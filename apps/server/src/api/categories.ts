@@ -192,7 +192,9 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Items must land somewhere, or they'd vanish from every category view
-    // while still sitting in the library.
+    // while still sitting in the library. With no other category left there is
+    // nowhere to move them: they keep their slug, which every view tolerates
+    // (the detail modal already shows a slug whose category was deleted).
     const [fallback] = await db
       .select()
       .from(categories)
@@ -200,21 +202,18 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
       .orderBy(asc(categories.position), asc(categories.id))
       .limit(1);
 
-    if (!fallback) {
-      reply.code(409);
-      return { error: "This is the only category — add another before removing it" };
-    }
-
-    const moved = await db
-      .update(mediaItems)
-      .set({ kind: fallback.slug })
-      .where(eq(mediaItems.kind, category.slug))
-      .returning({ id: mediaItems.id });
+    const moved = fallback
+      ? await db
+          .update(mediaItems)
+          .set({ kind: fallback.slug })
+          .where(eq(mediaItems.kind, category.slug))
+          .returning({ id: mediaItems.id })
+      : [];
 
     await db.delete(categories).where(eq(categories.id, id));
     await deleteKindCover(category.coverFile);
 
-    return { ok: true, movedCount: moved.length, movedTo: fallback.label };
+    return { ok: true, movedCount: moved.length, movedTo: fallback?.label ?? null };
   });
 
   app.get<{ Params: { slug: string } }>(

@@ -289,8 +289,7 @@ export function CategorySettings() {
       </div>
 
       <p className="text-[11px] text-muted-foreground/70">
-        Deleting a category never deletes videos — they move to the first remaining category. You
-        can't remove the last one.
+        Deleting a category never deletes videos — they move to the first remaining category.
       </p>
     </SettingsSection>
   );

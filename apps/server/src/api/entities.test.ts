@@ -2,7 +2,8 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { playbackStates } from "../db/schema.js";
+import { albums, appSettings, categories, performers, playbackStates, watchLog } from "../db/schema.js";
+import { seedCategories } from "../db/seed.js";
 import { mediaItems } from "../db/schema.js";
 import { resetDatabase, signIn, testApp } from "../test/harness.js";
 import {
@@ -348,12 +349,68 @@ describe("categories", () => {
     expect((await get(`/api/media-items/${item}`)).statusCode).toBe(200);
   });
 
+  it("lets you delete every category, leaving items where they were", async () => {
+    const item = await makeItem(libraryId, { title: "X", kind: "movie" });
+    const all = (await get("/api/categories")).json().categories as { id: number }[];
+    for (const category of all) {
+      expect((await send("DELETE", `/api/categories/${category.id}`)).statusCode).toBe(200);
+    }
+    expect((await get("/api/categories")).json().categories).toEqual([]);
+    // Nowhere to move to, so the slug stays rather than the item vanishing.
+    expect((await get(`/api/media-items/${item}`)).statusCode).toBe(200);
+  });
+
+  it("does not bring the defaults back on the next boot once you have emptied them", async () => {
+    await db.delete(categories);
+    await db.delete(appSettings).where(eq(appSettings.key, "categories_seeded"));
+    await seedCategories(); // first run: nothing exists and nothing was ever seeded
+    expect((await get("/api/categories")).json().categories).toHaveLength(3);
+
+    await db.delete(categories);
+    await seedCategories(); // a later boot: empty because you emptied it
+    expect((await get("/api/categories")).json().categories).toEqual([]);
+  });
+
   it("clamps cover framing", async () => {
     const video = (await get("/api/categories")).json().categories[0];
     await send("PATCH", `/api/categories/${video.id}`, { coverScale: 50, coverPositionY: 999 });
     const after = (await get("/api/categories")).json().categories[0];
     expect(after.coverScale).toBe(100);
     expect(after.coverPositionY).toBe(100);
+  });
+});
+
+describe("deleting a performer", () => {
+  // albums.performer_id references the performer; without clearing it the
+  // delete failed on the foreign key.
+  it("works when an album names them", async () => {
+    const performer = await makePerformer("Named On Album");
+    await db.insert(albums).values({ path: "/a", title: "A", performerId: performer });
+
+    expect((await send("DELETE", `/api/performers/${performer}`)).statusCode).toBe(200);
+    expect(await db.select().from(performers)).toHaveLength(0);
+    expect((await db.select().from(albums))[0].performerId).toBeNull();
+  });
+});
+
+describe("taste twins", () => {
+  // Regression: the exclusion was a raw `!= all(${ids})`, which binds each id
+  // as its own parameter and made Postgres reject the query with a 500.
+  it("ranks co-stars of the most-watched performers", async () => {
+    const top = await makePerformer("Top");
+    const twin = await makePerformer("Twin");
+    // Top is the only one with watch time; Twin shares a video you have not
+    // watched, which is what makes them a recommendation.
+    const watched = await makeItem(libraryId, { title: "Watched", durationSeconds: 600 });
+    await linkPerformer(watched, top);
+    await db.insert(watchLog).values({ mediaItemId: watched, hour: new Date(), seconds: 300 });
+    const unwatched = await makeItem(libraryId, { title: "Together", durationSeconds: 600 });
+    await linkPerformer(unwatched, top);
+    await linkPerformer(unwatched, twin);
+
+    const res = await get("/api/taste-twins");
+    expect(res.statusCode).toBe(200);
+    expect(res.json().performers.map((p: { name: string }) => p.name)).toEqual(["Twin"]);
   });
 });
 

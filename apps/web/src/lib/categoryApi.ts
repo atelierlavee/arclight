@@ -46,7 +46,7 @@ export const saveCategoryFraming = (
 ) => send<{ category: Category }>(`/api/categories/${id}`, "PATCH", framing);
 
 export const deleteCategory = (id: number) =>
-  send<{ ok: true; movedCount: number; movedTo: string }>(`/api/categories/${id}`, "DELETE");
+  send<{ ok: true; movedCount: number; movedTo: string | null }>(`/api/categories/${id}`, "DELETE");
 
 export async function uploadCategoryCover(slug: string, file: File): Promise<void> {
   const body = new FormData();
