@@ -6,7 +6,6 @@ import {
   Bookmark,
   Clapperboard,
   FolderOpen,
-  Globe2,
   Home,
   Inbox,
   Lock,
@@ -323,15 +322,6 @@ export function Sidebar({
         >
           <Users className="size-4 shrink-0" />
           {!collapsed && "Performers"}
-        </Link>
-        <Link
-          to="/map"
-          className={navItemClass}
-          title={collapsed ? "Library Map" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
-        >
-          <Globe2 className="size-4 shrink-0" />
-          {!collapsed && "Library Map"}
         </Link>
         <Link
           to="/albums"

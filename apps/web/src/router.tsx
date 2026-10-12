@@ -21,7 +21,6 @@ import { StatsPage } from "@/pages/StatsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SeriesPage } from "@/pages/SeriesPage";
 import { SeriesPageIndex } from "@/pages/SeriesPageIndex";
-import { LibraryMapPage } from "@/pages/LibraryMapPage";
 import type { NetworkView } from "@/lib/performerApi";
 
 const rootRoute = createRootRoute();
@@ -223,12 +222,6 @@ const accountRoute = createRoute({
   component: AccountPage,
 });
 
-const libraryMapRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/map",
-  component: LibraryMapPage,
-});
-
 const routeTree = rootRoute.addChildren([
   homeRoute,
   browseRoute,
@@ -247,7 +240,6 @@ const routeTree = rootRoute.addChildren([
   helpRoute,
   settingsRoute,
   accountRoute,
-  libraryMapRoute,
 ]);
 
 export const router = createRouter({
