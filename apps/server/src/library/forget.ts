@@ -9,6 +9,7 @@ import {
   mediaItems,
   mediaItemTags,
   mediaItemTypes,
+  playbackHeatmap,
   playbackStates,
   watchLog,
 } from "../db/schema.js";
@@ -149,6 +150,9 @@ export async function deleteItems(targets: number[]): Promise<number> {
     await tx
       .delete(playbackStates)
       .where(inArray(playbackStates.mediaItemId, targets));
+    await tx
+      .delete(playbackHeatmap)
+      .where(inArray(playbackHeatmap.mediaItemId, targets));
     await tx.delete(bookmarks).where(inArray(bookmarks.mediaItemId, targets));
     await tx.delete(watchLog).where(inArray(watchLog.mediaItemId, targets));
     await tx

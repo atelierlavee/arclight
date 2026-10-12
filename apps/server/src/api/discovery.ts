@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { type FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import {
@@ -148,7 +148,7 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin(performers, eq(performers.id, mediaItemPerformers.performerId))
       .where(
         and(
-          sql`${mediaItemPerformers.performerId} != all(${topIds})`,
+          notInArray(mediaItemPerformers.performerId, topIds),
           isNull(performers.archivedAt),
         )
       )

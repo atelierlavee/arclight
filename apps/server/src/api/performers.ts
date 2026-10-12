@@ -2,6 +2,7 @@ import { aliasedTable, and, desc, eq, inArray, isNull, ne, sql } from "drizzle-o
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import {
+  albums,
   mediaItemPerformers,
   mediaItems,
   mediaItemTypes,
@@ -778,6 +779,9 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       .delete(mediaItemPerformers)
       .where(eq(mediaItemPerformers.performerId, id))
       .returning();
+    // Albums name a performer too. Cleared rather than deleted: the album
+    // stays and simply stops claiming someone who no longer exists.
+    await db.update(albums).set({ performerId: null }).where(eq(albums.performerId, id));
     await db.delete(performers).where(eq(performers.id, id));
     await deletePerformerImage(existing.imageFile);
     await deletePerformerImage(existing.bannerFile);

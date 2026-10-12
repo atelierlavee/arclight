@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { albums, mediaItems, performers, studios } from "../db/schema.js";
+import { albums, mediaItems, performers, playbackHeatmap, studios } from "../db/schema.js";
 import { resetDatabase, signIn, testApp } from "../test/harness.js";
 import {
   attachFile,
@@ -66,6 +66,19 @@ describe("cleaning up after a removed folder", () => {
     expect((await post("/api/library/cleanup")).json().removed.items).toBe(1);
     const left = await db.select().from(mediaItems);
     expect(left.map((row) => row.id)).toEqual([kept]);
+  });
+
+  // playback_heatmap was added after the delete path was written, and its
+  // foreign key made the final delete fail, so cleanup 500'd with nothing
+  // removed for anyone who had ever played a video.
+  it("removes hidden items that have playback heatmap rows", async () => {
+    const gone = await hiddenItem("Watched then hidden");
+    await db.insert(playbackHeatmap).values({ mediaItemId: gone, bucket: 3 });
+
+    const res = await post("/api/library/cleanup");
+    expect(res.statusCode).toBe(200);
+    expect(await db.select().from(mediaItems)).toHaveLength(0);
+    expect(await db.select().from(playbackHeatmap)).toHaveLength(0);
   });
 
   // The whole point: names from a library you no longer have.
