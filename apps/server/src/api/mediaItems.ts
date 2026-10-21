@@ -33,6 +33,8 @@ import {
   fetchRelated,
   itemColumns,
   orderFor,
+  parseId,
+  parsePage,
   playbackColumns,
   searchOrder,
   searchTerms,
@@ -69,7 +71,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       seed?: string;
       minRating?: string;
     };
-  }>("/api/media-items", async (request) => {
+  }>("/api/media-items", async (request, reply) => {
     const {
       libraryId,
       type,
@@ -97,7 +99,26 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       month,
       seed,
     } = request.query;
-    const pageNum = Math.max(1, Number(page) || 1);
+    // Ids and the page are rejected when malformed rather than ignored:
+    // dropping a bad libraryId would quietly widen the result to every
+    // library, and passing NaN through made Postgres fail with a 500. The
+    // looser filters below (year, duration, …) keep ignoring junk, as a
+    // filter that can't be read simply doesn't narrow anything.
+    const pageNum = parsePage(page);
+    if (pageNum === null) {
+      reply.code(400);
+      return { error: "page must be a positive whole number" };
+    }
+    const libraryIdNum = libraryId ? parseId(libraryId) : null;
+    if (libraryId && libraryIdNum === null) {
+      reply.code(400);
+      return { error: "libraryId must be a positive whole number" };
+    }
+    const parentIdNum = parentId ? parseId(parentId) : null;
+    if (parentId && parentIdNum === null) {
+      reply.code(400);
+      return { error: "parentId must be a positive whole number" };
+    }
     const search = q?.trim();
     // The client sends a seed so a shuffled grid keeps one order across its
     // pages; without one, each page would be shuffled separately.
@@ -106,8 +127,8 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
     // Items whose folder was removed from the scan list stay in the database
     // but drop out of every view, so removing a folder reads as a clean slate.
     const conditions: SQL[] = [visibleItems()];
-    if (libraryId) {
-      conditions.push(eq(mediaItems.libraryId, Number(libraryId)));
+    if (libraryIdNum !== null) {
+      conditions.push(eq(mediaItems.libraryId, libraryIdNum));
     }
     if (type) {
       conditions.push(eq(mediaItemTypes.name, type));
@@ -188,7 +209,8 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       conditions.push(sql`lower(${studios.name}) = lower(${studio})`);
     }
     const yearNum = Number(year);
-    const filterYear = year && Number.isInteger(yearNum) ? yearNum : null;
+    const filterYear =
+      year && Number.isInteger(yearNum) && yearNum >= 1 && yearNum <= 9999 ? yearNum : null;
     if (filterYear !== null) {
       conditions.push(sql`extract(year from ${mediaItems.releaseDate}) = ${filterYear}`);
     }
@@ -297,11 +319,15 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       );
     }
 
-    const minSeconds = Number(minDuration);
+    // Capped: the comparison binds against an integer column, and a value
+    // past its range is a Postgres error rather than "matches nothing".
+    // A week of footage is already far past any real file.
+    const MAX_FILTER_SECONDS = 7 * 24 * 3600;
+    const minSeconds = Math.min(Number(minDuration), MAX_FILTER_SECONDS);
     if (Number.isFinite(minSeconds) && minSeconds > 0) {
       conditions.push(sql`${mediaItems.durationSeconds} >= ${Math.round(minSeconds)}`);
     }
-    const maxSeconds = Number(maxDuration);
+    const maxSeconds = Math.min(Number(maxDuration), MAX_FILTER_SECONDS);
     if (Number.isFinite(maxSeconds) && maxSeconds > 0) {
       conditions.push(sql`${mediaItems.durationSeconds} <= ${Math.round(maxSeconds)}`);
     }
@@ -327,7 +353,9 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       );
     }
 
-    const withinDays = Number(addedWithin);
+    // Capped for the same reason: make_interval takes an int, and a century
+    // covers any library.
+    const withinDays = Math.min(Number(addedWithin), 36_500);
     if (Number.isFinite(withinDays) && withinDays > 0) {
       conditions.push(
         sql`${mediaItems.createdAt} >= now() - make_interval(days => ${Math.round(withinDays)})`
@@ -363,7 +391,9 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
 
     if (!anyGlobalFilter) {
       conditions.push(
-        parentId ? eq(mediaItems.parentId, Number(parentId)) : isNull(mediaItems.parentId)
+        parentIdNum !== null
+          ? eq(mediaItems.parentId, parentIdNum)
+          : isNull(mediaItems.parentId)
       );
     }
 

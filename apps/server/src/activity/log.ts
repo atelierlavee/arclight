@@ -50,5 +50,7 @@ export async function listActivity(limit = 100, type?: string, includeHidden = f
     .from(activityEvents)
     .where(and(...conditions))
     .orderBy(desc(activityEvents.createdAt), desc(activityEvents.id))
-    .limit(Math.min(500, Math.max(1, limit)));
+    // A limit parsed from a query string can be NaN, which Postgres rejects
+    // outright; fall back to the default rather than failing the request.
+    .limit(Number.isFinite(limit) ? Math.min(500, Math.max(1, Math.floor(limit))) : 100);
 }

@@ -176,6 +176,51 @@ export function clampPercent(value: number, min: number, max: number): number {
   return Math.round(Math.max(min, Math.min(max, n)));
 }
 
+/** Largest value a Postgres `integer` column holds. */
+export const PG_INT_MAX = 2_147_483_647;
+
+/**
+ * Whether a JSON value is usable as a row id.
+ *
+ * A positive whole number inside Postgres' integer range. Anything else —
+ * a string, 1.5, NaN, or a number too big for the column — would either be
+ * rejected by Postgres as a 500 or quietly match nothing.
+ */
+export function isId(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= PG_INT_MAX;
+}
+
+/**
+ * Reads an id out of a URL segment or query string.
+ *
+ * Strict digits only: `Number()` would accept "", " 1", "1e3" and "0x10",
+ * and turn "abc" into NaN, which Postgres then rejects as invalid integer
+ * syntax — a 500 for what is really a bad request.
+ */
+export function parseId(value: unknown): number | null {
+  if (typeof value !== "string" || !/^\d{1,10}$/.test(value)) return null;
+  const n = Number(value);
+  return isId(n) ? n : null;
+}
+
+/**
+ * A 1-based page number from the query string.
+ *
+ * Absent or empty means page 1; anything else that isn't a positive whole
+ * number is `null`, for the caller to reject. Capped so OFFSET can't be asked
+ * for something absurd.
+ */
+export function parsePage(value: unknown): number | null {
+  if (value === undefined || value === "") return 1;
+  const n = parseId(value);
+  return n !== null && n <= 100_000 ? n : null;
+}
+
+/** A whole number that is zero or more and fits an integer column, or null. */
+export function isNonNegativeInt(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= PG_INT_MAX;
+}
+
 /**
  * Splits a query into the words that must each match.
  *

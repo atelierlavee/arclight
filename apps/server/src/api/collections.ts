@@ -5,8 +5,13 @@ import { compileSmartRule, smartRuleError, type SmartRule } from "../collections
 import { db } from "../db/client.js";
 import { collectionItems, collections, mediaItemTypes, mediaItems } from "../db/schema.js";
 import { playbackWarningFor } from "../media/compatibility.js";
+import { isId, parseId, parsePage } from "./mediaItemQueries.js";
 
 const PAGE_SIZE = 50;
+const MAX_NAME_LENGTH = 200;
+const MAX_DESCRIPTION_LENGTH = 2000;
+/** A reorder carries every id in the collection; this bounds one request. */
+const MAX_REORDER = 10_000;
 
 const itemColumns = {
   id: mediaItems.id,
@@ -37,8 +42,30 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
   app.post<{
     Body: { name: string; description?: string; type: "manual" | "smart"; smartRule?: SmartRule };
   }>("/api/collections", async (request, reply) => {
-    const { name, description, type, smartRule } = request.body;
+    const body = (request.body ?? {}) as Partial<typeof request.body>;
+    const { description, type, smartRule } = body;
+    const name = typeof body.name === "string" ? body.name.trim() : "";
 
+    if (!name) {
+      reply.code(400);
+      return { error: "name is required" };
+    }
+    if (name.length > MAX_NAME_LENGTH) {
+      reply.code(400);
+      return { error: `name can be at most ${MAX_NAME_LENGTH} characters` };
+    }
+    if (type !== "manual" && type !== "smart") {
+      reply.code(400);
+      return { error: "type must be 'manual' or 'smart'" };
+    }
+    if (
+      description !== undefined &&
+      description !== null &&
+      (typeof description !== "string" || description.length > MAX_DESCRIPTION_LENGTH)
+    ) {
+      reply.code(400);
+      return { error: `description must be a string of at most ${MAX_DESCRIPTION_LENGTH} characters` };
+    }
     if (type === "smart" && !smartRule) {
       reply.code(400);
       return { error: "smartRule is required for a smart collection" };
@@ -64,7 +91,11 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete<{ Params: { id: string } }>("/api/collections/:id", async (request, reply) => {
-    const id = Number(request.params.id);
+    const id = parseId(request.params.id);
+    if (id === null) {
+      reply.code(404);
+      return { error: "Not found" };
+    }
 
     // Membership rows first: collection_items has a foreign key to
     // collections, so the parent cannot be removed while they exist.
@@ -88,8 +119,16 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string }; Querystring: { page?: string } }>(
     "/api/collections/:id/items",
     async (request, reply) => {
-      const id = Number(request.params.id);
-      const pageNum = Math.max(1, Number(request.query.page) || 1);
+      const id = parseId(request.params.id);
+      const pageNum = parsePage(request.query.page);
+      if (id === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      if (pageNum === null) {
+        reply.code(400);
+        return { error: "page must be a positive whole number" };
+      }
 
       const [collection] = await db.select().from(collections).where(eq(collections.id, id));
       if (!collection) {
@@ -136,8 +175,16 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string }; Body: { mediaItemId: number } }>(
     "/api/collections/:id/items",
     async (request, reply) => {
-      const collectionId = Number(request.params.id);
-      const { mediaItemId } = request.body;
+      const collectionId = parseId(request.params.id);
+      if (collectionId === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const mediaItemId = (request.body as { mediaItemId?: unknown } | undefined)?.mediaItemId;
+      if (!isId(mediaItemId)) {
+        reply.code(400);
+        return { error: "mediaItemId must be a positive whole number" };
+      }
 
       const [collection] = await db
         .select()
@@ -150,6 +197,17 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
       if (collection.type !== "manual") {
         reply.code(400);
         return { error: "Cannot manually add items to a smart collection" };
+      }
+
+      // Checked up front rather than left to the foreign key, which would
+      // surface an unknown id as a 500.
+      const [item] = await db
+        .select({ id: mediaItems.id })
+        .from(mediaItems)
+        .where(eq(mediaItems.id, mediaItemId));
+      if (!item) {
+        reply.code(404);
+        return { error: "Media item not found" };
       }
 
       const [{ nextPos }] = await db
@@ -169,13 +227,19 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete<{ Params: { id: string; mediaItemId: string } }>(
     "/api/collections/:id/items/:mediaItemId",
-    async (request) => {
+    async (request, reply) => {
+      const collectionId = parseId(request.params.id);
+      const mediaItemId = parseId(request.params.mediaItemId);
+      if (collectionId === null || mediaItemId === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
       await db
         .delete(collectionItems)
         .where(
           and(
-            eq(collectionItems.collectionId, Number(request.params.id)),
-            eq(collectionItems.mediaItemId, Number(request.params.mediaItemId))
+            eq(collectionItems.collectionId, collectionId),
+            eq(collectionItems.mediaItemId, mediaItemId)
           )
         );
       return { ok: true };
@@ -185,8 +249,24 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string }; Body: { orderedIds: number[] } }>(
     "/api/collections/:id/items/reorder",
     async (request, reply) => {
-      const collectionId = Number(request.params.id);
-      const { orderedIds } = request.body;
+      const collectionId = parseId(request.params.id);
+      if (collectionId === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const orderedIds = (request.body as { orderedIds?: unknown } | undefined)?.orderedIds;
+      if (!Array.isArray(orderedIds) || !orderedIds.every(isId)) {
+        reply.code(400);
+        return { error: "orderedIds must be an array of positive whole numbers" };
+      }
+      if (orderedIds.length > MAX_REORDER) {
+        reply.code(400);
+        return { error: `orderedIds can hold at most ${MAX_REORDER} ids` };
+      }
+      if (new Set(orderedIds).size !== orderedIds.length) {
+        reply.code(400);
+        return { error: "orderedIds must not repeat an id" };
+      }
 
       const [collection] = await db
         .select()
@@ -201,19 +281,24 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Cannot reorder a smart collection" };
       }
 
-      await db.transaction(async (tx) => {
-        for (let i = 0; i < orderedIds.length; i++) {
-          await tx
-            .update(collectionItems)
-            .set({ position: i })
-            .where(
-              and(
-                eq(collectionItems.collectionId, collectionId),
-                eq(collectionItems.mediaItemId, orderedIds[i]),
-              ),
-            );
-        }
-      });
+      // One statement rather than one UPDATE per item — and, being a single
+      // statement, atomic without an explicit transaction. The ids are
+      // unnested alongside their index, which becomes the new position; ids
+      // that aren't in this collection simply match no row.
+      if (orderedIds.length > 0) {
+        const idList = sql.join(
+          orderedIds.map((id) => sql`${id}`),
+          sql`, `,
+        );
+        await db.execute(sql`
+          update ${collectionItems}
+          set position = ordered.position - 1
+          from unnest(array[${idList}]::int[])
+            with ordinality as ordered(media_item_id, position)
+          where ${collectionItems.collectionId} = ${collectionId}
+            and ${collectionItems.mediaItemId} = ordered.media_item_id
+        `);
+      }
 
       return { ok: true };
     }

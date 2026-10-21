@@ -6,7 +6,7 @@ import { visibleItems } from "../library/visibility.js";
 import { deleteKindCover, kindCoverPath, saveKindCover } from "../media/kindCovers.js";
 import { streamFile } from "../media/streamer.js";
 import { categorySlugs } from "./mediaItemQueries.js";
-import { getKindCovers, setKindCover } from "./settings.js";
+import { getKindCovers, kindCoverFor, setKindCover } from "./settings.js";
 
 export async function kindRoutes(app: FastifyInstance): Promise<void> {
   // Backs the category tiles on the home page.
@@ -32,19 +32,25 @@ export async function kindRoutes(app: FastifyInstance): Promise<void> {
         representativeItemId: byKind.get(kind)?.representativeItemId ?? null,
         // Folded into the URL so replacing a cover changes it, letting the
         // response be cached hard.
-        cover: covers[kind] ? `/api/kinds/${kind}/cover?v=${covers[kind]}` : null,
+        cover: kindCoverFor(covers, kind)
+          ? `/api/kinds/${kind}/cover?v=${kindCoverFor(covers, kind)}`
+          : null,
       })),
     };
   });
 
   app.get<{ Params: { kind: string } }>("/api/kinds/:kind/cover", async (request, reply) => {
-    const covers = await getKindCovers();
-    const fileName = covers[request.params.kind];
+    const kind = request.params.kind;
+    // Only a known category can have a cover, and the lookup is an own-key
+    // one — `constructor` or `__proto__` must not resolve to anything.
+    const fileName = (await categorySlugs()).has(kind)
+      ? kindCoverFor(await getKindCovers(), kind)
+      : undefined;
     if (!fileName) {
       reply.code(404);
       return { error: "No cover" };
     }
-    reply.header("Cache-Control", "public, max-age=31536000, immutable");
+    reply.header("Cache-Control", "private, max-age=31536000, immutable");
     await streamFile(reply, kindCoverPath(fileName), "image/jpeg", undefined, false);
   });
 
@@ -77,7 +83,7 @@ export async function kindRoutes(app: FastifyInstance): Promise<void> {
       return { error: "That file could not be read as an image" };
     }
 
-    const previous = (await getKindCovers())[kind];
+    const previous = kindCoverFor(await getKindCovers(), kind);
     await setKindCover(kind, fileName);
     // Only after the setting points at the new file, so a failure here leaves
     // a stray file rather than a broken reference.
@@ -92,7 +98,7 @@ export async function kindRoutes(app: FastifyInstance): Promise<void> {
       reply.code(400);
       return { error: "Unknown category" };
     }
-    const previous = (await getKindCovers())[kind];
+    const previous = kindCoverFor(await getKindCovers(), kind);
     await setKindCover(kind, null);
     await deleteKindCover(previous);
     return { ok: true };

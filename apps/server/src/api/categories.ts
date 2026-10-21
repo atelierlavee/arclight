@@ -5,6 +5,9 @@ import { db } from "../db/client.js";
 import { categories, mediaItems, mediaItemTypes } from "../db/schema.js";
 import { deleteKindCover, kindCoverPath, saveKindCover } from "../media/kindCovers.js";
 import { streamFile } from "../media/streamer.js";
+import { PG_INT_MAX, parseId } from "./mediaItemQueries.js";
+
+const MAX_LABEL_LENGTH = 100;
 
 /** Lowercase, hyphenated, so it's safe in a URL and stable as a key. */
 function toSlug(label: string): string {
@@ -64,10 +67,15 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Body: { label?: string } }>("/api/categories", async (request, reply) => {
-    const label = request.body.label?.trim();
+    const raw = (request.body as { label?: unknown } | undefined)?.label;
+    const label = typeof raw === "string" ? raw.trim() : "";
     if (!label) {
       reply.code(400);
       return { error: "Name is required" };
+    }
+    if (label.length > MAX_LABEL_LENGTH) {
+      reply.code(400);
+      return { error: `Name can be at most ${MAX_LABEL_LENGTH} characters` };
     }
     const slug = toSlug(label);
     if (!slug) {
@@ -112,7 +120,16 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
   }>(
     "/api/categories/:id",
     async (request, reply) => {
-      const id = Number(request.params.id);
+      const id = parseId(request.params.id);
+      if (id === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const body = request.body;
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        reply.code(400);
+        return { error: "Expected a JSON object" };
+      }
       const patch: {
         label?: string;
         position?: number;
@@ -121,11 +138,19 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
         coverScale?: number;
       } = {};
 
-      if (request.body.label !== undefined) {
-        const label = request.body.label.trim();
+      if (body.label !== undefined) {
+        if (typeof body.label !== "string") {
+          reply.code(400);
+          return { error: "label must be a string" };
+        }
+        const label = body.label.trim();
         if (!label) {
           reply.code(400);
           return { error: "Name cannot be empty" };
+        }
+        if (label.length > MAX_LABEL_LENGTH) {
+          reply.code(400);
+          return { error: `Name can be at most ${MAX_LABEL_LENGTH} characters` };
         }
         const [clash] = await db
           .select()
@@ -137,17 +162,31 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
         }
         patch.label = label;
       }
-      if (request.body.position !== undefined) patch.position = request.body.position;
-      if (request.body.coverPositionX !== undefined) {
-        const value = Number(request.body.coverPositionX);
+      if (body.position !== undefined) {
+        // Any whole number, negatives included: the settings screen moves a
+        // category by its position minus one, which goes below zero when two
+        // categories tie at 0.
+        const position = body.position;
+        if (
+          typeof position !== "number" ||
+          !Number.isInteger(position) ||
+          Math.abs(position) > PG_INT_MAX
+        ) {
+          reply.code(400);
+          return { error: "position must be a whole number" };
+        }
+        patch.position = body.position;
+      }
+      if (body.coverPositionX !== undefined) {
+        const value = Number(body.coverPositionX);
         if (!Number.isFinite(value)) {
           reply.code(400);
           return { error: "coverPositionX must be a number" };
         }
         patch.coverPositionX = Math.round(Math.max(0, Math.min(100, value)));
       }
-      if (request.body.coverPositionY !== undefined) {
-        const value = Number(request.body.coverPositionY);
+      if (body.coverPositionY !== undefined) {
+        const value = Number(body.coverPositionY);
         if (!Number.isFinite(value)) {
           reply.code(400);
           return { error: "coverPositionY must be a number" };
@@ -158,8 +197,8 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
         // position is handled.
         patch.coverPositionY = Math.round(Math.max(0, Math.min(100, value)));
       }
-      if (request.body.coverScale !== undefined) {
-        const value = Number(request.body.coverScale);
+      if (body.coverScale !== undefined) {
+        const value = Number(body.coverScale);
         if (!Number.isFinite(value)) {
           reply.code(400);
           return { error: "coverScale must be a number" };
@@ -184,7 +223,11 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.delete<{ Params: { id: string } }>("/api/categories/:id", async (request, reply) => {
-    const id = Number(request.params.id);
+    const id = parseId(request.params.id);
+    if (id === null) {
+      reply.code(404);
+      return { error: "Not found" };
+    }
     const [category] = await db.select().from(categories).where(eq(categories.id, id));
     if (!category) {
       reply.code(404);
@@ -227,7 +270,7 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
         reply.code(404);
         return { error: "No cover" };
       }
-      reply.header("Cache-Control", "public, max-age=31536000, immutable");
+      reply.header("Cache-Control", "private, max-age=31536000, immutable");
       await streamFile(reply, kindCoverPath(category.coverFile), "image/jpeg", undefined, false);
     }
   );

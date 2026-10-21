@@ -12,6 +12,10 @@ import {
   tags,
 } from "../db/schema.js";
 import { visibleItems } from "../library/visibility.js";
+import { isId, parsePage } from "./mediaItemQueries.js";
+
+/** Most ids one triage request acts on. */
+const MAX_TRIAGE = 500;
 
 export async function inboxRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/inbox/count", async () => {
@@ -29,8 +33,12 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
     return { count: row?.count ?? 0 };
   });
 
-  app.get<{ Querystring: { page?: string } }>("/api/inbox", async (request) => {
-    const page = Math.max(1, Number(request.query.page ?? 1));
+  app.get<{ Querystring: { page?: string } }>("/api/inbox", async (request, reply) => {
+    const page = parsePage(request.query.page);
+    if (page === null) {
+      reply.code(400);
+      return { error: "page must be a positive whole number" };
+    }
     const pageSize = 50;
 
     const videoTypeIds = db
@@ -105,18 +113,25 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Body: { ids: number[] } }>("/api/inbox/triage", async (request, reply) => {
-    const { ids } = request.body;
+    const ids = (request.body as { ids?: unknown } | undefined)?.ids;
     if (!Array.isArray(ids) || ids.length === 0) {
       reply.code(400);
       return { error: "ids must be a non-empty array" };
     }
+    if (!ids.every(isId)) {
+      reply.code(400);
+      return { error: "ids must be positive whole numbers" };
+    }
 
+    // Anything past the cap is left for the next request rather than
+    // rejected; the count says how many were actually handled.
+    const batch = [...new Set(ids)].slice(0, MAX_TRIAGE);
     await db
       .update(mediaItems)
       .set({ triagedAt: new Date() })
-      .where(inArray(mediaItems.id, ids.slice(0, 500)));
+      .where(inArray(mediaItems.id, batch));
 
-    return { ok: true, count: Math.min(ids.length, 500) };
+    return { ok: true, count: batch.length };
   });
 
   app.post("/api/inbox/triage-all", async () => {

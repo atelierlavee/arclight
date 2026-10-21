@@ -3,6 +3,8 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { mediaItems, playbackHeatmap, playbackStates, watchLog } from "../db/schema.js";
 import { logActivity } from "../activity/log.js";
+import { hiddenGate, itemReachable } from "../library/visibility.js";
+import { PG_INT_MAX, parseId } from "./mediaItemQueries.js";
 
 const HEATMAP_BUCKETS = 50;
 
@@ -33,12 +35,38 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string }; Body: { positionSeconds: number } }>(
     "/api/media-items/:id/playback",
     async (request, reply) => {
-      const mediaItemId = Number(request.params.id);
-      const { positionSeconds } = request.body;
+      const mediaItemId = parseId(request.params.id);
+      if (mediaItemId === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const rawPosition = (request.body as { positionSeconds?: unknown } | undefined)
+        ?.positionSeconds;
 
-      if (typeof positionSeconds !== "number" || positionSeconds < 0) {
+      if (
+        typeof rawPosition !== "number" ||
+        !Number.isFinite(rawPosition) ||
+        rawPosition < 0 ||
+        rawPosition > PG_INT_MAX
+      ) {
         reply.code(400);
         return { error: "positionSeconds must be a non-negative number" };
+      }
+      // The column is an integer, and Postgres rejects "12.5" for one rather
+      // than rounding it. The player already floors; this covers anyone else.
+      const positionSeconds = Math.round(rawPosition);
+
+      // Checked up front: otherwise the upsert below trips the foreign key
+      // and an unknown id comes back as a 500. A hidden item is "not found"
+      // too while the vault is locked. The duration is wanted for the
+      // heatmap anyway.
+      const [item] = await db
+        .select({ durationSeconds: mediaItems.durationSeconds })
+        .from(mediaItems)
+        .where(and(eq(mediaItems.id, mediaItemId), hiddenGate(request)));
+      if (!item) {
+        reply.code(404);
+        return { error: "Not found" };
       }
 
       const now = new Date();
@@ -75,11 +103,7 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
         }
 
         try {
-          const [item] = await db
-            .select({ durationSeconds: mediaItems.durationSeconds })
-            .from(mediaItems)
-            .where(eq(mediaItems.id, mediaItemId));
-          if (item?.durationSeconds && item.durationSeconds > 0) {
+          if (item.durationSeconds && item.durationSeconds > 0) {
             const bucket = Math.min(
               HEATMAP_BUCKETS - 1,
               Math.floor((positionSeconds / item.durationSeconds) * HEATMAP_BUCKETS),
@@ -103,8 +127,17 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { id: string } }>(
     "/api/media-items/:id/heatmap",
-    async (request) => {
-      const mediaItemId = Number(request.params.id);
+    async (request, reply) => {
+      const mediaItemId = parseId(request.params.id);
+      if (mediaItemId === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      // The heatmap shows how a hidden video was watched; locked vault, no answer.
+      if (!(await itemReachable(request, mediaItemId))) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
       const rows = await db
         .select({ bucket: playbackHeatmap.bucket, count: playbackHeatmap.count })
         .from(playbackHeatmap)
@@ -152,12 +185,25 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string }; Body: { watched: boolean } }>(
     "/api/media-items/:id/watched",
     async (request, reply) => {
-      const mediaItemId = Number(request.params.id);
-      const { watched } = request.body;
+      const mediaItemId = parseId(request.params.id);
+      if (mediaItemId === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const watched = (request.body as { watched?: unknown } | undefined)?.watched;
 
       if (typeof watched !== "boolean") {
         reply.code(400);
         return { error: "watched must be a boolean" };
+      }
+
+      const [item] = await db
+        .select({ title: mediaItems.title })
+        .from(mediaItems)
+        .where(and(eq(mediaItems.id, mediaItemId), hiddenGate(request)));
+      if (!item) {
+        reply.code(404);
+        return { error: "Not found" };
       }
 
       if (!watched) {
@@ -191,13 +237,9 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
         })
         .returning({ playCount: playbackStates.playCount });
 
-      const [item] = await db
-        .select({ title: mediaItems.title })
-        .from(mediaItems)
-        .where(eq(mediaItems.id, mediaItemId));
       await logActivity(
         "watch",
-        `Watched "${item?.title ?? `#${mediaItemId}`}"`,
+        `Watched "${item.title}"`,
         { playCount: row?.playCount ?? 1 },
         mediaItemId,
       );

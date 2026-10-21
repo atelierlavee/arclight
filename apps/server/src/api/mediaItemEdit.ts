@@ -1,10 +1,44 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type FastifyInstance } from "fastify";
 import { logActivity } from "../activity/log.js";
 import { isVaultUnlocked, vaultPinConfigured } from "../auth/vaultUnlock.js";
 import { db } from "../db/client.js";
-import { mediaItems } from "../db/schema.js";
-import { categorySlugs, clampPercent, ensureStudioId } from "./mediaItemQueries.js";
+import { mediaItems, series } from "../db/schema.js";
+import {
+  categorySlugs,
+  clampPercent,
+  ensureStudioId,
+  isId,
+  isNonNegativeInt,
+  parseId,
+} from "./mediaItemQueries.js";
+
+const isOptionalString = (value: unknown) =>
+  value === undefined || value === null || typeof value === "string";
+
+/**
+ * Whether making `parentId` the parent of `id` would close a loop.
+ *
+ * Walks up from the proposed parent: if `id` is anywhere among its
+ * ancestors, the item would end up inside itself and every folder view and
+ * breadcrumb that follows parent links would never terminate. UNION rather
+ * than UNION ALL, so a loop that somehow already exists stops the walk
+ * instead of spinning it forever.
+ */
+async function wouldCreateCycle(id: number, parentId: number): Promise<boolean> {
+  if (id === parentId) return true;
+  const rows = await db.execute(sql`
+    with recursive ancestors(id, parent_id) as (
+      select id, parent_id from media_items where id = ${parentId}
+      union
+      select m.id, m.parent_id
+      from media_items m
+      join ancestors a on m.id = a.parent_id
+    )
+    select 1 from ancestors where id = ${id} limit 1
+  `);
+  return rows.rows.length > 0;
+}
 
 export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{
@@ -29,7 +63,16 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       episodeTitle?: string | null;
     };
   }>("/api/media-items/:id", async (request, reply) => {
-    const id = Number(request.params.id);
+    const id = parseId(request.params.id);
+    if (id === null) {
+      reply.code(404);
+      return { error: "Not found" };
+    }
+    const body = request.body;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      reply.code(400);
+      return { error: "Expected a JSON object" };
+    }
     const {
       parentId,
       title,
@@ -46,15 +89,82 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       seasonNumber,
       episodeNumber,
       episodeTitle,
-    } = request.body;
+    } = body;
+
+    // Shape checks first, so a wrong type is a 400 naming the field rather
+    // than a TypeError (or a Postgres error) surfacing as a 500.
+    if (title !== undefined && typeof title !== "string") {
+      reply.code(400);
+      return { error: "title must be a string" };
+    }
+    if (title !== undefined && !title.trim()) {
+      reply.code(400);
+      return { error: "title cannot be empty" };
+    }
+    if (!isOptionalString(description)) {
+      reply.code(400);
+      return { error: "description must be a string or null" };
+    }
+    if (isFavorite !== undefined && typeof isFavorite !== "boolean") {
+      reply.code(400);
+      return { error: "isFavorite must be a boolean" };
+    }
+    if (kind !== undefined && typeof kind !== "string") {
+      reply.code(400);
+      return { error: "kind must be a string" };
+    }
+    if (!isOptionalString(studio)) {
+      reply.code(400);
+      return { error: "studio must be a string or null" };
+    }
+    if (!isOptionalString(episodeTitle)) {
+      reply.code(400);
+      return { error: "episodeTitle must be a string or null" };
+    }
+    if (seasonNumber !== undefined && seasonNumber !== null && !isNonNegativeInt(seasonNumber)) {
+      reply.code(400);
+      return { error: "seasonNumber must be a whole number of 0 or more, or null" };
+    }
+    if (episodeNumber !== undefined && episodeNumber !== null && !isNonNegativeInt(episodeNumber)) {
+      reply.code(400);
+      return { error: "episodeNumber must be a whole number of 0 or more, or null" };
+    }
+    if (parentId !== undefined && parentId !== null && !isId(parentId)) {
+      reply.code(400);
+      return { error: "parentId must be a positive whole number or null" };
+    }
+    if (seriesId !== undefined && seriesId !== null && !isId(seriesId)) {
+      reply.code(400);
+      return { error: "seriesId must be a positive whole number or null" };
+    }
 
     if (parentId === id) {
       reply.code(400);
       return { error: "An item cannot be its own parent" };
     }
-    if (title !== undefined && !title.trim()) {
-      reply.code(400);
-      return { error: "title cannot be empty" };
+    if (parentId !== undefined && parentId !== null) {
+      const [parent] = await db
+        .select({ id: mediaItems.id })
+        .from(mediaItems)
+        .where(eq(mediaItems.id, parentId));
+      if (!parent) {
+        reply.code(400);
+        return { error: "Parent not found" };
+      }
+      if (await wouldCreateCycle(id, parentId)) {
+        reply.code(400);
+        return { error: "An item cannot be moved inside one of its own descendants" };
+      }
+    }
+    if (seriesId !== undefined && seriesId !== null) {
+      const [found] = await db
+        .select({ id: series.id })
+        .from(series)
+        .where(eq(series.id, seriesId));
+      if (!found) {
+        reply.code(400);
+        return { error: "Series not found" };
+      }
     }
 
     const patch: Partial<typeof mediaItems.$inferInsert> = { updatedAt: new Date() };
@@ -124,6 +234,11 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
     if (seriesId !== undefined) patch.seriesId = seriesId;
     if (seasonNumber !== undefined) patch.seasonNumber = seasonNumber;
     if (episodeNumber !== undefined) patch.episodeNumber = episodeNumber;
+    // The scanner parses series, season and episode from the filename as one
+    // unit, so correcting any of them hands all three over to the user.
+    if (seriesId !== undefined || seasonNumber !== undefined || episodeNumber !== undefined) {
+      patch.seriesSource = "user";
+    }
     if (episodeTitle !== undefined) patch.episodeTitle = episodeTitle?.trim() || null;
 
     const updated = await db
@@ -159,8 +274,12 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string }; Body: { hidden: boolean } }>(
     "/api/media-items/:id/hidden",
     async (request, reply) => {
-      const id = Number(request.params.id);
-      const { hidden } = request.body;
+      const id = parseId(request.params.id);
+      if (id === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const hidden = (request.body as { hidden?: unknown } | undefined)?.hidden;
 
       if (typeof hidden !== "boolean") {
         reply.code(400);
