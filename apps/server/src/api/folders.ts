@@ -4,11 +4,13 @@ import { db } from "../db/client.js";
 import { libraries, mediaItemTypes, mediaItems } from "../db/schema.js";
 import { notHidden } from "../library/visibility.js";
 
+import { profileId } from "../auth/profileContext.js";
 export async function folderRoutes(app: FastifyInstance): Promise<void> {
   // Flat list of every folder (id + title + parentId) — used by the "move to
   // folder" picker. There's no per-library scoping UI yet (single library,
   // per Phase 2), so this intentionally isn't paginated or filtered.
-  app.get("/api/folders", async () => {
+  app.get("/api/folders", async (request) => {
+    const profile = profileId(request);
     const [folderType] = await db
       .select()
       .from(mediaItemTypes)
@@ -20,7 +22,7 @@ export async function folderRoutes(app: FastifyInstance): Promise<void> {
       .from(mediaItems)
       // A folder in the vault stays out of the picker like it stays out of
       // the grid; offering it as a destination would name it.
-      .where(and(eq(mediaItems.itemTypeId, folderType.id), notHidden()))
+      .where(and(eq(mediaItems.itemTypeId, folderType.id), notHidden(profile)))
       .orderBy(mediaItems.title);
 
     return { folders: rows };

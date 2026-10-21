@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { mediaItems, mediaItemTypes, playbackStates } from "../db/schema.js";
-import { resetDatabase, testApp } from "../test/harness.js";
-import { makeItem, makeLibrary, makePhoto } from "../test/fixtures.js";
+import { resetDatabase, signIn, testApp } from "../test/harness.js";
+import { makeItem, makeLibrary, makePhoto, ownerProfileId } from "../test/fixtures.js";
 import { compileSmartRule, smartRuleError, type SmartRule } from "./ruleCompiler.js";
 
 let libraryId: number;
@@ -14,13 +14,15 @@ async function matching(rule: SmartRule): Promise<string[]> {
     .select({ title: mediaItems.title })
     .from(mediaItems)
     .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
-    .where(and(compileSmartRule(rule)));
+    .where(and(compileSmartRule(rule, await ownerProfileId())));
   return rows.map((r) => r.title).sort();
 }
 
 beforeEach(async () => {
   await testApp();
   await resetDatabase();
+  // Rules that read favourites, ratings or history evaluate for a profile.
+  await signIn();
   ({ libraryId } = await makeLibrary());
 });
 
@@ -113,8 +115,8 @@ describe("compileSmartRule", () => {
 
   describe("rating, favourite and playback conditions", () => {
     const DAY = 24 * 60 * 60 * 1000;
-    const play = (mediaItemId: number, state: Partial<typeof playbackStates.$inferInsert>) =>
-      db.insert(playbackStates).values({ mediaItemId, ...state });
+    const play = async (mediaItemId: number, state: Partial<typeof playbackStates.$inferInsert>) =>
+      db.insert(playbackStates).values({ profileId: await ownerProfileId(), mediaItemId, ...state });
 
     it("matches a rating floor and leaves unrated items out", async () => {
       await makeItem(libraryId, { title: "Five", rating: 5 });

@@ -67,10 +67,8 @@ export const mediaItems = pgTable("media_items", {
   // the folder decides an item's performers until you touch them, then you
   // do — which is what makes "I removed this performer" survive a rescan.
   performersSource: text("performers_source").notNull().default("scanner"),
-  // A per-item flag rather than a well-known tag: "favourite" is a state you
-  // toggle, not a descriptive label, and keeping it off the tag list stops it
-  // polluting the sidebar and the tag rows.
-  isFavorite: boolean("is_favorite").notNull().default(false),
+  // Favourite, rating and hidden-in-the-vault used to live here. They are
+  // per-person, so they moved to profile_item_state (migration 0047).
   studioId: integer("studio_id").references((): AnyPgColumn => studios.id),
   // Same scanner-owns-it-until-you-edit-it contract as titleSource and
   // performersSource.
@@ -104,10 +102,6 @@ export const mediaItems = pgTable("media_items", {
   // Display only, like the thumbnail framing above it: no file is touched and
   // no poster is regenerated, so flipping it back costs nothing.
   tileShape: text("tile_shape"),
-  // 1–5 stars, or null for "not rated". Null rather than 0 so an unrated
-  // item is never read as a one you rated badly — the sort puts it last and
-  // a "rating at least" rule simply leaves it out.
-  rating: integer("rating"),
   // False when the item's file sits in a folder you've removed from the scan
   // list. Distinct from missingSince, which means the file vanished from a
   // folder still being watched — different causes, different fixes. Rows are
@@ -127,7 +121,6 @@ export const mediaItems = pgTable("media_items", {
   // ownership of all of them. Without it every rescan silently re-applied
   // whatever the filename implied over a hand-made correction.
   seriesSource: text("series_source").notNull().default("scanner"),
-  hiddenAt: timestamp("hidden_at"),
   triagedAt: timestamp("triaged_at"),
   durationSeconds: integer("duration_seconds"),
   takenAt: timestamp("taken_at"),
@@ -234,10 +227,8 @@ export const performers = pgTable(
     // exist at all. No source column: the scanner writes `name` and nothing
     // else, so there is no ownership to arbitrate.
     bio: text("bio"),
-    // Pins them to the top of the performers page. A column rather than a
-    // tag or a collection for the same reason items carry one: it's a state
-    // you toggle, not a label that belongs in any list.
-    isFavorite: boolean("is_favorite").notNull().default(false),
+    // Favourite moved to profile_performer_state: it is one person's taste,
+    // not a fact about the performer.
     // Set when archived: out of the performers grid, the home row, search
     // suggestions and the network graph, but nothing about them is removed —
     // their videos keep the credit and their page still opens. A timestamp
@@ -418,6 +409,12 @@ export const webauthnCredentials = pgTable("webauthn_credentials", {
   // The authenticator's own use count, checked to spot a cloned credential.
   counter: integer("counter").notNull().default(0),
   label: text("label").notNull(),
+  // The profile that registered it. Signing in accepts any of the account's
+  // passkeys (the picker comes after), but unlocking a profile's vault or
+  // privacy lock only accepts that profile's own — otherwise a passkey on a
+  // shared Mac would open everyone's vault. Nullable only because the column
+  // was added to existing rows; migration 0047 backfills them to the owner.
+  profileId: integer("profile_id").references((): AnyPgColumn => profiles.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -462,19 +459,123 @@ export const sessions = pgTable("sessions", {
   userId: integer("user_id")
     .notNull()
     .references(() => users.id),
+  // Who is watching on this session. Null between signing in and picking a
+  // profile — the guard then answers everything but the picker with 409
+  // profile_required. On the session rather than a cookie of its own so it
+  // is server state: a client cannot claim to be a profile it never unlocked.
+  profileId: integer("profile_id").references((): AnyPgColumn => profiles.id, { onDelete: "set null" }),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// No user_id yet — single-user for now (per Section 2's future-proofing
-// note, this is exactly the kind of inherently-per-person table that gets a
-// user_id column once the auth phase lands, without needing a data migration
-// beyond adding that column).
+/**
+ * Netflix-style profiles: one account signs in, then picks who is watching.
+ *
+ * Everything personal — history, favourites, ratings, bookmarks, the vault,
+ * the privacy password, appearance — hangs off a profile, while the library
+ * itself stays shared. Exactly one profile per account is the owner, and only
+ * the owner manages the library (see auth/ownerRoutes.ts).
+ */
+export const profiles = pgTable(
+  "profiles",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("#6366f1"),
+    isOwner: boolean("is_owner").notNull().default(false),
+    // Optional 4–8 digit PIN, scrypt-hashed like every other credential.
+    // It keeps housemates out of each other's profile, nothing more: the
+    // account password is still what gets anyone through the front door.
+    pinHash: text("pin_hash"),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("profiles_user_name_lower_idx").on(table.userId, sql`lower(${table.name})`),
+    // One owner per account, enforced by the database rather than by every
+    // code path that might create or edit a profile remembering to check.
+    uniqueIndex("profiles_one_owner_idx").on(table.userId).where(sql`${table.isOwner}`),
+  ],
+);
+
+/**
+ * One profile's relationship with one item: favourite, stars, hidden.
+ *
+ * A row only exists once the profile has touched the item, so every read is
+ * a LEFT JOIN (or correlated lookup) that treats "no row" as "not favourite,
+ * not rated, not hidden" — see library/profileState.ts.
+ */
+export const profileItemState = pgTable(
+  "profile_item_state",
+  {
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    mediaItemId: integer("media_item_id")
+      .notNull()
+      .references(() => mediaItems.id, { onDelete: "cascade" }),
+    isFavorite: boolean("is_favorite").notNull().default(false),
+    // 1–5 stars, or null for "not rated". Null rather than 0 so an unrated
+    // item is never read as a one you rated badly — the sort puts it last and
+    // a "rating at least" rule simply leaves it out.
+    rating: integer("rating"),
+    // In this profile's vault. Per profile on purpose: what one person hides
+    // is nobody else's business, and hiding it from them too would tell them
+    // something is hidden.
+    hiddenAt: timestamp("hidden_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.mediaItemId] }),
+    index("profile_item_state_hidden_idx").on(table.profileId, table.hiddenAt),
+    index("profile_item_state_favorite_idx").on(table.profileId).where(sql`${table.isFavorite}`),
+  ],
+);
+
+export const profilePerformerState = pgTable(
+  "profile_performer_state",
+  {
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    performerId: integer("performer_id")
+      .notNull()
+      .references(() => performers.id, { onDelete: "cascade" }),
+    isFavorite: boolean("is_favorite").notNull().default(false),
+  },
+  (table) => [primaryKey({ columns: [table.profileId, table.performerId] })],
+);
+
+/**
+ * app_settings, per profile: the keys that are one person's preference or
+ * secret rather than the site's (appearance, privacy, vault, achievements).
+ * Which key lives where is listed in library/profileSettings.ts.
+ */
+export const profileSettings = pgTable(
+  "profile_settings",
+  {
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: jsonb("value").notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.profileId, table.key] })],
+);
+
+// Per profile: where each person got to in each video. Unique on
+// (profile, item), so two people half-way through the same film each keep
+// their own place.
 export const playbackStates = pgTable("playback_states", {
   id: serial("id").primaryKey(),
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
   mediaItemId: integer("media_item_id")
     .notNull()
-    .unique()
     .references(() => mediaItems.id),
   positionSeconds: integer("position_seconds").notNull().default(0),
   // Set once a video is played to the end (or marked watched by hand), and
@@ -485,7 +586,9 @@ export const playbackStates = pgTable("playback_states", {
   // the app would have for a "most played" view.
   playCount: integer("play_count").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("playback_states_profile_item_idx").on(table.profileId, table.mediaItemId),
+]);
 
 /**
  * Moments marked inside a video.
@@ -510,6 +613,9 @@ export const watchLog = pgTable(
   "watch_log",
   {
     id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
     mediaItemId: integer("media_item_id")
       .notNull()
       .references(() => mediaItems.id),
@@ -518,8 +624,8 @@ export const watchLog = pgTable(
     seconds: integer("seconds").notNull().default(0),
   },
   (table) => [
-    uniqueIndex("watch_log_item_hour_idx").on(table.mediaItemId, table.hour),
-    index("watch_log_hour_idx").on(table.hour),
+    uniqueIndex("watch_log_profile_item_hour_idx").on(table.profileId, table.mediaItemId, table.hour),
+    index("watch_log_profile_hour_idx").on(table.profileId, table.hour),
   ],
 );
 
@@ -527,6 +633,9 @@ export const playbackHeatmap = pgTable(
   "playback_heatmap",
   {
     id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
     mediaItemId: integer("media_item_id")
       .notNull()
       .references(() => mediaItems.id),
@@ -534,7 +643,8 @@ export const playbackHeatmap = pgTable(
     count: integer("count").notNull().default(1),
   },
   (table) => [
-    uniqueIndex("playback_heatmap_item_bucket_idx").on(
+    uniqueIndex("playback_heatmap_profile_item_bucket_idx").on(
+      table.profileId,
       table.mediaItemId,
       table.bucket,
     ),
@@ -543,6 +653,9 @@ export const playbackHeatmap = pgTable(
 
 export const bookmarks = pgTable("bookmarks", {
   id: serial("id").primaryKey(),
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
   mediaItemId: integer("media_item_id")
     .notNull()
     .references(() => mediaItems.id),
@@ -550,4 +663,4 @@ export const bookmarks = pgTable("bookmarks", {
   label: text("label"),
   note: text("note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [index("bookmarks_profile_item_idx").on(table.profileId, table.mediaItemId)]);

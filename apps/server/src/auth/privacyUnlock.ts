@@ -1,12 +1,15 @@
-import { count } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db/client.js";
-import { appSettings, webauthnCredentials } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { webauthnCredentials } from "../db/schema.js";
+import { getProfileSetting } from "../library/profileSettings.js";
+import { forgetSession, unlockKey } from "./profileContext.js";
 import { sweeper } from "./sweep.js";
 
 /**
- * Which sessions have proved the privacy credential recently.
+ * Which session+profile pairs have proved the privacy credential recently.
+ * Keyed by `unlockKey()` — one profile unlocking never unlocks another on the
+ * same browser, and picking a profile clears the session's entries.
  *
  * In memory, for the same reason the unlock throttle is: the process is
  * single-instance, and a restart clearing this fails closed — everyone is
@@ -31,23 +34,28 @@ const UNLOCK_TTL_MS = 15 * 60 * 1000;
 
 const sweep = sweeper(unlocked, (expires, now) => expires <= now);
 
-export function markUnlocked(sessionId: string): void {
+export function markUnlocked(key: string): void {
   sweep();
-  unlocked.set(sessionId, Date.now() + UNLOCK_TTL_MS);
+  unlocked.set(key, Date.now() + UNLOCK_TTL_MS);
 }
 
-export function isUnlocked(sessionId: string): boolean {
-  const expires = unlocked.get(sessionId);
+export function isUnlocked(key: string): boolean {
+  const expires = unlocked.get(key);
   if (expires === undefined) return false;
   if (expires <= Date.now()) {
-    unlocked.delete(sessionId);
+    unlocked.delete(key);
     return false;
   }
   return true;
 }
 
-export function lock(sessionId: string): void {
-  unlocked.delete(sessionId);
+export function lock(key: string): void {
+  unlocked.delete(key);
+}
+
+/** Every profile's privacy unlock on this session — on a profile switch. */
+export function lockPrivacySession(sessionId: string): void {
+  forgetSession(unlocked, sessionId);
 }
 
 /**
@@ -58,17 +66,15 @@ export function lock(sessionId: string): void {
  * back. Matches what the client's `usePrivacyGuard` already means by
  * "guarded", so the two cannot disagree about whether a prompt is coming.
  */
-export async function privacyIsConfigured(): Promise<boolean> {
-  const [row] = await db
-    .select()
-    .from(appSettings)
-    .where(eq(appSettings.key, "privacy"));
-  const value = row?.value as { passwordHash?: unknown } | null;
+export async function privacyIsConfigured(profileId: number): Promise<boolean> {
+  const value = (await getProfileSetting(profileId, "privacy")) as { passwordHash?: unknown } | null;
   if (typeof value?.passwordHash === "string") return true;
 
+  // Only this profile's passkeys: they are what it could unlock with.
   const [passkeys] = await db
     .select({ total: count() })
-    .from(webauthnCredentials);
+    .from(webauthnCredentials)
+    .where(eq(webauthnCredentials.profileId, profileId));
   return (passkeys?.total ?? 0) > 0;
 }
 
@@ -87,9 +93,10 @@ export async function privacyLocked(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<boolean> {
-  if (!(await privacyIsConfigured())) return false;
-  const sessionId = request.user?.sessionId;
-  if (sessionId && isUnlocked(sessionId)) return false;
+  const profileId = request.profile?.id;
+  if (profileId !== undefined && !(await privacyIsConfigured(profileId))) return false;
+  const key = unlockKey(request);
+  if (key && isUnlocked(key)) return false;
   reply.code(403).send({ error: "Locked", code: "privacy_locked" });
   return true;
 }

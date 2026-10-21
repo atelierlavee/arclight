@@ -51,6 +51,7 @@ import {
   savedSearchesChangedEvent,
 } from "@/lib/savedSearches";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
 
 type Collection = { id: number; name: string; type: "manual" | "smart" };
 type TagRow = { id: number; name: string };
@@ -197,6 +198,8 @@ export function Sidebar({
     });
   }
 
+  // Inbox, library health and collection management are the owner's.
+  const isOwner = useIsOwner();
   const deleteCollection = useMutation({
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/collections/${id}`, { method: "DELETE" });
@@ -342,7 +345,7 @@ export function Sidebar({
           <Tv className="size-4 shrink-0" />
           {!collapsed && "Series"}
         </Link>
-        <InboxLink collapsed={collapsed} navItemClass={navItemClass} />
+        {isOwner && <InboxLink collapsed={collapsed} navItemClass={navItemClass} />}
         <Link
           to="/vault"
           className={navItemClass}
@@ -359,7 +362,7 @@ export function Sidebar({
             action stays, since it's the one thing that isn't recoverable by
             just expanding again. */}
         {collapsed ? (
-          <button
+          isOwner && <button
             type="button"
             onClick={() => setShowCreate(true)}
             aria-label="New collection"
@@ -372,14 +375,14 @@ export function Sidebar({
           <>
             <div className="flex items-center justify-between pr-2">
               <SectionLabel>Collections</SectionLabel>
-              <button
+              {isOwner && <button
                 type="button"
                 onClick={() => setShowCreate(true)}
                 aria-label="New collection"
                 className="mt-3 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <Plus className="size-3.5" />
-              </button>
+              </button>}
             </div>
             {collections?.collections.length === 0 && (
               <p className="px-3 text-xs text-muted-foreground/60">None yet</p>
@@ -395,7 +398,7 @@ export function Sidebar({
                   dropTarget === c.id && "ring-1 ring-foreground/40",
                 )}
                 onDragOver={(event) => {
-                  if (c.type !== "manual" || !isMediaDrag(event.dataTransfer))
+                  if (!isOwner || c.type !== "manual" || !isMediaDrag(event.dataTransfer))
                     return;
                   // Both are required: without preventDefault the browser
                   // refuses the drop, and the drop handler never runs.
@@ -407,7 +410,7 @@ export function Sidebar({
                   setDropTarget((current) => (current === c.id ? null : current))
                 }
                 onDrop={(event) => {
-                  if (c.type !== "manual") return;
+                  if (!isOwner || c.type !== "manual") return;
                   event.preventDefault();
                   setDropTarget(null);
                   const payload = readMediaDragData(event.dataTransfer);
@@ -443,14 +446,14 @@ export function Sidebar({
                     )}
                   />
                 </button>
-                <button
+                {isOwner && <button
                   type="button"
                   onClick={() => deleteCollection.mutate(c.id)}
                   aria-label={`Delete ${c.name}`}
                   className="hidden rounded p-1 text-muted-foreground hover:text-destructive group-hover:block"
                 >
                   <Trash2 className="size-3.5" />
-                </button>
+                </button>}
               </div>
             ))}
 
@@ -568,7 +571,7 @@ export function Sidebar({
             built to act on them, so that is where the row goes when there are
             any. With only duplicates — which have a count but no manager yet —
             the health panel in settings is still the whole story. */}
-        <Link
+        {isOwner && <Link
           {...(health && health.videoMissing > 0
             ? { to: "/missing" as const }
             : { to: "/settings" as const, search: { tab: "library" } })}
@@ -589,7 +592,7 @@ export function Sidebar({
           {!collapsed && health && health.videoMissing > 0 && (
             <Lock className="size-3 shrink-0 text-muted-foreground/60" />
           )}
-        </Link>
+        </Link>}
         {/* A page you come to browse, so it sits with the other destinations
             here rather than behind the account menu. */}
         <Link

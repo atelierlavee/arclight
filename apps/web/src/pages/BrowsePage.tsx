@@ -1,3 +1,5 @@
+import { pkey } from "@/lib/profileStorage";
+import { useIsOwner } from "@/lib/profile";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
@@ -121,6 +123,8 @@ function hashView(search: Record<string, unknown>): string {
 
 export function BrowsePage() {
   const search = routeApi.useSearch();
+  // Making folders is library management: the owner profile's.
+  const isOwner = useIsOwner();
   const {
     tag,
     performer,
@@ -170,14 +174,14 @@ export function BrowsePage() {
   useEffect(() => {
     const restore = () => {
       try {
-        window.scrollTo({ top: Number(sessionStorage.getItem(scrollKey) ?? 0) });
+        window.scrollTo({ top: Number(sessionStorage.getItem(pkey(scrollKey)) ?? 0) });
       } catch {
         // Storage blocked: start at the top, as a fresh view would.
       }
     };
     const save = () => {
       try {
-        sessionStorage.setItem(scrollKey, String(window.scrollY));
+        sessionStorage.setItem(pkey(scrollKey), String(window.scrollY));
       } catch {
         // Not remembering a scroll position is not worth surfacing.
       }
@@ -344,7 +348,7 @@ export function BrowsePage() {
             !performer &&
             !studio &&
             !kind &&
-            !q && <NewFolderButton parentId={currentParentId} />}
+            !q && isOwner && <NewFolderButton parentId={currentParentId} />}
         </div>
 
         {/* Studios as a row of shortcuts, above the grid. Only on the plain

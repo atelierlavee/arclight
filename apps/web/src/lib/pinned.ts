@@ -1,3 +1,4 @@
+import { pkey } from "./profileStorage";
 export type Pin =
   | { id: string; type: "performer"; label: string; performerId: number }
   | { id: string; type: "studio"; label: string; studioId: number }
@@ -10,7 +11,7 @@ const CHANGE_EVENT = "media-server:pins-changed";
 export function readPins(): Pin[] {
   try {
     const value = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) ?? "[]",
+      localStorage.getItem(pkey(STORAGE_KEY)) ?? "[]",
     ) as unknown;
     return Array.isArray(value) ? (value as Pin[]) : [];
   } catch {
@@ -20,7 +21,7 @@ export function readPins(): Pin[] {
 
 function writePins(pins: Pin[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pins));
+    localStorage.setItem(pkey(STORAGE_KEY), JSON.stringify(pins));
     window.dispatchEvent(new Event(CHANGE_EVENT));
   } catch {
     // Pins are optional when browser storage is unavailable.
@@ -56,7 +57,7 @@ export function removeFolderPins(folderId: number): void {
 /** All pins, for signing out. */
 export function clearPins(): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(pkey(STORAGE_KEY));
     window.dispatchEvent(new Event(CHANGE_EVENT));
   } catch {
     // As above.

@@ -14,6 +14,8 @@ import { PrivacySettingsSection } from "@/components/PrivacySettingsSection";
 import { ActivityLogSection } from "@/components/ActivityLogSection";
 import { StorageInsightsSection } from "@/components/StorageInsightsSection";
 import { cn } from "@/lib/utils";
+import { useIsOwner } from "@/lib/profile";
+import { ProfilesSettingsSection } from "@/components/ProfilesSettingsSection";
 
 const routeApi = getRouteApi("/settings");
 
@@ -24,22 +26,27 @@ const routeApi = getRouteApi("/settings");
  * homepage shows.
  */
 const TABS = [
-  { id: "library", label: "Library" },
-  { id: "homepage", label: "Homepage" },
-  { id: "privacy", label: "Privacy" },
-  { id: "storage", label: "Storage" },
-  { id: "backup", label: "Backup" },
-  { id: "activity", label: "Activity" },
+  { id: "library", label: "Library", ownerOnly: true },
+  { id: "homepage", label: "Homepage", ownerOnly: false },
+  { id: "privacy", label: "Privacy", ownerOnly: false },
+  { id: "profiles", label: "Profiles", ownerOnly: false },
+  { id: "storage", label: "Storage", ownerOnly: true },
+  { id: "backup", label: "Backup", ownerOnly: true },
+  { id: "activity", label: "Activity", ownerOnly: true },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 export function SettingsPage() {
   const { tab } = routeApi.useSearch();
+  const isOwner = useIsOwner();
+  // Library management is the owner profile's; anyone else gets only the
+  // tabs that are about them.
+  const tabs = TABS.filter((t) => isOwner || !t.ownerOnly);
   // An unknown tab in the URL falls back rather than rendering an empty page.
-  const active: TabId = TABS.some((t) => t.id === tab)
+  const active: TabId = tabs.some((t) => t.id === tab)
     ? (tab as TabId)
-    : "library";
+    : tabs[0].id;
 
   return (
     <AppShell
@@ -58,7 +65,7 @@ export function SettingsPage() {
           // the first and last were both cut off with no way to reach them.
           className="scrollbar-hide -mx-4 flex gap-1 overflow-x-auto border-b border-border px-4 md:mx-0 md:justify-center md:overflow-visible md:px-0"
         >
-          {TABS.map((entry) => (
+          {tabs.map((entry) => (
             <Link
               key={entry.id}
               to="/settings"
@@ -92,14 +99,14 @@ export function SettingsPage() {
           )}
           {active === "homepage" && (
             <>
-              <HeroSettingsSection />
+              {isOwner && <HeroSettingsSection />}
               <AppearanceSettingsSection />
             </>
           )}
           {active === "privacy" && (
             <>
               <PrivacySettingsSection />
-              <NetworkSettingsSection />
+              {isOwner && <NetworkSettingsSection />}
             </>
           )}
           {active === "backup" && (
@@ -108,6 +115,7 @@ export function SettingsPage() {
               <CacheSettingsSection />
             </>
           )}
+          {active === "profiles" && <ProfilesSettingsSection />}
           {active === "storage" && <StorageInsightsSection />}
           {active === "activity" && <ActivityLogSection />}
         </div>

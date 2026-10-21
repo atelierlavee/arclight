@@ -12,28 +12,32 @@ import {
 } from "../db/schema.js";
 import { notHidden, visibleItems } from "../library/visibility.js";
 import {
+  fetchRelated,
   HERO_LIMIT,
+  itemColumnsFor,
+  playbackColumns,
+  playbackJoin,
   RELATED_LIMIT,
   WATCHED_PERCENT,
-  fetchRelated,
-  itemColumns,
-  playbackColumns,
   withPlayback,
 } from "./mediaItemQueries.js";
 import { getHeroSettings } from "./settings.js";
 
+import { profileId } from "../auth/profileContext.js";
+import { itemFavoriteFilter, itemRating } from "../library/profileState.js";
 export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
   // Resolves the hero setting into actual items, so the homepage doesn't have
   // to know how the setting is shaped.
-  app.get("/api/hero-items", async () => {
+  app.get("/api/hero-items", async (request) => {
+    const profile = profileId(request);
     const hero = await getHeroSettings();
 
     const base = db
-      .select({ ...itemColumns, ...playbackColumns })
+      .select({ ...itemColumnsFor(profile), ...playbackColumns })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id));
+      .leftJoin(playbackStates, playbackJoin(profile));
 
     let rows;
     if (hero.source === "manual") {
@@ -41,7 +45,7 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
       const found = await base.where(
         and(
           eq(mediaItemTypes.name, "video"),
-          visibleItems(),
+          visibleItems(profile),
           inArray(mediaItems.id, hero.itemIds)
         )
       );
@@ -53,8 +57,8 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
         .where(
           and(
             eq(mediaItemTypes.name, "video"),
-            visibleItems(),
-            eq(mediaItems.isFavorite, true)
+            visibleItems(profile),
+            itemFavoriteFilter(profile, mediaItems.id)
           )
         )
         .orderBy(desc(mediaItems.createdAt))
@@ -62,10 +66,10 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     } else {
       rows = await base
         .where(
-          // Through visibleItems() like the other two sources: spelling the
+          // Through visibleItems(profile) like the other two sources: spelling the
           // rule out here is how "recent" came to put vault items on the
           // homepage hero.
-          and(eq(mediaItemTypes.name, "video"), visibleItems())
+          and(eq(mediaItemTypes.name, "video"), visibleItems(profile))
         )
         .orderBy(desc(mediaItems.createdAt))
         .limit(HERO_LIMIT);
@@ -81,17 +85,18 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
 
   // Backs the "Continue Watching" row — anything with real progress that
   // isn't essentially finished, most recently watched first.
-  app.get("/api/continue-watching", async () => {
+  app.get("/api/continue-watching", async (request) => {
+    const profile = profileId(request);
     const rows = await db
-      .select({ ...itemColumns, ...playbackColumns })
+      .select({ ...itemColumnsFor(profile), ...playbackColumns })
       .from(playbackStates)
-      .innerJoin(mediaItems, eq(mediaItems.id, playbackStates.mediaItemId))
+      .innerJoin(mediaItems, and(eq(mediaItems.id, playbackStates.mediaItemId), eq(playbackStates.profileId, profile)))
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
       .where(
         and(
           gt(playbackStates.positionSeconds, 15),
-          visibleItems(),
+          visibleItems(profile),
           // Finished videos drop out of the row rather than sitting at the
           // front of it forever. A video with no known duration is kept —
           // better a stale entry than silently hiding something.
@@ -110,16 +115,17 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get("/api/taste-twins", async () => {
+  app.get("/api/taste-twins", async (request) => {
+    const profile = profileId(request);
     // Both halves only over visible items: what you watch in the vault must
     // not decide who the homepage suggests, and a twin shared only through a
     // hidden video would point straight at it.
     const topPerformers = await db
       .select({ performerId: mediaItemPerformers.performerId, watchTime: sql<number>`coalesce(sum(${watchLog.seconds}), 0)::int` })
       .from(mediaItemPerformers)
-      .innerJoin(watchLog, eq(watchLog.mediaItemId, mediaItemPerformers.mediaItemId))
+      .innerJoin(watchLog, and(eq(watchLog.mediaItemId, mediaItemPerformers.mediaItemId), eq(watchLog.profileId, profile)))
       .innerJoin(mediaItems, eq(mediaItems.id, mediaItemPerformers.mediaItemId))
-      .where(visibleItems())
+      .where(visibleItems(profile))
       .groupBy(mediaItemPerformers.performerId)
       .orderBy(sql`coalesce(sum(${watchLog.seconds}), 0) desc`)
       .limit(10);
@@ -131,7 +137,7 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
       db.selectDistinct({ mediaItemId: mediaItemPerformers.mediaItemId })
         .from(mediaItemPerformers)
         .innerJoin(mediaItems, eq(mediaItems.id, mediaItemPerformers.mediaItemId))
-        .where(and(inArray(mediaItemPerformers.performerId, topIds), visibleItems()))
+        .where(and(inArray(mediaItemPerformers.performerId, topIds), visibleItems(profile)))
     );
 
     const twins = await db
@@ -164,7 +170,8 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     return { performers: twins };
   });
 
-  app.get("/api/fun-stat", async () => {
+  app.get("/api/fun-stat", async (request) => {
+    const profile = profileId(request);
     const today = new Date();
     const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
 
@@ -174,25 +181,25 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     const [totalRow] = await db
       .select({ total: sql<number>`coalesce(sum(${watchLog.seconds}), 0)::int` })
       .from(watchLog)
-      .innerJoin(mediaItems, eq(mediaItems.id, watchLog.mediaItemId))
-      .where(notHidden());
+      .innerJoin(mediaItems, and(eq(mediaItems.id, watchLog.mediaItemId), eq(watchLog.profileId, profile)))
+      .where(notHidden(profile));
     const totalSeconds = totalRow?.total ?? 0;
 
     const [watchedRow] = await db
       .select({ count: sql<number>`count(distinct ${playbackStates.mediaItemId})::int` })
       .from(playbackStates)
-      .innerJoin(mediaItems, eq(mediaItems.id, playbackStates.mediaItemId))
-      .where(and(isNotNull(playbackStates.completedAt), notHidden()));
+      .innerJoin(mediaItems, and(eq(mediaItems.id, playbackStates.mediaItemId), eq(playbackStates.profileId, profile)))
+      .where(and(isNotNull(playbackStates.completedAt), notHidden(profile)));
     const watchedCount = watchedRow?.count ?? 0;
 
     const [unwatchedRow] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+      .leftJoin(playbackStates, playbackJoin(profile))
       .where(
         and(
-          visibleItems(),
+          visibleItems(profile),
           ne(mediaItemTypes.name, "photo"),
           ne(mediaItemTypes.name, "folder"),
           isNull(playbackStates.completedAt),
@@ -203,26 +210,26 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     const [studioRow] = await db
       .select({ count: sql<number>`count(distinct ${mediaItems.studioId})::int` })
       .from(mediaItems)
-      .where(and(visibleItems(), isNotNull(mediaItems.studioId)));
+      .where(and(visibleItems(profile), isNotNull(mediaItems.studioId)));
     const studioCount = studioRow?.count ?? 0;
 
     const [avgRow] = await db
       .select({ avg: sql<number>`coalesce(avg(${mediaItems.durationSeconds}), 0)::int` })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
-      .where(and(visibleItems(), ne(mediaItemTypes.name, "photo"), ne(mediaItemTypes.name, "folder"), isNotNull(mediaItems.durationSeconds)));
+      .where(and(visibleItems(profile), ne(mediaItemTypes.name, "photo"), ne(mediaItemTypes.name, "folder"), isNotNull(mediaItems.durationSeconds)));
     const avgDuration = avgRow?.avg ?? 0;
 
     const [ratedRow] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(mediaItems)
-      .where(and(visibleItems(), isNotNull(mediaItems.rating)));
+      .where(and(visibleItems(profile), isNotNull(itemRating(profile, mediaItems.id))));
     const ratedCount = ratedRow?.count ?? 0;
 
     const [fiveStarRow] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(mediaItems)
-      .where(and(visibleItems(), eq(mediaItems.rating, 5)));
+      .where(and(visibleItems(profile), eq(itemRating(profile, mediaItems.id), 5)));
     const fiveStarCount = fiveStarRow?.count ?? 0;
 
     const stats: string[] = [];
@@ -242,34 +249,36 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     return { stat: stats[seed % stats.length] };
   });
 
-  app.get("/api/forgotten-gems", async () => {
+  app.get("/api/forgotten-gems", async (request) => {
+    const profile = profileId(request);
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     const rows = await db
-      .select({ ...itemColumns, ...playbackColumns })
+      .select({ ...itemColumnsFor(profile), ...playbackColumns })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
-      .innerJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+      .innerJoin(playbackStates, playbackJoin(profile))
       .where(
         and(
-          visibleItems(),
-          gte(mediaItems.rating, 4),
+          visibleItems(profile),
+          sql`${itemRating(profile, mediaItems.id)} >= ${4}`,
           isNotNull(playbackStates.completedAt),
           sql`${playbackStates.updatedAt} < ${sixMonthsAgo}`,
           ne(mediaItemTypes.name, "photo"),
           ne(mediaItemTypes.name, "folder"),
         )
       )
-      .orderBy(sql`${mediaItems.rating} desc`, sql`${playbackStates.updatedAt} asc`)
+      .orderBy(sql`${itemRating(profile, mediaItems.id)} desc`, sql`${playbackStates.updatedAt} asc`)
       .limit(RELATED_LIMIT);
 
     const related = await fetchRelated(rows.map((r) => r.id));
     return { items: rows.map((r) => withPlayback(r, related)) };
   });
 
-  app.get("/api/streak", async () => {
+  app.get("/api/streak", async (request) => {
+    const profile = profileId(request);
     // Summed per hour in SQL: the widget only adds seconds up by local day,
     // so one row per hour carries everything it needs, where one row per
     // video per hour grew with every video ever watched. Hours rather than
@@ -278,8 +287,8 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     const rows = await db
       .select({ hour: watchLog.hour, seconds: sql<number>`sum(${watchLog.seconds})::int` })
       .from(watchLog)
-      .innerJoin(mediaItems, eq(mediaItems.id, watchLog.mediaItemId))
-      .where(notHidden())
+      .innerJoin(mediaItems, and(eq(mediaItems.id, watchLog.mediaItemId), eq(watchLog.profileId, profile)))
+      .where(notHidden(profile))
       .groupBy(watchLog.hour)
       .orderBy(watchLog.hour);
 
@@ -287,22 +296,23 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get<{ Querystring: { seed?: string } }>("/api/daily-pick", async (request) => {
+    const profile = profileId(request);
     const today = new Date();
     const defaultSeed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
     const seed = request.query.seed ? Number(request.query.seed) || defaultSeed : defaultSeed;
 
     const baseQuery = db
-      .select({ ...itemColumns, ...playbackColumns })
+      .select({ ...itemColumnsFor(profile), ...playbackColumns })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id));
+      .leftJoin(playbackStates, playbackJoin(profile));
 
     // Prefer unwatched, fall back to any video if the pool is empty.
     let [row] = await baseQuery
       .where(
         and(
-          visibleItems(),
+          visibleItems(profile),
           ne(mediaItemTypes.name, "photo"),
           ne(mediaItemTypes.name, "folder"),
           isNull(playbackStates.completedAt),
@@ -315,7 +325,7 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
       [row] = await baseQuery
         .where(
           and(
-            visibleItems(),
+            visibleItems(profile),
             ne(mediaItemTypes.name, "photo"),
             ne(mediaItemTypes.name, "folder"),
           )
@@ -330,15 +340,16 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     return { item: withPlayback(row, related) };
   });
 
-  app.get("/api/on-this-day", async () => {
+  app.get("/api/on-this-day", async (request) => {
+    const profile = profileId(request);
     const now = new Date();
     const month = now.getMonth() + 1;
     const day = now.getDate();
 
     const rows = await db
-      .select({ ...itemColumns, ...playbackColumns, completedYear: sql<number>`extract(year from ${playbackStates.completedAt})::int` })
+      .select({ ...itemColumnsFor(profile), ...playbackColumns, completedYear: sql<number>`extract(year from ${playbackStates.completedAt})::int` })
       .from(playbackStates)
-      .innerJoin(mediaItems, eq(mediaItems.id, playbackStates.mediaItemId))
+      .innerJoin(mediaItems, and(eq(mediaItems.id, playbackStates.mediaItemId), eq(playbackStates.profileId, profile)))
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
       .where(
@@ -347,7 +358,7 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
           sql`extract(month from ${playbackStates.completedAt}) = ${month}`,
           sql`extract(day from ${playbackStates.completedAt}) = ${day}`,
           sql`extract(year from ${playbackStates.completedAt}) < extract(year from now())`,
-          visibleItems(),
+          visibleItems(profile),
         )
       )
       .orderBy(desc(playbackStates.completedAt))

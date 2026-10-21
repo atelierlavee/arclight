@@ -14,6 +14,7 @@ import {
   makePerformer,
   makePhoto,
   makeStudio,
+  ownerProfileId,
 } from "../test/fixtures.js";
 
 let app: FastifyInstance;
@@ -403,7 +404,7 @@ describe("taste twins", () => {
     // watched, which is what makes them a recommendation.
     const watched = await makeItem(libraryId, { title: "Watched", durationSeconds: 600 });
     await linkPerformer(watched, top);
-    await db.insert(watchLog).values({ mediaItemId: watched, hour: new Date(), seconds: 300 });
+    await db.insert(watchLog).values({ profileId: await ownerProfileId(), mediaItemId: watched, hour: new Date(), seconds: 300 });
     const unwatched = await makeItem(libraryId, { title: "Together", durationSeconds: 600 });
     await linkPerformer(unwatched, top);
     await linkPerformer(unwatched, twin);
@@ -616,7 +617,7 @@ describe("missing items stay out of the library", () => {
       missingSince: gone(),
       durationSeconds: 600,
     });
-    await db.insert(playbackStates).values({ mediaItemId: item, positionSeconds: 120 });
+    await db.insert(playbackStates).values({ profileId: await ownerProfileId(), mediaItemId: item, positionSeconds: 120 });
 
     expect(await titles("/api/continue-watching")).not.toContain("Half watched");
   });

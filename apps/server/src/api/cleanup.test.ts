@@ -11,6 +11,7 @@ import {
   makeLibrary,
   makePerformer,
   makeStudio,
+  ownerProfileId,
 } from "../test/fixtures.js";
 
 let app: FastifyInstance;
@@ -73,7 +74,7 @@ describe("cleaning up after a removed folder", () => {
   // removed for anyone who had ever played a video.
   it("removes hidden items that have playback heatmap rows", async () => {
     const gone = await hiddenItem("Watched then hidden");
-    await db.insert(playbackHeatmap).values({ mediaItemId: gone, bucket: 3 });
+    await db.insert(playbackHeatmap).values({ profileId: await ownerProfileId(), mediaItemId: gone, bucket: 3 });
 
     const res = await post("/api/library/cleanup");
     expect(res.statusCode).toBe(200);

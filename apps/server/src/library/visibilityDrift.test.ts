@@ -84,3 +84,48 @@ describe("visibility rule drift", () => {
     expect(MISSING_FILTER.test("missingSince: mediaItems.missingSince,")).toBe(false);
   });
 });
+
+/**
+ * "Hidden" is per profile (profile_item_state), and only means anything for
+ * the profile asking. A query that reads hidden_at by hand can easily forget
+ * the profile and hide one person's vault from everybody — or, worse, show
+ * it. So outside the helpers, only these files may touch it, each because it
+ * lists the vault itself rather than filtering it out.
+ */
+const HIDDEN_STATE_ALLOWED: Record<string, string> = {
+  "library/profileState.ts": "the helpers themselves",
+  "api/vault.ts": "lists this profile's vault",
+  "api/missing.ts": "drops this profile's vault items from the missing list",
+  "activity/log.ts": "drops this profile's vault items from the log",
+};
+
+const HIDDEN_STATE = /\bprofileItemState\.hiddenAt\b|\bhidden_at\b/;
+const SRC_DIR = path.resolve(import.meta.dirname, "..");
+
+function sourceFiles(dir = SRC_DIR, prefix = ""): string[] {
+  return readdirSync(path.join(dir, prefix), { withFileTypes: true }).flatMap((entry) => {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) return rel === "db" || rel === "test" ? [] : sourceFiles(dir, rel);
+    return rel.endsWith(".ts") && !rel.endsWith(".test.ts") ? [rel] : [];
+  });
+}
+
+describe("per-profile hidden state drift", () => {
+  it("only the vault's own listings read hidden_at outside library/profileState.ts", () => {
+    const offenders = sourceFiles().filter((file) => {
+      if (file in HIDDEN_STATE_ALLOWED) return false;
+      return HIDDEN_STATE.test(stripComments(readFileSync(path.join(SRC_DIR, file), "utf8")));
+    });
+    expect(
+      offenders,
+      "use visibleItems(profile)/notHidden(profile)/hiddenGate(request) or the profileState helpers",
+    ).toEqual([]);
+  });
+
+  it("every allowance is still needed", () => {
+    const unneeded = Object.keys(HIDDEN_STATE_ALLOWED).filter(
+      (file) => !HIDDEN_STATE.test(stripComments(readFileSync(path.join(SRC_DIR, file), "utf8"))),
+    );
+    expect(unneeded).toEqual([]);
+  });
+});

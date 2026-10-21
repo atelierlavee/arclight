@@ -39,6 +39,7 @@ import {
 } from "./searchRows";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
 
 /**
  * Search from anywhere, Spotlight-style.
@@ -85,8 +86,10 @@ export function SpotlightSearch() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Scanning is library management: the owner profile's.
+  const isOwner = useIsOwner();
   const commands = useMemo<CommandItem[]>(
-    () => [
+    () => ([
       {
         id: "resume",
         label: "Resume last video",
@@ -252,8 +255,8 @@ export function SpotlightSearch() {
         icon: Settings,
         run: () => void navigate({ to: "/settings" }),
       },
-    ],
-    [appearance, navigate, queryClient, toast],
+    ] satisfies CommandItem[]).filter((command) => isOwner || command.id !== "scan"),
+    [appearance, navigate, queryClient, toast, isOwner],
   );
 
   const { rows, ready } = useSuggestionRows(value);

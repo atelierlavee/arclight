@@ -12,6 +12,7 @@ import {
   tags,
 } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { profileItemState, profilePerformerState, profiles } from "../db/schema.js";
 
 /**
  * Builders for the rows a route needs to have something to return.
@@ -50,19 +51,30 @@ async function typeId(name: string): Promise<number> {
   return created.id;
 }
 
+/** Per-profile state a test can give an item at creation (the owner's). */
+type ItemState = { isFavorite?: boolean; rating?: number | null; hiddenAt?: Date | null };
+
 export async function makeItem(
   libraryId: number,
-  overrides: Partial<typeof mediaItems.$inferInsert> = {}
+  overrides: Partial<typeof mediaItems.$inferInsert> & ItemState = {}
 ): Promise<number> {
+  // Favourite, rating and hidden moved to profile_item_state; accepted here
+  // still so a test reads as before, and written for the owner profile.
+  const { isFavorite, rating, hiddenAt, ...columns } = overrides;
   const [item] = await db
     .insert(mediaItems)
     .values({
       libraryId,
       itemTypeId: await typeId("video"),
       title: "A Video",
-      ...overrides,
+      ...columns,
     })
     .returning();
+  const state: ItemState = {};
+  if (isFavorite !== undefined) state.isFavorite = isFavorite;
+  if (rating !== undefined) state.rating = rating;
+  if (hiddenAt !== undefined) state.hiddenAt = hiddenAt;
+  if (Object.keys(state).length > 0) await setItemStateFor(item.id, state);
   return item.id;
 }
 
@@ -121,4 +133,39 @@ export async function linkTag(mediaItemId: number, tagId: number): Promise<void>
 export async function makeStudio(name: string): Promise<number> {
   const [row] = await db.insert(studios).values({ name }).returning();
   return row.id;
+}
+
+/**
+ * Favourite / rating / hidden for one item, as one profile — the owner's by
+ * default (the profile `signIn()` acts as). These used to be columns on
+ * media_items and were set through `makeItem` overrides.
+ */
+export async function setItemStateFor(
+  mediaItemId: number,
+  state: { isFavorite?: boolean; rating?: number | null; hiddenAt?: Date | null },
+  profileId?: number,
+): Promise<void> {
+  const pid = profileId ?? (await ownerProfileId());
+  await db
+    .insert(profileItemState)
+    .values({ profileId: pid, mediaItemId, ...state })
+    .onConflictDoUpdate({ target: [profileItemState.profileId, profileItemState.mediaItemId], set: state });
+}
+
+export async function setPerformerFavoriteFor(performerId: number, isFavorite: boolean, profileId?: number) {
+  const pid = profileId ?? (await ownerProfileId());
+  await db
+    .insert(profilePerformerState)
+    .values({ profileId: pid, performerId, isFavorite })
+    .onConflictDoUpdate({
+      target: [profilePerformerState.profileId, profilePerformerState.performerId],
+      set: { isFavorite },
+    });
+}
+
+/** The owner profile `signIn()` created. Throws when nobody signed in. */
+export async function ownerProfileId(): Promise<number> {
+  const [owner] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.isOwner, true));
+  if (!owner) throw new Error("ownerProfileId(): call signIn() first");
+  return owner.id;
 }

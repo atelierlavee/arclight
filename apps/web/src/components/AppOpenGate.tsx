@@ -1,7 +1,8 @@
+import { pkey } from "@/lib/profileStorage";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Clapperboard, Loader2 } from "lucide-react";
-import { fetchPasskeys } from "@/lib/webauthnApi";
+import { useOwnPasskeys } from "@/lib/profile";
 import { fetchPrivacyStatus } from "@/lib/privacyApi";
 import { PrivacyUnlockForm } from "./PrivacyUnlockForm";
 import { qk } from "@/lib/queryKeys";
@@ -10,7 +11,7 @@ const UNLOCK_KEY = "media-server:app-open-unlocked";
 
 function readUnlocked(): boolean {
   try {
-    return window.sessionStorage.getItem(UNLOCK_KEY) === "true";
+    return window.sessionStorage.getItem(pkey(UNLOCK_KEY)) === "true";
   } catch {
     return false;
   }
@@ -18,7 +19,7 @@ function readUnlocked(): boolean {
 
 export function clearAppOpenUnlock(): void {
   try {
-    window.sessionStorage.removeItem(UNLOCK_KEY);
+    window.sessionStorage.removeItem(pkey(UNLOCK_KEY));
   } catch {
     // Storage may be disabled; the next app mount will ask again.
   }
@@ -27,7 +28,7 @@ export function clearAppOpenUnlock(): void {
 export function AppOpenGate({ children }: { children: React.ReactNode }) {
   const [unlocked, setUnlocked] = useState(readUnlocked);
   const privacy = useQuery({ queryKey: qk.privacy, queryFn: fetchPrivacyStatus });
-  const passkeys = useQuery({ queryKey: qk.passkeys, queryFn: fetchPasskeys });
+  const passkeys = useOwnPasskeys();
 
   if (privacy.isPending || passkeys.isPending) {
     return (
@@ -79,7 +80,7 @@ export function AppOpenGate({ children }: { children: React.ReactNode }) {
         <PrivacyUnlockForm
           onUnlocked={() => {
             try {
-              window.sessionStorage.setItem(UNLOCK_KEY, "true");
+              window.sessionStorage.setItem(pkey(UNLOCK_KEY), "true");
             } catch {
               // Keep this mount usable even when browser storage is disabled.
             }

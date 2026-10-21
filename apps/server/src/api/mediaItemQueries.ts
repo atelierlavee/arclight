@@ -1,4 +1,4 @@
-import { type SQL, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { type SQL, and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
   categories,
@@ -13,6 +13,7 @@ import {
   tags,
 } from "../db/schema.js";
 import { playbackWarningFor } from "../media/compatibility.js";
+import { itemIsFavorite, itemRating } from "../library/profileState.js";
 
 export const PAGE_SIZE = 50;
 
@@ -23,6 +24,15 @@ export const playbackColumns = {
   watchedAt: playbackStates.completedAt,
   playCount: playbackStates.playCount,
 };
+
+/**
+ * The join condition for "this profile's playback row for the item". Watch
+ * state is per profile, so joining on the item alone would fan out one row
+ * per profile that has watched it — and show everyone's progress.
+ */
+export function playbackJoin(profileId: number): SQL {
+  return and(eq(playbackStates.mediaItemId, mediaItems.id), eq(playbackStates.profileId, profileId))!;
+}
 
 // How much of a video counts as "finished". Credits, black frames and a
 // stray click near the end all mean the last few percent often never play,
@@ -118,7 +128,7 @@ export function searchOrder(search: string): SQL[] {
   ];
 }
 
-export function orderFor(sort: string | undefined, randomSeed: number): SQL[] {
+export function orderFor(sort: string | undefined, randomSeed: number, profileId: number): SQL[] {
   switch (sort) {
     case "oldest":
       return [asc(mediaItems.createdAt), asc(mediaItems.id)];
@@ -157,7 +167,7 @@ export function orderFor(sort: string | undefined, randomSeed: number): SQL[] {
     // Unrated is unknown, not bad — it goes after every star count, the same
     // reasoning as undated items under the release sorts.
     case "rating":
-      return [sql`${mediaItems.rating} desc nulls last`, desc(mediaItems.id)];
+      return [sql`${itemRating(profileId, mediaItems.id)} desc nulls last`, desc(mediaItems.id)];
     case "largest":
       return [sql`${fileSizeExpr} desc nulls last`, desc(mediaItems.id)];
     case "smallest":
@@ -260,7 +270,12 @@ export async function categorySlugs(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.slug));
 }
 
-export const itemColumns = {
+/**
+ * The columns every item list selects. A function of the profile because
+ * isFavorite and rating are the current profile's (profile_item_state); the
+ * field names are the ones the API has always used.
+ */
+export const itemColumnsFor = (profileId: number) => ({
   id: mediaItems.id,
   libraryId: mediaItems.libraryId,
   parentId: mediaItems.parentId,
@@ -269,7 +284,7 @@ export const itemColumns = {
   titleSource: mediaItems.titleSource,
   description: mediaItems.description,
   performersSource: mediaItems.performersSource,
-  isFavorite: mediaItems.isFavorite,
+  isFavorite: itemIsFavorite(profileId, mediaItems.id),
   kind: mediaItems.kind,
   studio: studios.name,
   studioSource: mediaItems.studioSource,
@@ -278,7 +293,7 @@ export const itemColumns = {
   thumbnailPositionY: mediaItems.thumbnailPositionY,
   thumbnailScale: mediaItems.thumbnailScale,
   tileShape: mediaItems.tileShape,
-  rating: mediaItems.rating,
+  rating: itemRating(profileId, mediaItems.id),
   durationSeconds: mediaItems.durationSeconds,
   takenAt: mediaItems.takenAt,
   releaseDate: mediaItems.releaseDate,
@@ -286,7 +301,7 @@ export const itemColumns = {
   missingSince: mediaItems.missingSince,
   createdAt: mediaItems.createdAt,
   updatedAt: mediaItems.updatedAt,
-};
+});
 
 export async function fetchTagsByItemIds(
   itemIds: number[]

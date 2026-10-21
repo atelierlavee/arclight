@@ -7,7 +7,10 @@ import { eq, inArray } from "drizzle-orm";
 import {
   registeredRoutes,
   resetDatabase,
+  sessionCookie,
   signIn,
+  signInOtherProfile,
+  testAccount,
   testApp,
   type RegisteredRoute,
 } from "../test/harness.js";
@@ -21,24 +24,33 @@ import {
   makePhoto,
   makeStudio,
   makeTag,
+  ownerProfileId,
 } from "../test/fixtures.js";
 import { db } from "../db/client.js";
 import {
   activityEvents,
   albums,
-  appSettings,
   bookmarks,
   collectionItems,
   collections,
   mediaItems,
   playbackHeatmap,
   playbackStates,
+  profileItemState,
+  profileSettings,
   scanJobs,
   series,
   watchLog,
 } from "../db/schema.js";
 import { hashPassword } from "../auth/passwords.js";
 import { PUBLIC_API_PATHS } from "../auth/guard.js";
+import { PROFILE_OPTIONAL_ROUTES } from "../auth/ownerRoutes.js";
+
+/** Signs the test user in (creating it and its owner profile) and returns its ids. */
+async function testAccountAfterSignIn() {
+  await signIn();
+  return testAccount();
+}
 import { resetVaultAttempts } from "./vault.js";
 
 /**
@@ -129,6 +141,66 @@ describe("every /api route needs a session", () => {
       }
     }
     expect(failures).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. Signed in, no profile picked: only the picker answers
+// ---------------------------------------------------------------------------
+
+/**
+ * What a session may do between signing in and picking a profile. Repeated
+ * from the guard's table (auth/ownerRoutes.ts) for the same reason as the
+ * public list above: widening it takes two edits.
+ */
+const EXPECTED_PROFILE_OPTIONAL = [
+  "GET /api/auth/status",
+  "POST /api/auth/logout",
+  "GET /api/profiles",
+  "POST /api/profiles/:id/select",
+];
+
+describe("every signed-in /api route needs a profile", () => {
+  let cookie: string;
+
+  beforeAll(async () => {
+    await resetDatabase();
+    const { userId } = await testAccountAfterSignIn();
+    cookie = await sessionCookie(userId, null);
+  });
+
+  it("the no-profile allow-list is exactly the expected one", () => {
+    expect([...PROFILE_OPTIONAL_ROUTES].sort()).toEqual([...EXPECTED_PROFILE_OPTIONAL].sort());
+  });
+
+  it("answers 409 profile_required everywhere else, in plain and encoded spellings", async () => {
+    const failures: string[] = [];
+    for (const route of routes) {
+      if (PUBLIC_API_PATHS.has(route.url)) continue;
+      // HEAD is served by, and judged as, the GET route.
+      const method = route.method === "HEAD" ? "GET" : route.method;
+      if (PROFILE_OPTIONAL_ROUTES.has(`${method} ${route.url}`)) continue;
+      const url = fillParams(route.url);
+      for (const spelling of [url, url.replace(/^\/api/, "/%61pi")]) {
+        const res = await app.inject({
+          method: route.method as "GET",
+          url: spelling,
+          headers: { cookie },
+          ...(["POST", "PUT", "PATCH"].includes(route.method) ? { payload: {} } : {}),
+        });
+        // HEAD answers carry no body; the status is the whole answer.
+        const code =
+          res.statusCode !== 409 ? undefined : route.method === "HEAD" ? "profile_required" : res.json().code;
+        if (code !== "profile_required") failures.push(`${route.method} ${spelling} -> ${res.statusCode}`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it("is not vacuous: the picker itself answers", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/profiles", headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().profiles).toHaveLength(1);
   });
 });
 
@@ -260,20 +332,26 @@ async function seedLibrary(): Promise<Seeded> {
   );
   // Two in progress (continue watching); the missing one finished a year ago
   // today, for the history views that keep missing items (on this day etc.).
+  // All of it the owner's — the profile whose vault holds the hidden items
+  // and whose session the sweep runs as.
+  const profileId = await ownerProfileId();
   await db.insert(playbackStates).values(
     videos.map((mediaItemId) =>
       mediaItemId === HIDDEN_MISSING_ID
-        ? { mediaItemId, playCount: 3, completedAt: lastYear }
-        : { mediaItemId, positionSeconds: 120, playCount: 3 },
+        ? { profileId, mediaItemId, playCount: 3, completedAt: lastYear }
+        : { profileId, mediaItemId, positionSeconds: 120, playCount: 3 },
     ),
   );
   await db.insert(watchLog).values([
-    ...videos.map((mediaItemId) => ({ mediaItemId, hour, seconds: 300 })),
-    ...videos.map((mediaItemId) => ({ mediaItemId, hour: lastYear, seconds: 300 })),
+    ...videos.map((mediaItemId) => ({ profileId, mediaItemId, hour, seconds: 300 })),
+    ...videos.map((mediaItemId) => ({ profileId, mediaItemId, hour: lastYear, seconds: 300 })),
   ]);
-  await db.insert(playbackHeatmap).values(videos.map((mediaItemId) => ({ mediaItemId, bucket: 1 })));
+  await db
+    .insert(playbackHeatmap)
+    .values(videos.map((mediaItemId) => ({ profileId, mediaItemId, bucket: 1 })));
   await db.insert(bookmarks).values(
     videos.map((mediaItemId) => ({
+      profileId,
       mediaItemId,
       positionSeconds: 30,
       label: mediaItemId === visibleId ? "Visible mark" : `${SENTINEL} mark`,
@@ -371,7 +449,14 @@ function leak(body: string): string | null {
   return null;
 }
 
-describe("a locked vault leaves no trace in any GET", () => {
+/**
+ * Run twice: once with the vault and history belonging to the owner, once
+ * moved wholesale to a non-owner profile. The vault is per profile, so every
+ * per-profile query has to find "hidden" for whoever is asking — a query
+ * that still assumed the owner would pass the first run and leak in the
+ * second.
+ */
+describe.each(["owner", "guest"] as const)("a locked vault leaves no trace in any GET (%s)", (who) => {
   let seeded: Seeded;
   let cookie: string;
   const get = (url: string) => app.inject({ method: "GET", url, headers: { cookie } });
@@ -381,12 +466,20 @@ describe("a locked vault leaves no trace in any GET", () => {
     resetVaultAttempts();
     cookie = await signIn();
     seeded = await seedLibrary();
+    if (who === "guest") {
+      const guest = await signInOtherProfile("Guest", "2468");
+      const owner = await ownerProfileId();
+      for (const table of [profileItemState, playbackStates, watchLog, playbackHeatmap, bookmarks]) {
+        await db.update(table).set({ profileId: guest.profileId }).where(eq(table.profileId, owner));
+      }
+      cookie = guest.cookie;
+    }
     // A PIN makes the vault real; setting it opens it, so close it again.
     const pin = await app.inject({
       method: "PUT",
       url: "/api/vault/pin",
       headers: { cookie },
-      payload: { pin: "1234", accountPassword: "test-password" },
+      payload: { pin: "1234", accountPassword: "test-password", profilePin: "2468" },
     });
     expect(pin.statusCode).toBe(200);
     await app.inject({ method: "POST", url: "/api/vault/lock", headers: { cookie } });
@@ -495,6 +588,8 @@ const UNGATED_DELETES: Record<string, string> = {
   "/api/media-items/:id/thumbnail": "custom artwork; falls back to the generated thumbnail",
   "/api/continue-watching":
     "resets resume positions only; play counts and completion are kept (see playback.ts)",
+  "/api/profiles/:id":
+    "owner only (ownerRoutes.ts) behind a typed confirmation; removes one profile and its own history, never a library record",
 };
 
 /** Non-DELETE routes that destroy or hand out the whole library. */
@@ -513,7 +608,8 @@ describe("destructive routes need the privacy credential", () => {
   beforeEach(async () => {
     await resetDatabase();
     cookie = await signIn();
-    await db.insert(appSettings).values({
+    await db.insert(profileSettings).values({
+      profileId: await ownerProfileId(),
       key: "privacy",
       value: { passwordHash: await hashPassword("correct horse") },
     });

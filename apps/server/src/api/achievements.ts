@@ -1,7 +1,6 @@
-import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db } from "../db/client.js";
-import { appSettings } from "../db/schema.js";
+import { profileId } from "../auth/profileContext.js";
+import { getProfileSetting, setProfileSetting } from "../library/profileSettings.js";
 
 const ACHIEVEMENTS_KEY = "achievements";
 
@@ -25,9 +24,8 @@ const MAX_ID_LENGTH = 200;
 const MAX_IDS_PER_SAVE = 500;
 const MAX_STORED = 5000;
 
-export async function getAchievements(): Promise<AchievementRecord> {
-  const [row] = await db.select().from(appSettings).where(eq(appSettings.key, ACHIEVEMENTS_KEY));
-  const value = row?.value as Partial<AchievementRecord> | null;
+export async function getAchievements(profile: number): Promise<AchievementRecord> {
+  const value = (await getProfileSetting(profile, ACHIEVEMENTS_KEY)) as Partial<AchievementRecord> | null;
   // Re-validated on read: a hand-edited row keeps only well-formed entries.
   const unlocked: Record<string, string> = {};
   if (value?.unlocked && typeof value.unlocked === "object") {
@@ -42,8 +40,8 @@ export async function getAchievements(): Promise<AchievementRecord> {
  * Records ids not seen before, stamped now. An id already recorded keeps its
  * original date, so a second device reporting the same badge changes nothing.
  */
-export async function recordUnlocks(ids: string[]): Promise<AchievementRecord> {
-  const current = await getAchievements();
+export async function recordUnlocks(profile: number, ids: string[]): Promise<AchievementRecord> {
+  const current = await getAchievements(profile);
   const now = new Date().toISOString();
   const unlocked = { ...current.unlocked };
   for (const id of ids) {
@@ -51,15 +49,12 @@ export async function recordUnlocks(ids: string[]): Promise<AchievementRecord> {
     if (!(id in unlocked)) unlocked[id] = now;
   }
   const value: AchievementRecord = { unlocked, seeded: true };
-  await db
-    .insert(appSettings)
-    .values({ key: ACHIEVEMENTS_KEY, value })
-    .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
+  await setProfileSetting(profile, ACHIEVEMENTS_KEY, value);
   return value;
 }
 
 export async function achievementRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/achievements", async () => getAchievements());
+  app.get("/api/achievements", async (request) => getAchievements(profileId(request)));
 
   app.post<{ Body: { ids?: unknown } }>("/api/achievements/unlock", async (request, reply) => {
     const ids = request.body?.ids;
@@ -71,6 +66,6 @@ export async function achievementRoutes(app: FastifyInstance): Promise<void> {
       reply.code(400);
       return { error: `ids must be up to ${MAX_IDS_PER_SAVE} non-empty strings` };
     }
-    return recordUnlocks(ids as string[]);
+    return recordUnlocks(profileId(request), ids as string[]);
   });
 }

@@ -19,6 +19,7 @@ import type { ContextMenuEntry, ContextMenuState } from "@/components/ContextMen
 import type { MediaCardItem } from "@/components/MediaCard";
 import { updateItem, hideItem } from "./mediaItemApi";
 import { useAppearance } from "./appearance";
+import { useIsOwner } from "./profile";
 import { useCardShortcuts } from "./cardShortcuts";
 import { useQueue, type QueueItem } from "./queue";
 import { playItem } from "./appEvents";
@@ -135,6 +136,7 @@ export function useTileMenu({
   const { peek, toggleFavourite, toggleWatched } = useCardShortcuts();
   const { add, addNext, remove: removeFromQueue } = useQueue();
   const setTileShape = useTileShape();
+  const isOwner = useIsOwner();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -223,8 +225,10 @@ export function useTileMenu({
               },
             ]
           : []),
-        { separator: true as const },
-        ...tileShapeEntries(item, tileShape, setTileShape),
+        // Tile shape and editing are library management: the owner's.
+        ...(isOwner
+          ? [{ separator: true as const }, ...tileShapeEntries(item, tileShape, setTileShape)]
+          : []),
         ...(isFolder
           ? []
           : [
@@ -243,7 +247,7 @@ export function useTileMenu({
                     },
                   ]
                 : []),
-              ...(onEdit
+              ...(onEdit && isOwner
                 ? [
                     {
                       label: "Edit details",

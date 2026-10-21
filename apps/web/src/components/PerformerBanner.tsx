@@ -6,6 +6,7 @@ import { useAppearance } from "@/lib/appearance";
 import { framingAfterDrag } from "@/lib/reposition";
 import { cn } from "@/lib/utils";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
 
 /**
  * Banner image with drag-to-reposition.
@@ -40,6 +41,8 @@ export function PerformerBanner({
 }) {
   const { bannerHeight } = useAppearance();
   const [editing, setEditing] = useState(false);
+  // Banner images are library management: the owner profile's.
+  const isOwner = useIsOwner();
   const [draft, setDraft] = useState(positionY);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -172,7 +175,7 @@ export function PerformerBanner({
       )}
 
       <div className="absolute right-4 top-20 z-10 flex items-center gap-1.5">
-        {!editing && (
+        {!editing && isOwner && (
           <button
             type="button"
             onClick={() => setEditing(true)}

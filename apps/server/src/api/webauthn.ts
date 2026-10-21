@@ -1,10 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
-import { createSession } from "../auth/sessions.js";
+import { autoSelectProfile, createSession } from "../auth/sessions.js";
 import { setSessionCookie } from "./auth.js";
 import { getVaultPinHash, unlockVault } from "../auth/vaultUnlock.js";
+import { profileId, unlockKey } from "../auth/profileContext.js";
+import { proveProfile } from "../auth/profileProof.js";
 import { markUnlocked, privacyLocked } from "../auth/privacyUnlock.js";
-import { verifyPassword } from "../auth/passwords.js";
 import { sweeper } from "../auth/sweep.js";
 import type { FastifyInstance } from "fastify";
 import {
@@ -14,7 +15,7 @@ import {
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import { db } from "../db/client.js";
-import { users, webauthnCredentials } from "../db/schema.js";
+import { profiles, users, webauthnCredentials } from "../db/schema.js";
 
 /**
  * Passkeys for sign-in and Touch ID for discreet mode.
@@ -163,17 +164,30 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
       reply.code(401);
       return { error: "That passkey didn't verify" };
     }
-    const sessionId = await createSession(user.id);
+    const sessionId = await createSession(user.id, await autoSelectProfile(user.id));
     setSessionCookie(reply, sessionId, request.protocol === "https");
     return { user: { id: user.id, username: user.username } };
   });
 
   app.get("/api/webauthn/credentials", async (request) => {
-    if (!request.user) return { credentials: [] };
+    if (!request.user || !request.profile) return { credentials: [] };
+    // A profile sees its own passkeys; the owner sees every profile's, so
+    // it can clean up after a housemate's lost phone.
     const rows = await db
-      .select({ id: webauthnCredentials.id, label: webauthnCredentials.label })
+      .select({
+        id: webauthnCredentials.id,
+        label: webauthnCredentials.label,
+        profileId: webauthnCredentials.profileId,
+        profileName: profiles.name,
+      })
       .from(webauthnCredentials)
-      .where(eq(webauthnCredentials.userId, request.user.id));
+      .leftJoin(profiles, eq(profiles.id, webauthnCredentials.profileId))
+      .where(
+        and(
+          eq(webauthnCredentials.userId, request.user.id),
+          request.profile.isOwner ? undefined : eq(webauthnCredentials.profileId, request.profile.id),
+        ),
+      );
     return { credentials: rows };
   });
 
@@ -196,16 +210,15 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
         reply.code(401);
         return { error: "Not signed in" };
       }
-      const [account] = await db.select().from(users).where(eq(users.id, request.user.id));
-      const accountPassword = request.body?.accountPassword;
-      if (
-        !account ||
-        typeof accountPassword !== "string" ||
-        !(await verifyPassword(accountPassword, account.passwordHash))
-      ) {
+      // Owner: the account password. Anyone else: their own profile PIN,
+      // which they must have — a passkey for a profile with nothing behind
+      // it would let whoever is at the keyboard mint a credential.
+      const failure = await proveProfile(request, request.body ?? {}, { requirePin: true });
+      if (failure) {
         reply.code(403);
-        return { error: "That account password isn't right", code: "account_password_required" };
+        return failure;
       }
+      const [account] = await db.select().from(users).where(eq(users.id, request.user.id));
 
       const existing = await db
         .select({ id: webauthnCredentials.id })
@@ -229,7 +242,9 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
         },
       });
 
-      putChallenge(request.user.sessionId, options.challenge);
+      // Keyed by session and profile, so the credential lands on the
+      // profile that proved itself even if the session switches mid-flow.
+      putChallenge(`register:${unlockKey(request)}`, options.challenge);
       return options;
     },
   );
@@ -241,7 +256,7 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
         reply.code(401);
         return { error: "Not signed in" };
       }
-      const expected = takeChallenge(request.user.sessionId);
+      const expected = takeChallenge(`register:${unlockKey(request)}`);
       if (!expected) {
         reply.code(400);
         return { error: "That took too long — try again" };
@@ -273,6 +288,7 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
         .values({
           id: credential.id,
           userId: request.user.id,
+          profileId: profileId(request),
           publicKey: Buffer.from(credential.publicKey).toString("base64"),
           counter: credential.counter,
           label: (request.body?.label ?? "This browser").slice(0, 60),
@@ -293,14 +309,20 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
       reply.code(400);
       return { error: "Invalid unlock purpose" };
     }
-    if (purpose === "vault" && !(await getVaultPinHash())) {
+    if (purpose === "vault" && !(await getVaultPinHash(profileId(request)))) {
       reply.code(400);
       return { error: "Set a vault PIN first" };
     }
     const existing = await db
       .select({ id: webauthnCredentials.id })
       .from(webauthnCredentials)
-      .where(eq(webauthnCredentials.userId, request.user.id));
+      // Only this profile's own passkeys can unlock its vault or privacy.
+      .where(
+        and(
+          eq(webauthnCredentials.userId, request.user.id),
+          eq(webauthnCredentials.profileId, profileId(request)),
+        ),
+      );
 
     if (existing.length === 0) {
       reply.code(404);
@@ -313,7 +335,7 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
       userVerification: "required",
     });
 
-    putChallenge(`${purpose}:${request.user.sessionId}`, options.challenge);
+    putChallenge(`${purpose}:${unlockKey(request)}`, options.challenge);
     return options;
   });
 
@@ -333,7 +355,7 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
         reply.code(400);
         return { error: "Invalid unlock purpose" };
       }
-      const expected = takeChallenge(`${purpose}:${request.user.sessionId}`);
+      const expected = takeChallenge(`${purpose}:${unlockKey(request)}`);
       const credentialId = request.body?.response?.id;
       if (!expected || !credentialId) {
         reply.code(400);
@@ -348,7 +370,9 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
             eq(webauthnCredentials.id, credentialId),
             // Scoped to this account, so a credential belonging to someone
             // else can't be presented here.
-            eq(webauthnCredentials.userId, request.user.id)
+            eq(webauthnCredentials.userId, request.user.id),
+            // And to this profile: another profile's passkey opens nothing here.
+            eq(webauthnCredentials.profileId, profileId(request)),
           )
         );
       if (!stored) {
@@ -364,13 +388,13 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
       // Same standing as the password: either credential guards discreet
       // mode, so either has to unlock what the password unlocks.
       if (purpose === "vault") {
-        if (!(await getVaultPinHash())) {
+        if (!(await getVaultPinHash(profileId(request)))) {
           reply.code(400);
           return { error: "Set a vault PIN first" };
         }
-        unlockVault(request.user.sessionId);
+        unlockVault(unlockKey(request)!);
       } else {
-        markUnlocked(request.user.sessionId);
+        markUnlocked(unlockKey(request)!);
       }
       return { ok: true };
     }
@@ -390,7 +414,9 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
       .where(
         and(
           eq(webauthnCredentials.id, request.params.id),
-          eq(webauthnCredentials.userId, request.user.id)
+          eq(webauthnCredentials.userId, request.user.id),
+          // Your own passkeys; the owner may remove anyone's.
+          request.profile?.isOwner ? undefined : eq(webauthnCredentials.profileId, profileId(request)),
         )
       );
     return { ok: true };

@@ -7,6 +7,7 @@ import { withPrivacyUnlock } from "@/lib/privacyLock";
 import { deletePasskey, fetchPasskeys, registerPasskey } from "@/lib/webauthnApi";
 import { SettingsSection } from "./SettingsSection";
 import { qk } from "@/lib/queryKeys";
+import { useProfile, useProofPrompt } from "@/lib/profile";
 
 /**
  * The password that unlocks discreet mode.
@@ -30,6 +31,10 @@ export function PrivacySettingsSection() {
   const [enrolling, setEnrolling] = useState(false);
   const [enrollPassword, setEnrollPassword] = useState("");
   const queryClient = useQueryClient();
+  // The owner confirms with the account password; another profile with its
+  // own PIN, or nothing when it has none.
+  const prompt = useProofPrompt();
+  const { isOwner } = useProfile();
 
   const { data } = useQuery({ queryKey: qk.privacy, queryFn: fetchPrivacyStatus });
   const { data: passkeys } = useQuery({ queryKey: qk.passkeys, queryFn: fetchPasskeys });
@@ -37,7 +42,7 @@ export function PrivacySettingsSection() {
   const addPasskey = useMutation({
     // Named after the browser it's registered in, since that's what the
     // credential is actually tied to and a Mac may hold several.
-    mutationFn: () => registerPasskey(browserName(), enrollPassword),
+    mutationFn: () => registerPasskey(browserName(), prompt.toProof(enrollPassword)),
     onSuccess: () => {
       setPasskeyError(null);
       setEnrolling(false);
@@ -53,7 +58,7 @@ export function PrivacySettingsSection() {
   });
 
   const save = useMutation({
-    mutationFn: () => savePrivacyPassword(password, accountPassword),
+    mutationFn: () => savePrivacyPassword(password, prompt.toProof(accountPassword)),
     onSuccess: () => {
       setError(null);
       setSaved(true);
@@ -97,10 +102,11 @@ export function PrivacySettingsSection() {
           />
         </label>
 
-        <label className="block space-y-1">
-          <span className="text-xs font-medium">Your account password</span>
+        {prompt.needed && <label className="block space-y-1">
+          <span className="text-xs font-medium">{prompt.label}</span>
           <input
             type="password"
+            inputMode={prompt.numeric ? "numeric" : undefined}
             value={accountPassword}
             onChange={(event) => {
               setAccountPassword(event.target.value);
@@ -110,10 +116,10 @@ export function PrivacySettingsSection() {
           />
           {/* The way out if the privacy password is ever forgotten — without
               this, forgetting it would mean being stuck in discreet mode. */}
-          <span className="block text-[11px] text-muted-foreground/70">
+          {isOwner && <span className="block text-[11px] text-muted-foreground/70">
             Confirms it's you, and is what lets you reset a privacy password you've forgotten.
-          </span>
-        </label>
+          </span>}
+        </label>}
 
         {error && <p className="text-xs text-destructive">{error}</p>}
         {saved && (
@@ -126,7 +132,7 @@ export function PrivacySettingsSection() {
         <button
           type="button"
           onClick={() => save.mutate()}
-          disabled={save.isPending || accountPassword.length === 0}
+          disabled={save.isPending || (prompt.needed && accountPassword.length === 0)}
           className="flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity disabled:opacity-50"
         >
           {save.isPending && <Loader2 className="size-3.5 animate-spin" />}
@@ -166,14 +172,15 @@ export function PrivacySettingsSection() {
               className="space-y-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (enrollPassword) addPasskey.mutate();
+                if (enrollPassword || !prompt.needed) addPasskey.mutate();
               }}
             >
               <label className="block space-y-1">
-                <span className="text-xs font-medium">Your account password</span>
+                <span className="text-xs font-medium">{prompt.label}</span>
                 <input
                   type="password"
-                  autoComplete="current-password"
+                  inputMode={prompt.numeric ? "numeric" : undefined}
+                  autoComplete={prompt.numeric ? "off" : "current-password"}
                   autoFocus
                   value={enrollPassword}
                   onChange={(event) => {
@@ -184,7 +191,7 @@ export function PrivacySettingsSection() {
                 />
                 <span className="block text-[11px] text-muted-foreground/70">
                   Touch ID unlocks discreet mode and the vault on its own, so adding it
-                  needs your password.
+                  needs {prompt.numeric ? "your profile PIN" : "your password"}.
                 </span>
               </label>
               <div className="flex items-center gap-2">
@@ -213,6 +220,10 @@ export function PrivacySettingsSection() {
                 </button>
               </div>
             </form>
+          ) : !prompt.needed ? (
+            <p className="text-[11px] text-muted-foreground">
+              Set a PIN for your profile under Settings → Profiles to add Touch ID.
+            </p>
           ) : (
             <button
               type="button"

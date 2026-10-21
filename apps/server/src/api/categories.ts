@@ -7,6 +7,7 @@ import { deleteKindCover, kindCoverPath, saveKindCover } from "../media/kindCove
 import { streamFile } from "../media/streamer.js";
 import { PG_INT_MAX, parseId } from "./mediaItemQueries.js";
 
+import { profileId } from "../auth/profileContext.js";
 const MAX_LABEL_LENGTH = 100;
 
 /** Lowercase, hyphenated, so it's safe in a URL and stable as a key. */
@@ -21,14 +22,15 @@ function toSlug(label: string): string {
 }
 
 export async function categoryRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/categories", async () => {
+  app.get("/api/categories", async (request) => {
+    const profile = profileId(request);
     const rows = await db.select().from(categories).orderBy(asc(categories.position), asc(categories.id));
 
     // Photos carry a `kind` too — the column defaults to "video" and nothing
     // ever changes it for them — so counting by kind alone reported every
     // still in the library as a video. Categories apply to videos only, which
     // is also how every listing query already treats them.
-    const videosOnly = and(visibleItems(), eq(mediaItemTypes.name, "video"));
+    const videosOnly = and(visibleItems(profile), eq(mediaItemTypes.name, "video"));
 
     const counts = await db
       .select({ kind: mediaItems.kind, total: sql<number>`count(*)::int` })

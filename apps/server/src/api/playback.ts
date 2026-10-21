@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { mediaItems, playbackHeatmap, playbackStates, watchLog } from "../db/schema.js";
 import { logActivity } from "../activity/log.js";
 import { hiddenGate, itemReachable } from "../library/visibility.js";
+import { profileId } from "../auth/profileContext.js";
 import { PG_INT_MAX, parseId } from "./mediaItemQueries.js";
 
 const HEATMAP_BUCKETS = 50;
@@ -69,6 +70,7 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Not found" };
       }
 
+      const profile = profileId(request);
       const now = new Date();
       const [previous] = await db
         .select({
@@ -76,13 +78,13 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
           updatedAt: playbackStates.updatedAt,
         })
         .from(playbackStates)
-        .where(eq(playbackStates.mediaItemId, mediaItemId));
+        .where(and(eq(playbackStates.mediaItemId, mediaItemId), eq(playbackStates.profileId, profile)));
 
       await db
         .insert(playbackStates)
-        .values({ mediaItemId, positionSeconds })
+        .values({ profileId: profile, mediaItemId, positionSeconds })
         .onConflictDoUpdate({
-          target: playbackStates.mediaItemId,
+          target: [playbackStates.profileId, playbackStates.mediaItemId],
           set: { positionSeconds, updatedAt: now },
         });
 
@@ -93,9 +95,9 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
         try {
           await db
             .insert(watchLog)
-            .values({ mediaItemId, hour, seconds: watched })
+            .values({ profileId: profile, mediaItemId, hour, seconds: watched })
             .onConflictDoUpdate({
-              target: [watchLog.mediaItemId, watchLog.hour],
+              target: [watchLog.profileId, watchLog.mediaItemId, watchLog.hour],
               set: { seconds: sql`${watchLog.seconds} + ${watched}` },
             });
         } catch (error) {
@@ -110,9 +112,9 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
             );
             await db
               .insert(playbackHeatmap)
-              .values({ mediaItemId, bucket })
+              .values({ profileId: profile, mediaItemId, bucket })
               .onConflictDoUpdate({
-                target: [playbackHeatmap.mediaItemId, playbackHeatmap.bucket],
+                target: [playbackHeatmap.profileId, playbackHeatmap.mediaItemId, playbackHeatmap.bucket],
                 set: { count: sql`${playbackHeatmap.count} + 1` },
               });
           }
@@ -141,7 +143,8 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
       const rows = await db
         .select({ bucket: playbackHeatmap.bucket, count: playbackHeatmap.count })
         .from(playbackHeatmap)
-        .where(eq(playbackHeatmap.mediaItemId, mediaItemId))
+        // This profile's viewing only, like the rest of its history.
+        .where(and(eq(playbackHeatmap.mediaItemId, mediaItemId), eq(playbackHeatmap.profileId, profileId(request))))
         .orderBy(playbackHeatmap.bucket);
 
       const buckets = new Array(HEATMAP_BUCKETS).fill(0);
@@ -165,11 +168,17 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
    * Scoped to unfinished videos for the same reason — a completed one isn't
    * in the row anyway, and its position is already 0.
    */
-  app.delete("/api/continue-watching", async () => {
+  app.delete("/api/continue-watching", async (request) => {
     const cleared = await db
       .update(playbackStates)
       .set({ positionSeconds: 0, updatedAt: new Date() })
-      .where(and(gt(playbackStates.positionSeconds, 0), isNull(playbackStates.completedAt)))
+      .where(
+        and(
+          eq(playbackStates.profileId, profileId(request)),
+          gt(playbackStates.positionSeconds, 0),
+          isNull(playbackStates.completedAt),
+        ),
+      )
       .returning({ id: playbackStates.id });
 
     return { cleared: cleared.length };
@@ -206,13 +215,14 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Not found" };
       }
 
+      const profile = profileId(request);
       if (!watched) {
         // Un-marking leaves the play count alone — it's a record of what
         // actually happened, not a toggle.
         await db
           .update(playbackStates)
           .set({ completedAt: null, positionSeconds: 0, updatedAt: new Date() })
-          .where(eq(playbackStates.mediaItemId, mediaItemId));
+          .where(and(eq(playbackStates.mediaItemId, mediaItemId), eq(playbackStates.profileId, profile)));
         return { ok: true, watched: false };
       }
 
@@ -221,9 +231,9 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
       // offering to resume from the final seconds.
       const [row] = await db
         .insert(playbackStates)
-        .values({ mediaItemId, positionSeconds: 0, completedAt: now, playCount: 1 })
+        .values({ profileId: profile, mediaItemId, positionSeconds: 0, completedAt: now, playCount: 1 })
         .onConflictDoUpdate({
-          target: playbackStates.mediaItemId,
+          target: [playbackStates.profileId, playbackStates.mediaItemId],
           set: {
             positionSeconds: 0,
             completedAt: now,
@@ -237,7 +247,9 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
         })
         .returning({ playCount: playbackStates.playCount });
 
-      await logActivity(
+      // The owner's viewing only: the log is library-wide and read by the
+      // owner, and another profile's history is its own.
+      if (request.profile?.isOwner) await logActivity(
         "watch",
         `Watched "${item.title}"`,
         { playCount: row?.playCount ?? 1 },

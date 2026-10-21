@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { albums, mediaFiles, mediaItemTypes, mediaItems, performers, studios } from "../db/schema.js";
 
+import { profileId } from "../auth/profileContext.js";
 const PAGE_SIZE = 100;
 
 /**
@@ -17,6 +18,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { performer?: string; studio?: string } }>(
     "/api/albums",
     async (request) => {
+    const profile = profileId(request);
     const performerFilter = request.query.performer?.trim();
     const studioFilter = request.query.studio?.trim();
     // Grouped, not a correlated subquery per row. Drizzle renders an
@@ -53,7 +55,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
       .from(albums)
       .leftJoin(
         mediaItems,
-        and(eq(mediaItems.albumId, albums.id), visibleItems())
+        and(eq(mediaItems.albumId, albums.id), visibleItems(profile))
       )
       .leftJoin(mediaItemTypes, eq(mediaItemTypes.id, mediaItems.itemTypeId))
       .leftJoin(performers, eq(performers.id, albums.performerId))
@@ -89,6 +91,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string }; Querystring: { page?: string } }>(
     "/api/albums/:id",
     async (request, reply) => {
+      const profile = profileId(request);
       const id = Number(request.params.id);
       const pageNum = Math.max(1, Number(request.query.page) || 1);
 
@@ -130,7 +133,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
         .where(
           and(
             eq(mediaItems.albumId, id),
-            visibleItems(),
+            visibleItems(profile),
             eq(mediaItemTypes.name, "photo")
           )
         )
@@ -148,7 +151,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
         .where(
           and(
             eq(mediaItems.albumId, id),
-            visibleItems(),
+            visibleItems(profile),
             eq(mediaItemTypes.name, "video")
           )
         )
@@ -184,6 +187,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
   }>(
     "/api/albums/:id",
     async (request, reply) => {
+      const profile = profileId(request);
       const id = Number(request.params.id);
       const { coverItemId, coverPositionX, coverPositionY, coverScale } = request.body ?? {};
 
@@ -208,7 +212,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
             and(
               eq(mediaItems.id, coverItemId),
               eq(mediaItems.albumId, id),
-              visibleItems(),
+              visibleItems(profile),
               eq(mediaItemTypes.name, "photo")
             )
           );

@@ -12,6 +12,7 @@ import { visibleItemsSql } from "../library/visibility.js";
 import { privacyLocked } from "../auth/privacyUnlock.js";
 import { isScanRunning } from "../scanner/pipeline.js";
 
+import { profileId } from "../auth/profileContext.js";
 // A container can only see what's mounted into it, so these are the mount
 // points the picker is allowed to walk. Anything outside them isn't a
 // permissions decision — the path genuinely doesn't exist in here.
@@ -217,7 +218,8 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
    * work rather than a fault, and a folder you stopped scanning should not
    * still be reporting problems.
    */
-  app.get("/api/library/duplicates", async () => {
+  app.get("/api/library/duplicates", async (request) => {
+    const profile = profileId(request);
     const rows = await db.execute<{
       content_hash: string;
       media_item_id: number;
@@ -237,7 +239,7 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
       join media_items mi on mi.id = mf.media_item_id
       join media_item_types mit on mit.id = mi.item_type_id
       where mf.content_hash is not null
-        and ${visibleItemsSql("mi")}
+        and ${visibleItemsSql("mi", profile)}
         and mit.name = 'video'
         and mf.content_hash in (
           select mf2.content_hash
@@ -245,7 +247,7 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
           join media_items mi2 on mi2.id = mf2.media_item_id
           join media_item_types mit2 on mit2.id = mi2.item_type_id
           where mf2.content_hash is not null
-            and ${visibleItemsSql("mi2")}
+            and ${visibleItemsSql("mi2", profile)}
             and mit2.name = 'video'
           group by mf2.content_hash
           having count(*) > 1

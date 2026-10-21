@@ -12,21 +12,24 @@ import {
 } from "../db/schema.js";
 import { hiddenGate, itemReachable, visibleItems } from "../library/visibility.js";
 import {
-  GALLERY_PREVIEW_LIMIT,
-  RELATED_LIMIT,
   fetchRelated,
-  itemColumns,
+  GALLERY_PREVIEW_LIMIT,
+  itemColumnsFor,
   playbackColumns,
+  playbackJoin,
+  RELATED_LIMIT,
   withComputedFields,
   withPlayback,
 } from "./mediaItemQueries.js";
 
+import { profileId } from "../auth/profileContext.js";
 export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/api/media-items/:id", async (request, reply) => {
+    const profile = profileId(request);
     const id = Number(request.params.id);
     const [item] = await db
       .select({
-        ...itemColumns,
+        ...itemColumnsFor(profile),
         ...playbackColumns,
         // The detail view is the only place these are shown, so the join
         // stays here rather than on every listing query.
@@ -36,7 +39,7 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+      .leftJoin(playbackStates, playbackJoin(profile))
       .leftJoin(mediaFiles, eq(mediaFiles.mediaItemId, mediaItems.id))
       // A vault item answers 404, not 403, unless this session has the vault
       // open: "forbidden" would confirm that the id is something hidden.
@@ -61,6 +64,7 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
    * would quietly pull in the wrong folder's photos.
    */
   app.get<{ Params: { id: string } }>("/api/media-items/:id/gallery", async (request, reply) => {
+    const profile = profileId(request);
     const id = Number(request.params.id);
     // The strip names the folder's photos and the album, so a hidden video's
     // gallery is as much a leak as the video itself.
@@ -80,7 +84,7 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
 
     const sameDirectoryPhotos = and(
       eq(mediaItemTypes.name, "photo"),
-      visibleItems(),
+      visibleItems(profile),
       ne(mediaItems.id, id),
       // Beside the video, or one folder below it.
       //
@@ -187,6 +191,7 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
   //
   // Each tier only runs when the one before it returned nothing.
   app.get<{ Params: { id: string } }>("/api/media-items/:id/related", async (request, reply) => {
+    const profile = profileId(request);
     const id = Number(request.params.id);
 
     const [item] = await db
@@ -213,7 +218,7 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
     ).map((r) => r.performerId);
 
     const baseQuery = db
-      .select(itemColumns)
+      .select(itemColumnsFor(profile))
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .leftJoin(studios, eq(studios.id, mediaItems.studioId));
@@ -234,7 +239,7 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
             inArray(mediaItems.id, samePerformerIds),
             ne(mediaItems.id, id),
             ne(mediaItemTypes.name, "photo"),
-            visibleItems()
+            visibleItems(profile)
           )
         )
         .orderBy(desc(mediaItems.createdAt))
@@ -252,7 +257,7 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
           and(
             inArray(mediaItems.id, relatedIds),
             ne(mediaItems.id, id),
-            visibleItems()
+            visibleItems(profile)
           )
         )
         .orderBy(desc(mediaItems.createdAt))
@@ -271,7 +276,7 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
             ne(mediaItems.id, id),
             ne(mediaItemTypes.name, "folder"),
             ne(mediaItemTypes.name, "photo"),
-            visibleItems()
+            visibleItems(profile)
           )
         )
         .orderBy(desc(mediaItems.createdAt))

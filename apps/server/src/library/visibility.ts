@@ -2,7 +2,9 @@ import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { db } from "../db/client.js";
 import { mediaItems } from "../db/schema.js";
+import { unlockKey } from "../auth/profileContext.js";
 import { isVaultUnlocked } from "../auth/vaultUnlock.js";
+import { itemNotHidden } from "./profileState.js";
 
 /**
  * The condition every list of media has to satisfy.
@@ -19,10 +21,17 @@ import { isVaultUnlocked } from "../auth/vaultUnlock.js";
  * play. The one screen that deliberately shows them is the missing-videos
  * manager, which asks for them by name rather than going through here.
  */
-export function visibleItems(): SQL {
+export function visibleItems(profileId: number): SQL {
+  // Hidden is per profile (profile_item_state.hidden_at): what A put in A's
+  // vault is still an ordinary item to B.
+  //
   // Non-null assertion is safe and deliberate: `and` only returns undefined
   // when given no defined conditions, and all of these are constants.
-  return and(eq(mediaItems.inScope, true), isNull(mediaItems.missingSince), isNull(mediaItems.hiddenAt))!;
+  return and(
+    eq(mediaItems.inScope, true),
+    isNull(mediaItems.missingSince),
+    itemNotHidden(profileId, mediaItems.id),
+  )!;
 }
 
 /** Just the "file is still there" half, for queries that scope differently. */
@@ -31,8 +40,8 @@ export function notMissing(): SQL {
 }
 
 /** Just the "not in the vault" half, for history that outlives a file but not a hide. */
-export function notHidden(): SQL {
-  return isNull(mediaItems.hiddenAt);
+export function notHidden(profileId: number): SQL {
+  return itemNotHidden(profileId, mediaItems.id);
 }
 
 /**
@@ -46,11 +55,12 @@ export function notHidden(): SQL {
  * The alias is interpolated, not bound, so it is checked against a plain
  * identifier pattern rather than trusted.
  */
-export function visibleItemsSql(alias: string): SQL {
+export function visibleItemsSql(alias: string, profileId: number): SQL {
   if (!/^[a-z_][a-z0-9_]*$/i.test(alias)) throw new Error(`Bad table alias: ${alias}`);
-  return sql.raw(
-    `(${alias}.in_scope = true and ${alias}.missing_since is null and ${alias}.hidden_at is null)`,
-  );
+  return sql`(${sql.raw(`${alias}.in_scope = true and ${alias}.missing_since is null`)} and ${itemNotHidden(
+    profileId,
+    sql.raw(`${alias}.id`),
+  )})`;
 }
 
 /**
@@ -62,7 +72,16 @@ export function visibleItemsSql(alias: string): SQL {
  * GET /api/vault/items: only a session that has opened the vault passes.
  */
 export function canSeeHidden(request: FastifyRequest): boolean {
-  return isVaultUnlocked(request.user?.sessionId);
+  return isVaultUnlocked(unlockKey(request));
+}
+
+/**
+ * The current profile's id for visibility purposes. A request with no
+ * profile (a cast token's stream) gets -1: no profile has that id, so
+ * nothing counts as hidden for it — the cast token itself is what scopes it.
+ */
+export function viewerProfile(request: FastifyRequest): number {
+  return request.profile?.id ?? -1;
 }
 
 /**
@@ -71,7 +90,7 @@ export function canSeeHidden(request: FastifyRequest): boolean {
  * by `and`, so it reads `and(eq(mediaItems.id, id), hiddenGate(request))`.
  */
 export function hiddenGate(request: FastifyRequest): SQL | undefined {
-  return canSeeHidden(request) ? undefined : isNull(mediaItems.hiddenAt);
+  return canSeeHidden(request) ? undefined : itemNotHidden(viewerProfile(request), mediaItems.id);
 }
 
 /**

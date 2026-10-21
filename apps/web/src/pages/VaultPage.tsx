@@ -20,7 +20,9 @@ import {
   type VaultItemsPage,
 } from "@/lib/vaultApi";
 import { formatDuration } from "@/lib/utils";
-import { fetchPasskeys, unlockVaultWithPasskey } from "@/lib/webauthnApi";
+import { unlockVaultWithPasskey } from "@/lib/webauthnApi";
+import { useOwnPasskeys, useProofPrompt } from "@/lib/profile";
+import type { Proof } from "@/lib/profilesApi";
 import { itemScopedKeys, qk } from "@/lib/queryKeys";
 
 /**
@@ -72,18 +74,22 @@ function PinForm({
   submitLabel: string;
   pending: boolean;
   error: string | null;
-  onSubmit: (pin: string, accountPassword: string) => void;
+  onSubmit: (pin: string, proof: Proof | null) => void;
   onPasskey?: () => void;
 }) {
   const [pin, setPin] = useState("");
   const [accountPassword, setAccountPassword] = useState("");
+  // The owner proves it with the account password, anyone else with their
+  // profile PIN (or nothing, when they have none).
+  const prompt = useProofPrompt();
+  const askProof = withAccountPassword && prompt.needed;
 
   return (
     <form
       className="mx-auto w-full max-w-sm space-y-4 rounded-lg border border-border bg-card/40 p-6"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit(pin, accountPassword);
+        onSubmit(pin, withAccountPassword ? prompt.toProof(accountPassword) : null);
       }}
     >
       <div className="space-y-1 text-center">
@@ -103,12 +109,13 @@ function PinForm({
         onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
         className={`${settingsInputClass} text-center tracking-[0.4em]`}
       />
-      {withAccountPassword && (
+      {askProof && (
         <input
           type="password"
-          autoComplete="current-password"
-          aria-label="Account password"
-          placeholder="Your account password"
+          autoComplete={prompt.numeric ? "off" : "current-password"}
+          inputMode={prompt.numeric ? "numeric" : undefined}
+          aria-label={prompt.numeric ? "Profile PIN" : "Account password"}
+          placeholder={prompt.label}
           value={accountPassword}
           onChange={(e) => setAccountPassword(e.target.value)}
           className={settingsInputClass}
@@ -117,7 +124,7 @@ function PinForm({
       {error && <p className="text-center text-xs text-destructive">{error}</p>}
       <button
         type="submit"
-        disabled={pending || pin.length < 4 || (withAccountPassword && !accountPassword)}
+        disabled={pending || pin.length < 4 || (askProof && !accountPassword)}
         className="w-full rounded-md bg-white px-3 py-2 text-sm font-semibold text-black disabled:opacity-50"
       >
         {submitLabel}
@@ -156,7 +163,7 @@ function Unlocked({ count }: { count: number | null }) {
   });
 
   const changePin = useMutation({
-    mutationFn: ({ pin, accountPassword }: { pin: string; accountPassword: string }) =>
+    mutationFn: ({ pin, accountPassword }: { pin: string; accountPassword: Proof | null }) =>
       setVaultPin(pin, accountPassword),
     onSuccess: () => {
       setChanging(false);
@@ -261,7 +268,7 @@ function Unlocked({ count }: { count: number | null }) {
 export function VaultPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: qk.vault, queryFn: fetchVault });
-  const passkeys = useQuery({ queryKey: qk.passkeys, queryFn: fetchPasskeys });
+  const passkeys = useOwnPasskeys();
   const passkeyUnlock = useMutation({
     mutationFn: unlockVaultWithPasskey,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.vault }),
@@ -273,7 +280,7 @@ export function VaultPage() {
   });
 
   const create = useMutation({
-    mutationFn: ({ pin, accountPassword }: { pin: string; accountPassword: string }) =>
+    mutationFn: ({ pin, accountPassword }: { pin: string; accountPassword: Proof | null }) =>
       setVaultPin(pin, accountPassword),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.vault }),
   });

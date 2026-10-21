@@ -4,6 +4,8 @@ import { Clapperboard, Fingerprint, Loader2, WifiOff } from "lucide-react";
 import { LanBlockedError, fetchAuthStatus, login, setupAccount } from "@/lib/authApi";
 import { loginWithPasskey } from "@/lib/webauthnApi";
 import { AppOpenGate, clearAppOpenUnlock } from "./AppOpenGate";
+import { ProfilePicker } from "./ProfilePicker";
+import { ProfileProvider } from "./ProfileProvider";
 import { qk } from "@/lib/queryKeys";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -43,7 +45,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   // that refuses every attempt for reasons it never explains.
   if (error instanceof LanBlockedError) return <LanBlocked />;
 
-  if (status?.user) return <AppOpenGate>{children}</AppOpenGate>;
+  if (status?.user) {
+    // Signed in but nobody picked yet. `undefined` (no field at all) is a
+    // server without profiles, which carries on single-user.
+    if (status.profile === null) return <ProfilePicker />;
+    return (
+      <ProfileProvider profile={status.profile}>
+        {/* Keyed on the profile so a switch remounts the whole app: the
+            appearance and queue providers re-read for the new person. */}
+        <AppOpenGate key={status.profile?.id ?? "single"}>{children}</AppOpenGate>
+      </ProfileProvider>
+    );
+  }
 
   return (
     <AuthForm

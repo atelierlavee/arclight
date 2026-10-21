@@ -9,6 +9,8 @@ import {
   settingsInputClass,
 } from "@/components/SettingsSection";
 import { changePassword, fetchAuthStatus, updateUsername } from "@/lib/authApi";
+import { useProfile } from "@/lib/profile";
+import { ProfileAvatar } from "@/components/ProfilePicker";
 import { qk } from "@/lib/queryKeys";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -141,15 +143,20 @@ function PasswordSection() {
 /** Your profile: who you are, a way into your stats, and your sign-in details. */
 export function AccountPage() {
   const { data: auth } = useQuery({ queryKey: qk.authStatus, queryFn: fetchAuthStatus });
-  const name = auth?.user?.username ?? "";
+  const { profile, isOwner } = useProfile();
+  const name = profile?.name ?? auth?.user?.username ?? "";
 
   return (
     <AppShell>
       <div className="stagger mx-auto w-full max-w-2xl space-y-5 px-4 py-6 md:px-6 md:py-8">
         <div className="flex items-center gap-4">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-secondary text-lg font-semibold ring-1 ring-border">
-            {name.charAt(0).toUpperCase()}
-          </div>
+          {profile ? (
+            <ProfileAvatar name={profile.name} color={profile.color} className="size-12 rounded-full text-lg" />
+          ) : (
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-secondary text-lg font-semibold ring-1 ring-border">
+              {name.charAt(0).toUpperCase()}
+            </div>
+          )}
           <div className="min-w-0">
             <h1 className="sensitive truncate text-xl font-bold tracking-tight">{name}</h1>
             <p className="text-sm text-muted-foreground">Profile</p>
@@ -168,8 +175,10 @@ export function AccountPage() {
           <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
 
-        <UsernameSection />
-        <PasswordSection />
+        {/* The sign-in account belongs to the owner; other profiles manage
+            their own name, colour and PIN under Settings → Profiles. */}
+        {isOwner && <UsernameSection />}
+        {isOwner && <PasswordSection />}
       </div>
     </AppShell>
   );

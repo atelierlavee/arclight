@@ -39,6 +39,7 @@ import { inboxRoutes } from "./api/inbox.js";
 import { vaultRoutes } from "./api/vault.js";
 import { insightsRoutes } from "./api/insights.js";
 import { achievementRoutes } from "./api/achievements.js";
+import { profileRoutes } from "./api/profiles.js";
 import { registerAuthGuard } from "./auth/guard.js";
 import { decodedPath, isApiUrl } from "./auth/paths.js";
 import { registerLanGuard } from "./net/lan.js";
@@ -157,6 +158,7 @@ export async function buildApp({
   );
 
   await app.register(authRoutes);
+  await app.register(profileRoutes);
   await app.register(scanRoutes);
   await app.register(mediaItemRoutes);
   await app.register(kindRoutes);

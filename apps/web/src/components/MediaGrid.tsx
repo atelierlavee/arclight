@@ -31,6 +31,7 @@ import { reorderCollectionItems } from "@/lib/mediaItemApi";
 import { isTypingTarget, playItem } from "@/lib/appEvents";
 import { useCardShortcuts } from "@/lib/cardShortcuts";
 import { readPins } from "@/lib/pinned";
+import { useIsOwner } from "@/lib/profile";
 import { tileShapeEntries, useTileShape } from "@/lib/tileMenu";
 import {
   chunkIntoRows,
@@ -154,6 +155,7 @@ export function MediaGrid({
   const { tileSizePercent, tileInfo, viewMode, tileShape, density } = useAppearance();
   const isMobile = useIsMobile();
   const setTileShape = useTileShape();
+  const isOwner = useIsOwner();
   const { add, addNext, clear } = useQueue();
   // Every length the grid needs comes from here, so the mode and density can
   // change the shape of the page without this component knowing what either
@@ -741,10 +743,12 @@ export function MediaGrid({
               },
             ]
           : []),
-        { separator: true as const },
         // Shared with every other surface that draws tiles, so the same tile
-        // offers the same shape entries wherever it is right-clicked.
-        ...tileShapeEntries(item, tileShape, setTileShape),
+        // offers the same shape entries wherever it is right-clicked. Library
+        // management, so the owner profile's only.
+        ...(isOwner
+          ? [{ separator: true as const }, ...tileShapeEntries(item, tileShape, setTileShape)]
+          : []),
         ...(isFolder
           ? []
           : [
@@ -763,11 +767,15 @@ export function MediaGrid({
                     },
                   ]
                 : []),
-              {
-                label: "Edit details",
-                icon: Pencil,
-                onSelect: () => setOpenItemId(item.id),
-              },
+              ...(isOwner
+                ? [
+                    {
+                      label: "Edit details",
+                      icon: Pencil,
+                      onSelect: () => setOpenItemId(item.id),
+                    },
+                  ]
+                : []),
             ]),
       ],
     });

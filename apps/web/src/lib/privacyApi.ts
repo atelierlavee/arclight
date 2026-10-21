@@ -1,3 +1,4 @@
+import { proofBody, type Proof } from "./profilesApi";
 export async function fetchPrivacyStatus(): Promise<{ hasPassword: boolean }> {
   const res = await fetch("/api/privacy");
   if (!res.ok) throw new Error(`Failed to load privacy status: ${res.status}`);
@@ -7,12 +8,12 @@ export async function fetchPrivacyStatus(): Promise<{ hasPassword: boolean }> {
 /** Empty `password` clears it, so discreet mode unlocks freely again. */
 export async function savePrivacyPassword(
   password: string,
-  accountPassword: string
+  proof: string | Proof | null
 ): Promise<void> {
   const res = await fetch("/api/privacy/password", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password, accountPassword }),
+    body: JSON.stringify({ password, ...proofBody(proof) }),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;

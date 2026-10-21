@@ -18,6 +18,7 @@ import { thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { cardChrome, TILE_SHAPES } from "@/lib/layout";
 import { useAppearance } from "@/lib/appearance";
 import { cn, formatDuration } from "@/lib/utils";
+import { useIsOwner } from "@/lib/profile";
 
 /**
  * The hero banner's shape, so reframing can preview it alongside the tiles.
@@ -86,6 +87,7 @@ export function DetailsPanel({
   onSaveFraming: (next: FramingValue) => void;
 }) {
   const { density, heroHeight } = useAppearance();
+  const isOwner = useIsOwner();
   return (
     <div className="grid gap-6 p-4 sm:grid-cols-[1.6fr_1fr] sm:p-6">
       <div className="space-y-3">
@@ -101,7 +103,7 @@ export function DetailsPanel({
           <StarRating itemId={item.id} rating={item.rating} />
           {/* Nothing to toggle on a phone — the sheet is read-only
               there, so the control that turns editing on goes too. */}
-          {!isMobile && (
+          {!isMobile && isOwner && (
             <button
               type="button"
               onClick={onToggleEditing}

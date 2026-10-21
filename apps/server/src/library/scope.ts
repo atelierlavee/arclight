@@ -131,8 +131,8 @@ export async function purgeEmptyEntities(): Promise<{
   //
   // `origin` is the direct statement of that; the bio/artwork checks remain
   // for performers created by hand before the column existed, which were
-  // backfilled as 'scanner'. Favouriting or archiving someone is also a
-  // deliberate act about that performer, so either one keeps them too.
+  // backfilled as 'scanner'. Favouriting (by any profile) or archiving
+  // someone is also a deliberate act about that performer, so either keeps them.
   const deadPerformers = await db
     .select({ id: performers.id })
     .from(performers)
@@ -142,7 +142,10 @@ export async function purgeEmptyEntities(): Promise<{
         where mip.performer_id = ${performers.id}
       )
       and ${performers.origin} = 'scanner'
-      and ${performers.isFavorite} = false
+      and not exists (
+        select 1 from profile_performer_state pps
+        where pps.performer_id = ${performers.id} and pps.is_favorite
+      )
       and ${performers.archivedAt} is null
       and ${performers.bio} is null
       and ${performers.imageFile} is null

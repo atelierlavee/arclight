@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { resetDatabase, signIn, testApp } from "../test/harness.js";
-import { makeItem, makeLibrary } from "../test/fixtures.js";
+import { makeItem, makeLibrary, ownerProfileId } from "../test/fixtures.js";
 import { db } from "../db/client.js";
 import { activityEvents } from "../db/schema.js";
 import { lockoutMs, resetVaultAttempts } from "./vault.js";
@@ -120,7 +120,7 @@ describe("PIN guessing", () => {
     for (let i = 0; i < 6; i++) await send("POST", "/api/vault/unlock", { pin: "0000" });
 
     const [user] = await db.select().from(users);
-    const other = `media_session=${await createSession(user.id)}`;
+    const other = `media_session=${await createSession(user.id, await ownerProfileId())}`;
     const res = await app.inject({
       method: "POST", url: "/api/vault/unlock", headers: { cookie: other }, payload: { pin: "1234" },
     });
@@ -132,14 +132,14 @@ describe("PIN guessing", () => {
     await send("POST", "/api/vault/lock");
     const [user] = await db.select().from(users);
     for (let s = 0; s < 5; s++) {
-      const c = `media_session=${await createSession(user.id)}`;
+      const c = `media_session=${await createSession(user.id, await ownerProfileId())}`;
       for (let i = 0; i < 5; i++) {
         await app.inject({
           method: "POST", url: "/api/vault/unlock", headers: { cookie: c }, payload: { pin: "0000" },
         });
       }
     }
-    const fresh = `media_session=${await createSession(user.id)}`;
+    const fresh = `media_session=${await createSession(user.id, await ownerProfileId())}`;
     const res = await app.inject({
       method: "POST", url: "/api/vault/unlock", headers: { cookie: fresh }, payload: { pin: "1234" },
     });

@@ -1,5 +1,16 @@
+import type { CurrentProfile } from "./profilesApi";
+
 export type AuthUser = { id: number; username: string };
-export type AuthStatus = { needsSetup: boolean; user: AuthUser | null };
+/**
+ * `profile` is the session's selected profile, or null for "nobody picked
+ * yet". Absent altogether on a server without profiles: the app then runs
+ * single-user, as the owner.
+ */
+export type AuthStatus = {
+  needsSetup: boolean;
+  user: AuthUser | null;
+  profile?: CurrentProfile | null;
+};
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {

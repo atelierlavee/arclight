@@ -1,3 +1,4 @@
+import { pkey } from "@/lib/profileStorage";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
@@ -159,7 +160,7 @@ export function HomePage() {
   });
   const [dailyPickSeed, setDailyPickSeed] = useState<number | null>(() => {
     try {
-      const stored = sessionStorage.getItem("dailyPickSeed");
+      const stored = sessionStorage.getItem(pkey("dailyPickSeed"));
       return stored ? Number(stored) : null;
     } catch { return null; }
   });
@@ -231,7 +232,7 @@ export function HomePage() {
                       onRefresh={() => {
                         const seed = Math.floor(Math.random() * 1_000_000);
                         setDailyPickSeed(seed);
-                        try { sessionStorage.setItem("dailyPickSeed", String(seed)); } catch {}
+                        try { sessionStorage.setItem(pkey("dailyPickSeed"), String(seed)); } catch {}
                       }}
                     />
                   );

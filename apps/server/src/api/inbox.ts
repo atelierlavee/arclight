@@ -14,11 +14,14 @@ import {
 import { visibleItems } from "../library/visibility.js";
 import { isId, parsePage } from "./mediaItemQueries.js";
 
+import { profileId } from "../auth/profileContext.js";
+import { itemIsFavorite, itemRating } from "../library/profileState.js";
 /** Most ids one triage request acts on. */
 const MAX_TRIAGE = 500;
 
 export async function inboxRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/inbox/count", async () => {
+  app.get("/api/inbox/count", async (request) => {
+    const profile = profileId(request);
     const videoTypeIds = db
       .select({ id: mediaItemTypes.id })
       .from(mediaItemTypes)
@@ -28,12 +31,13 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
       .select({ count: sql<number>`count(*)::int` })
       .from(mediaItems)
       .where(
-        and(visibleItems(), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
+        and(visibleItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
       );
     return { count: row?.count ?? 0 };
   });
 
   app.get<{ Querystring: { page?: string } }>("/api/inbox", async (request, reply) => {
+    const profile = profileId(request);
     const page = parsePage(request.query.page);
     if (page === null) {
       reply.code(400);
@@ -59,14 +63,14 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
         itemType: sql<string>`'video'`,
         studioId: mediaItems.studioId,
         studioName: studios.name,
-        rating: mediaItems.rating,
-        isFavorite: mediaItems.isFavorite,
+        rating: itemRating(profile, mediaItems.id),
+        isFavorite: itemIsFavorite(profile, mediaItems.id),
         createdAt: mediaItems.createdAt,
       })
       .from(mediaItems)
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
       .where(
-        and(visibleItems(), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
+        and(visibleItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
       )
       .orderBy(desc(mediaItems.createdAt), desc(mediaItems.id))
       .limit(pageSize)
@@ -134,7 +138,8 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, count: batch.length };
   });
 
-  app.post("/api/inbox/triage-all", async () => {
+  app.post("/api/inbox/triage-all", async (request) => {
+    const profile = profileId(request);
     const videoTypeIds = db
       .select({ id: mediaItemTypes.id })
       .from(mediaItemTypes)
@@ -144,7 +149,7 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
       .update(mediaItems)
       .set({ triagedAt: new Date() })
       .where(
-        and(visibleItems(), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
+        and(visibleItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
       )
       .returning({ id: mediaItems.id });
 

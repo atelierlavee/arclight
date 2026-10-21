@@ -1,3 +1,4 @@
+import { pkey } from "./profileStorage";
 import {
   createContext,
   useCallback,
@@ -35,7 +36,7 @@ const STORAGE_KEY = QUEUE_STORAGE_KEY;
 function readQueue(): QueueItem[] {
   try {
     const parsed = JSON.parse(
-      sessionStorage.getItem(STORAGE_KEY) ?? "[]",
+      sessionStorage.getItem(pkey(STORAGE_KEY)) ?? "[]",
     ) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
@@ -57,7 +58,7 @@ export function QueueProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      sessionStorage.setItem(pkey(STORAGE_KEY), JSON.stringify(items));
     } catch {
       // A queue is optional; private browsing may disable session storage.
     }

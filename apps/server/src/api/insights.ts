@@ -13,6 +13,9 @@ import {
 } from "../db/schema.js";
 import { notHidden, visibleItems } from "../library/visibility.js";
 
+import { profileId } from "../auth/profileContext.js";
+import { itemRating } from "../library/profileState.js";
+import { playbackJoin } from "./mediaItemQueries.js";
 /**
  * Everything the Stats page works from, in one read.
  *
@@ -24,12 +27,13 @@ import { notHidden, visibleItems } from "../library/visibility.js";
  * the browser knows.
  */
 export async function insightsRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/insights", async () => {
+  app.get("/api/insights", async (request) => {
+    const profile = profileId(request);
     const videoTypeIds = db
       .select({ id: mediaItemTypes.id })
       .from(mediaItemTypes)
       .where(eq(mediaItemTypes.name, "video"));
-    const visibleVideo = and(visibleItems(), inArray(mediaItems.itemTypeId, videoTypeIds));
+    const visibleVideo = and(visibleItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds));
 
     // History survives a file going missing or a folder leaving the scan —
     // you did watch it — but not a hide: a vault item's hours, badges and
@@ -43,8 +47,8 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         seconds: watchLog.seconds,
       })
       .from(watchLog)
-      .innerJoin(mediaItems, eq(mediaItems.id, watchLog.mediaItemId))
-      .where(notHidden())
+      .innerJoin(mediaItems, and(eq(mediaItems.id, watchLog.mediaItemId), eq(watchLog.profileId, profile)))
+      .where(notHidden(profile))
       .orderBy(watchLog.hour);
 
     // Every video with any history worth showing: in the log, finished,
@@ -57,23 +61,23 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         title: mediaItems.title,
         thumbnailFile: mediaItems.thumbnailFile,
         durationSeconds: mediaItems.durationSeconds,
-        rating: mediaItems.rating,
+        rating: itemRating(profile, mediaItems.id),
         studio: studios.name,
         playCount: sql<number>`coalesce(${playbackStates.playCount}, 0)::int`,
         completedAt: playbackStates.completedAt,
       })
       .from(mediaItems)
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+      .leftJoin(playbackStates, playbackJoin(profile))
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
       .where(
         and(
           inArray(mediaItems.itemTypeId, videoTypeIds),
-          notHidden(),
+          notHidden(profile),
           or(
-            sql`exists (select 1 from ${watchLog} where ${watchLog.mediaItemId} = ${mediaItems.id})`,
+            sql`exists (select 1 from ${watchLog} where ${watchLog.mediaItemId} = ${mediaItems.id} and ${watchLog.profileId} = ${profile})`,
             isNotNull(playbackStates.completedAt),
             sql`${playbackStates.playCount} > 0`,
-            isNotNull(mediaItems.rating)
+            isNotNull(itemRating(profile, mediaItems.id))
           )
         )
       );
@@ -117,7 +121,7 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
       .from(performers)
       .innerJoin(mediaItemPerformers, eq(mediaItemPerformers.performerId, performers.id))
       .innerJoin(mediaItems, and(eq(mediaItems.id, mediaItemPerformers.mediaItemId), visibleVideo))
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+      .leftJoin(playbackStates, playbackJoin(profile))
       .groupBy(performers.id);
 
     const studioRows = await db
@@ -128,15 +132,15 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
       })
       .from(mediaItems)
       .innerJoin(studios, eq(studios.id, mediaItems.studioId))
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+      .leftJoin(playbackStates, playbackJoin(profile))
       .where(visibleVideo)
       .groupBy(studios.name);
 
     const [{ bookmarkCount }] = await db
       .select({ bookmarkCount: sql<number>`count(*)::int` })
       .from(bookmarks)
-      .innerJoin(mediaItems, eq(mediaItems.id, bookmarks.mediaItemId))
-      .where(notHidden());
+      .innerJoin(mediaItems, and(eq(mediaItems.id, bookmarks.mediaItemId), eq(bookmarks.profileId, profile)))
+      .where(notHidden(profile));
 
     return {
       log: log.map((row) => ({ ...row, hour: row.hour.toISOString() })),

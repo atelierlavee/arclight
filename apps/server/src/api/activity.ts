@@ -3,6 +3,7 @@ import { db } from "../db/client.js";
 import { activityEvents } from "../db/schema.js";
 import { listActivity } from "../activity/log.js";
 import { isVaultUnlocked } from "../auth/vaultUnlock.js";
+import { profileId, unlockKey } from "../auth/profileContext.js";
 import { privacyLocked } from "../auth/privacyUnlock.js";
 
 export async function activityRoutes(app: FastifyInstance): Promise<void> {
@@ -12,7 +13,8 @@ export async function activityRoutes(app: FastifyInstance): Promise<void> {
       events: await listActivity(
         Number(request.query.limit ?? 200),
         request.query.type || undefined,
-        isVaultUnlocked(request.user?.sessionId),
+        // Owner-only route, so these are the owner's vault items.
+        isVaultUnlocked(unlockKey(request)) ? null : profileId(request),
       ),
     }),
   );

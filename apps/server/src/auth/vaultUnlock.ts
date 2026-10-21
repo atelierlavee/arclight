@@ -1,12 +1,13 @@
-import { eq } from "drizzle-orm";
-import { db } from "../db/client.js";
-import { appSettings } from "../db/schema.js";
+import { getProfileSetting } from "../library/profileSettings.js";
+import { forgetSession } from "./profileContext.js";
 import { sweeper } from "./sweep.js";
 
 export const VAULT_KEY = "vault";
 
 /**
- * Which sessions have opened the vault recently.
+ * Which session+profile pairs have opened their vault recently, keyed by
+ * `unlockKey()` from profileContext.ts. Each profile has its own vault, so
+ * opening one never opens another's, and a profile switch clears them all.
  *
  * In memory like the privacy unlock: a restart locks everyone again, which is
  * the safe direction. Shorter than the privacy window because what this guards
@@ -17,33 +18,37 @@ const UNLOCK_TTL_MS = 10 * 60 * 1000;
 
 const sweep = sweeper(unlocked, (expires, now) => expires <= now);
 
-export function unlockVault(sessionId: string): void {
+export function unlockVault(key: string): void {
   sweep();
-  unlocked.set(sessionId, Date.now() + UNLOCK_TTL_MS);
+  unlocked.set(key, Date.now() + UNLOCK_TTL_MS);
 }
 
-export function isVaultUnlocked(sessionId: string | undefined): boolean {
-  if (!sessionId) return false;
-  const expires = unlocked.get(sessionId);
+export function isVaultUnlocked(key: string | null | undefined): boolean {
+  if (!key) return false;
+  const expires = unlocked.get(key);
   if (expires === undefined) return false;
   if (expires <= Date.now()) {
-    unlocked.delete(sessionId);
+    unlocked.delete(key);
     return false;
   }
   return true;
 }
 
-export function lockVault(sessionId: string): void {
-  unlocked.delete(sessionId);
+export function lockVault(key: string): void {
+  unlocked.delete(key);
 }
 
-export async function getVaultPinHash(): Promise<string | null> {
-  const [row] = await db.select().from(appSettings).where(eq(appSettings.key, VAULT_KEY));
-  const value = row?.value as { pinHash?: unknown } | null;
+/** Every profile's vault on this session — on a profile switch. */
+export function lockVaultSession(sessionId: string): void {
+  forgetSession(unlocked, sessionId);
+}
+
+export async function getVaultPinHash(profileId: number): Promise<string | null> {
+  const value = (await getProfileSetting(profileId, VAULT_KEY)) as { pinHash?: unknown } | null;
   return typeof value?.pinHash === "string" ? value.pinHash : null;
 }
 
 /** With no PIN set there is nothing to prove, so nothing to gate. */
-export async function vaultPinConfigured(): Promise<boolean> {
-  return (await getVaultPinHash()) !== null;
+export async function vaultPinConfigured(profileId: number): Promise<boolean> {
+  return (await getVaultPinHash(profileId)) !== null;
 }

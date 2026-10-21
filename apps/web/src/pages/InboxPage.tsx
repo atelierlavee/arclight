@@ -12,6 +12,8 @@ import { StarRating } from "@/components/StarRating";
 import { thumbnailUrl, framingStyle } from "@/lib/mediaItemApi";
 import { formatDuration } from "@/lib/utils";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
+import { OwnerOnlyPage } from "@/components/OwnerOnly";
 
 type InboxPerformer = { id: number; name: string };
 type InboxTag = { id: number; name: string };
@@ -89,7 +91,12 @@ function InboxThumbnail({ item, compact = false }: { item: InboxItem; compact?: 
   );
 }
 
+/** The owner profile's page; anyone else is told so. */
 export function InboxPage() {
+  return useIsOwner() ? <InboxPageContent /> : <OwnerOnlyPage title="Inbox" />;
+}
+
+function InboxPageContent() {
   const queryClient = useQueryClient();
   const [index, setIndex] = useState(0);
   const [page, setPage] = useState(1);

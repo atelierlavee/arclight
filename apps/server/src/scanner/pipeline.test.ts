@@ -5,7 +5,9 @@ import { desc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../db/client.js";
 import { albums, libraries, libraryRoots, mediaFiles, mediaItems, performers, scanJobs, series, studios } from "../db/schema.js";
-import { resetDatabase, testApp } from "../test/harness.js";
+import { resetDatabase, signIn, testApp } from "../test/harness.js";
+import { readItemState } from "../library/profileState.js";
+import { ownerProfileId, setItemStateFor } from "../test/fixtures.js";
 import { seed } from "../db/seed.js";
 import { startScan, isScanRunning } from "./pipeline.js";
 
@@ -170,7 +172,8 @@ describe("scanning", () => {
     const original = await put("Alice/before.mp4", "unique-content-here");
     await scan();
     const [item] = await db.select().from(mediaItems);
-    await db.update(mediaItems).set({ isFavorite: true }).where(eq(mediaItems.id, item.id));
+    await signIn();
+    await setItemStateFor(item.id, { isFavorite: true });
 
     await rename(original, path.join(root, "Alice/after.mp4"));
     await scan();
@@ -178,7 +181,8 @@ describe("scanning", () => {
     const items = await db.select().from(mediaItems);
     expect(items).toHaveLength(1);
     expect(items[0].id).toBe(item.id);
-    expect(items[0].isFavorite).toBe(true);
+    // The owner's favourite rides along with the item id it is keyed to.
+    expect((await readItemState(await ownerProfileId(), item.id)).isFavorite).toBe(true);
     expect(items[0].title).toBe("after");
   });
 

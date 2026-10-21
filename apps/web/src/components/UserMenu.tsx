@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LogOut, UserRound } from "lucide-react";
+import { ArrowLeftRight, LogOut, UserRound } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { fetchAuthStatus, logout, type AuthStatus } from "@/lib/authApi";
 import { useToast } from "@/lib/toast";
 import { clearUserLocalData } from "@/lib/userData";
 import { qk } from "@/lib/queryKeys";
+import { useProfile } from "@/lib/profile";
+import { ProfileAvatar } from "./ProfilePicker";
 
 /**
  * Account avatar in the header, with a sign-out menu.
@@ -21,6 +23,17 @@ export function UserMenu() {
   const { toast } = useToast();
 
   const { data: auth } = useQuery({ queryKey: qk.authStatus, queryFn: fetchAuthStatus });
+  const { profile, switchProfile } = useProfile();
+
+  const switchTo = useMutation({
+    mutationFn: switchProfile,
+    onSuccess: () => setOpen(false),
+    onError: (error) => toast({
+      title: "Could not switch profile",
+      description: error.message,
+      variant: "error",
+    }),
+  });
 
   const signOut = useMutation({
     mutationFn: logout,
@@ -68,6 +81,7 @@ export function UserMenu() {
   if (!auth?.user) return null;
 
   const initial = auth.user.username.trim()[0]?.toUpperCase() ?? "?";
+  const displayName = profile?.name ?? auth.user.username;
 
   return (
     <div ref={containerRef} className="relative">
@@ -77,10 +91,14 @@ export function UserMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Account"
-        title={auth.user.username}
-        className="flex size-9 items-center justify-center rounded-full bg-secondary text-sm font-semibold ring-1 ring-border transition-colors hover:bg-accent hover:text-foreground"
+        title={displayName}
+        className="flex size-9 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold ring-1 ring-border transition-colors hover:bg-accent hover:text-foreground"
       >
-        {initial}
+        {profile ? (
+          <ProfileAvatar name={profile.name} color={profile.color} className="size-9 rounded-full text-sm" />
+        ) : (
+          initial
+        )}
       </button>
 
       {open && (
@@ -89,12 +107,18 @@ export function UserMenu() {
           className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-md border border-border bg-card shadow-xl"
         >
           <div className="flex items-center gap-2.5 border-b border-border px-3 py-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
-              {initial}
-            </div>
+            {profile ? (
+              <ProfileAvatar name={profile.name} color={profile.color} className="size-8 rounded-full text-xs" />
+            ) : (
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
+                {initial}
+              </div>
+            )}
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{auth.user.username}</p>
-              <p className="text-[11px] text-muted-foreground">Signed in</p>
+              <p className="truncate text-sm font-medium">{displayName}</p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {profile ? `Profile on ${auth.user.username}` : "Signed in"}
+              </p>
             </div>
           </div>
 
@@ -107,6 +131,19 @@ export function UserMenu() {
             <UserRound className="size-4" />
             Profile
           </Link>
+
+          {profile && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => switchTo.mutate()}
+              disabled={switchTo.isPending}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            >
+              <ArrowLeftRight className="size-4" />
+              Switch profile
+            </button>
+          )}
 
           <button
             type="button"

@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/client.js";
 import { bookmarks, mediaItems } from "../db/schema.js";
 import { hiddenGate, itemReachable } from "../library/visibility.js";
+import { profileId } from "../auth/profileContext.js";
 
 const MAX_LABEL_LENGTH = 200;
 const MAX_NOTE_LENGTH = 4000;
@@ -52,7 +53,7 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
     const rows = await db
       .select(columns)
       .from(bookmarks)
-      .where(eq(bookmarks.mediaItemId, id))
+      .where(and(eq(bookmarks.mediaItemId, id), eq(bookmarks.profileId, profileId(request))))
       .orderBy(asc(bookmarks.positionSeconds), asc(bookmarks.id))
       .limit(MAX_BOOKMARKS);
     return { bookmarks: rows };
@@ -93,6 +94,7 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
     const [created] = await db
       .insert(bookmarks)
       .values({
+        profileId: profileId(request),
         mediaItemId: id,
         positionSeconds: position,
         label: cleanLabel(label),
@@ -139,7 +141,7 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
       const [updated] = await db
         .update(bookmarks)
         .set(update)
-        .where(eq(bookmarks.id, id))
+        .where(and(eq(bookmarks.id, id), eq(bookmarks.profileId, profileId(request))))
         .returning(columns);
       if (!updated) {
         reply.code(404);
@@ -157,7 +159,7 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
     }
     const deleted = await db
       .delete(bookmarks)
-      .where(eq(bookmarks.id, id))
+      .where(and(eq(bookmarks.id, id), eq(bookmarks.profileId, profileId(request))))
       .returning({ id: bookmarks.id });
     if (deleted.length === 0) {
       reply.code(404);
@@ -169,12 +171,13 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
 
 // Bookmarks are addressed by their own id, so the item they belong to has to
 // be looked up before the vault rule can apply — otherwise a hidden item's
-// bookmarks could be edited or deleted by enumerating bookmark ids.
+// bookmarks could be edited or deleted by enumerating bookmark ids. Another
+// profile's bookmark is "not found" the same way.
 async function bookmarkReachable(request: FastifyRequest, id: number): Promise<boolean> {
   if (!Number.isInteger(id)) return false;
   const [row] = await db
     .select({ mediaItemId: bookmarks.mediaItemId })
     .from(bookmarks)
-    .where(eq(bookmarks.id, id));
+    .where(and(eq(bookmarks.id, id), eq(bookmarks.profileId, profileId(request))));
   return row ? itemReachable(request, row.mediaItemId) : false;
 }

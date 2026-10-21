@@ -1,3 +1,4 @@
+import { proofBody, type Proof } from "./profilesApi";
 export type VaultStatus = { hasPin: boolean; unlocked: boolean; count: number | null };
 
 export type VaultItem = {
@@ -52,11 +53,11 @@ export async function unlockVault(pin: string): Promise<void> {
   throw new PinError(body?.error ?? "Could not unlock", body?.attemptsLeft, body?.retryAfterSeconds);
 }
 
-export async function setVaultPin(pin: string, accountPassword: string): Promise<void> {
+export async function setVaultPin(pin: string, proof: string | Proof | null): Promise<void> {
   const res = await fetch("/api/vault/pin", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pin, accountPassword }),
+    body: JSON.stringify({ pin, ...proofBody(proof) }),
   });
   if (!res.ok) throw await failure(res, "Failed to set the PIN");
 }

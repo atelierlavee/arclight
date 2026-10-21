@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { PlaySurface } from "@/components/PlaySurface";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
 
 const routeApi = getRouteApi("/album/$albumId");
 
@@ -27,6 +28,8 @@ export function AlbumPage() {
 
   const [reframing, setReframing] = useState(false);
 
+  // Album covers are library management: the owner profile's.
+  const isOwner = useIsOwner();
   const cover = useMutation({
     mutationFn: (patch: Parameters<typeof saveAlbumCover>[1]) =>
       saveAlbumCover(id, patch),
@@ -149,7 +152,7 @@ export function AlbumPage() {
                 label="Album playback"
               />
             )}
-            {coverPhoto && !reframing && (
+            {coverPhoto && !reframing && isOwner && (
               <button
                 type="button"
                 onClick={() => setReframing(true)}
@@ -161,7 +164,7 @@ export function AlbumPage() {
             )}
           </div>
 
-          {reframing && coverPhoto && album && (
+          {reframing && coverPhoto && album && isOwner && (
             <FramingEditor
               src={thumbnailUrl(coverPhoto)}
               value={{
@@ -219,7 +222,7 @@ export function AlbumPage() {
                   />
                 </button>
 
-                <button
+                {isOwner && <button
                   type="button"
                   onClick={() =>
                     cover.mutate({ coverItemId: isCover ? null : photo.id })
@@ -252,7 +255,7 @@ export function AlbumPage() {
                       isCover && "fill-yellow-400 text-yellow-400",
                     )}
                   />
-                </button>
+                </button>}
               </div>
             );
           })}

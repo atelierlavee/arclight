@@ -32,6 +32,7 @@ import { useQueueAdvance } from "./mediaDetail/useQueueAdvance";
 import { useScreenModes } from "./mediaDetail/useScreenModes";
 import { useVideoPlayback, type PlayerMode } from "./mediaDetail/useVideoPlayback";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
 
 export function MediaDetailModal({
   itemId,
@@ -94,7 +95,9 @@ export function MediaDetailModal({
   // Read-only on a phone. Derived rather than just hiding the button, so a
   // sheet left in edit mode on a desktop cannot stay that way when the window
   // narrows — every editor below is gated on this one flag.
-  const editing = editingRequested && !isMobile;
+  // Metadata is the owner profile's to change.
+  const isOwner = useIsOwner();
+  const editing = editingRequested && !isMobile && isOwner;
   const isVideo = item?.itemType === "video";
 
   const videoRef = useRef<HTMLVideoElement>(null);

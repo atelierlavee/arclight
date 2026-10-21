@@ -2,6 +2,8 @@ import { eq, sql } from "drizzle-orm";
 import { type FastifyInstance } from "fastify";
 import { logActivity } from "../activity/log.js";
 import { isVaultUnlocked, vaultPinConfigured } from "../auth/vaultUnlock.js";
+import { profileId, unlockKey } from "../auth/profileContext.js";
+import { setItemState } from "../library/profileState.js";
 import { db } from "../db/client.js";
 import { mediaItems, series } from "../db/schema.js";
 import {
@@ -40,6 +42,28 @@ async function wouldCreateCycle(id: number, parentId: number): Promise<boolean> 
   return rows.rows.length > 0;
 }
 
+/**
+ * The PATCH fields that are about the library rather than one person.
+ * PATCH /api/media-items/:id is the one route that mixes both (see
+ * auth/ownerRoutes.ts PROFILE_ROUTES), so a non-owner profile may send only
+ * isFavorite and rating; any of these is 403 owner_only for them.
+ */
+export const OWNER_FIELDS = [
+  "parentId",
+  "title",
+  "description",
+  "kind",
+  "studio",
+  "thumbnailPositionX",
+  "thumbnailPositionY",
+  "thumbnailScale",
+  "tileShape",
+  "seriesId",
+  "seasonNumber",
+  "episodeNumber",
+  "episodeTitle",
+] as const;
+
 export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{
     Params: { id: string };
@@ -72,6 +96,10 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       reply.code(400);
       return { error: "Expected a JSON object" };
+    }
+    if (!request.profile?.isOwner && OWNER_FIELDS.some((field) => field in body)) {
+      reply.code(403);
+      return { error: "Only the owner profile can edit item details", code: "owner_only" };
     }
     const {
       parentId,
@@ -175,7 +203,9 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       patch.titleSource = "user";
     }
     if (description !== undefined) patch.description = description;
-    if (isFavorite !== undefined) patch.isFavorite = isFavorite;
+    // Favourite and rating are the current profile's, written separately.
+    const personal: { isFavorite?: boolean; rating?: number | null } = {};
+    if (isFavorite !== undefined) personal.isFavorite = isFavorite;
     if (kind !== undefined) {
       // Checked against the categories table, so a category you created is
       // assignable — the old constant rejected everything but the three
@@ -223,7 +253,7 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
         reply.code(400);
         return { error: "rating must be a whole number from 1 to 5, or null" };
       }
-      patch.rating = rating;
+      personal.rating = rating;
     }
     if (studio !== undefined) {
       const name = studio?.trim();
@@ -241,16 +271,18 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
     }
     if (episodeTitle !== undefined) patch.episodeTitle = episodeTitle?.trim() || null;
 
-    const updated = await db
-      .update(mediaItems)
-      .set(patch)
-      .where(eq(mediaItems.id, id))
-      .returning();
+    // Touched even when only personal fields changed: it is also what
+    // tells a missing id from a real one.
+    const metadataChanged = Object.keys(patch).length > 1;
+    const updated = metadataChanged
+      ? await db.update(mediaItems).set(patch).where(eq(mediaItems.id, id)).returning()
+      : await db.select().from(mediaItems).where(eq(mediaItems.id, id));
 
     if (updated.length === 0) {
       reply.code(404);
       return { error: "Not found" };
     }
+    await setItemState(profileId(request), id, personal);
 
     const changes: string[] = [];
     if (title !== undefined) changes.push(`title → "${title}"`);
@@ -258,7 +290,9 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
     if (isFavorite !== undefined) changes.push(isFavorite ? "favorited" : "unfavorited");
     if (studio !== undefined) changes.push(studio ? `studio → "${studio}"` : "studio cleared");
     if (description !== undefined) changes.push("description updated");
-    if (changes.length > 0) {
+    // Another profile's favourites and stars are its own business, not the
+    // library's activity log, which the owner reads.
+    if (changes.length > 0 && request.profile?.isOwner) {
       const itemTitle = updated[0].title;
       await logActivity(
         "edit",
@@ -287,23 +321,27 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       }
 
       // Bringing something back out of the vault is what the PIN protects.
-      if (!hidden && (await vaultPinConfigured()) && !isVaultUnlocked(request.user?.sessionId)) {
+      const profile = profileId(request);
+      if (!hidden && (await vaultPinConfigured(profile)) && !isVaultUnlocked(unlockKey(request))) {
         reply.code(403);
         return { error: "Unlock the vault to restore hidden items" };
       }
 
       const updated = await db
-        .update(mediaItems)
-        .set({ hiddenAt: hidden ? new Date() : null })
-        .where(eq(mediaItems.id, id))
-        .returning({ id: mediaItems.id, title: mediaItems.title });
+        .select({ id: mediaItems.id, title: mediaItems.title })
+        .from(mediaItems)
+        .where(eq(mediaItems.id, id));
 
       if (updated.length === 0) {
         reply.code(404);
         return { error: "Not found" };
       }
+      // Hidden in this profile's vault only.
+      await setItemState(profile, id, { hiddenAt: hidden ? new Date() : null });
 
-      await logActivity(
+      // Only the owner's own hides are logged: the log is library-wide and
+      // naming what another profile hid would defeat its vault.
+      if (request.profile?.isOwner) await logActivity(
         "hide",
         hidden ? `Hidden "${updated[0].title}"` : `Unhidden "${updated[0].title}"`,
         { hidden },

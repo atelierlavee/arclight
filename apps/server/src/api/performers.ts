@@ -8,6 +8,7 @@ import {
   mediaItemTypes,
   performers,
   playbackStates,
+  profilePerformerState,
   studios,
 } from "../db/schema.js";
 import { affinityEdges } from "../library/affinity.js";
@@ -30,6 +31,9 @@ import {
 import { streamFile } from "../media/streamer.js";
 import { normalizeName } from "../scanner/performerNames.js";
 
+import { profileId } from "../auth/profileContext.js";
+import { itemRating, performerIsFavorite, setPerformerFavorite } from "../library/profileState.js";
+import { playbackJoin } from "./mediaItemQueries.js";
 /**
  * Resolves a name to a performer id, creating the row when it's new.
  * Mirrors the scanner's helper: conflict-tolerant insert then re-select, so
@@ -78,12 +82,22 @@ function dedupeNames(names: string[]): string[] {
   return out;
 }
 
+/** One performer's favourite flag for one profile. */
+async function isFavoritePerformer(profile: number, performerId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ isFavorite: profilePerformerState.isFavorite })
+    .from(profilePerformerState)
+    .where(and(eq(profilePerformerState.profileId, profile), eq(profilePerformerState.performerId, performerId)));
+  return row?.isFavorite ?? false;
+}
+
 export async function performerRoutes(app: FastifyInstance): Promise<void> {
   // Archived performers are left out unless `archived=include` asks for them
   // — only the performers page does, to list them in a section of their own.
   // Everything else that reads this (the home row, the filter bar, the
   // editor's suggestions) should behave as if they were not there.
   app.get<{ Querystring: { archived?: string } }>("/api/performers", async (request) => {
+    const profile = profileId(request);
     const includeArchived = request.query.archived === "include";
     const videoTypeIds = db
       .select({ id: mediaItemTypes.id })
@@ -94,7 +108,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       .select({
         id: performers.id,
         name: performers.name,
-        isFavorite: performers.isFavorite,
+        isFavorite: performerIsFavorite(profile, performers.id),
         archivedAt: performers.archivedAt,
         hasImage: sql<boolean>`(${performers.imageFile} is not null)`,
         hasBanner: sql<boolean>`(${performers.bannerFile} is not null)`,
@@ -119,7 +133,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         mediaItems,
         and(
           eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-          visibleItems(),
+          visibleItems(profile),
           inArray(mediaItems.itemTypeId, videoTypeIds)
         )
       )
@@ -127,13 +141,13 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       .groupBy(
         performers.id,
         performers.name,
-        performers.isFavorite,
+        performerIsFavorite(profile, performers.id),
         performers.imageFile,
         performers.bannerFile
       )
       // Favourites first, then alphabetically within each group. Plain name
       // ordering is ASCII, which sorts "Zoe" before "alice".
-      .orderBy(desc(performers.isFavorite), sql`lower(${performers.name})`);
+      .orderBy(desc(performerIsFavorite(profile, performers.id)), sql`lower(${performers.name})`);
 
     return { performers: rows };
   });
@@ -147,6 +161,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { by?: string } }>(
     "/api/performers/network",
     async (request) => {
+      const profile = profileId(request);
       const by = request.query.by === "studios" ? "studios" : "videos";
       const videoTypeIds = db
         .select({ id: mediaItemTypes.id })
@@ -154,7 +169,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(mediaItemTypes.name, "video"));
 
       const visibleVideoItem = and(
-        visibleItems(),
+        visibleItems(profile),
         inArray(mediaItems.itemTypeId, videoTypeIds)
       );
       // Archived performers are not drawn, and neither are the links to
@@ -177,7 +192,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         .select({
           id: performers.id,
           name: performers.name,
-          isFavorite: performers.isFavorite,
+          isFavorite: performerIsFavorite(profile, performers.id),
           hasImage: sql<boolean>`(${performers.imageFile} is not null)`,
           hasBanner: sql<boolean>`(${performers.bannerFile} is not null)`,
           imagePositionX: performers.imagePositionX,
@@ -197,12 +212,12 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
               then coalesce(${mediaItems.durationSeconds}, 0) * ${playbackStates.playCount}
             else coalesce(${playbackStates.positionSeconds}, 0)
           end), 0)::int`,
-          averageRating: sql<number | null>`round(avg(${mediaItems.rating}), 1)::float`,
+          averageRating: sql<number | null>`round(avg(${itemRating(profile, mediaItems.id)}), 1)::float`,
         })
         .from(performers)
         .innerJoin(mediaItemPerformers, eq(mediaItemPerformers.performerId, performers.id))
         .innerJoin(mediaItems, visibleVideo)
-        .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+        .leftJoin(playbackStates, playbackJoin(profile))
         .groupBy(performers.id)
         .orderBy(sql`lower(${performers.name})`);
 
@@ -300,6 +315,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
   // Backs the profile page: the performer plus enough aggregate to render the
   // header without a second round trip.
   app.get<{ Params: { id: string } }>("/api/performers/:id", async (request, reply) => {
+    const profile = profileId(request);
     const id = Number(request.params.id);
 
     const [performer] = await db.select().from(performers).where(eq(performers.id, id));
@@ -323,7 +339,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         mediaItems,
         and(
           eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-          visibleItems(),
+          visibleItems(profile),
           inArray(mediaItems.itemTypeId, videoTypeIds)
         )
       )
@@ -334,7 +350,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
     // section counts can't disagree with what's rendered.
     const performerVideos = and(
       eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-      visibleItems(),
+      visibleItems(profile),
       inArray(mediaItems.itemTypeId, videoTypeIds)
     );
 
@@ -374,7 +390,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       })
       .from(mediaItemPerformers)
       .innerJoin(mediaItems, performerVideos)
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+      .leftJoin(playbackStates, playbackJoin(profile))
       .where(eq(mediaItemPerformers.performerId, id));
 
     // Self-join on the join table: anyone credited on a video this performer
@@ -386,7 +402,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       .select({
         id: coPerformer.id,
         name: coPerformer.name,
-        isFavorite: coPerformer.isFavorite,
+        isFavorite: performerIsFavorite(profile, coPerformer.id),
         hasImage: sql<boolean>`(${coPerformer.imageFile} is not null)`,
         hasBanner: sql<boolean>`(${coPerformer.bannerFile} is not null)`,
         imagePositionX: coPerformer.imagePositionX,
@@ -412,7 +428,6 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       .groupBy(
         coPerformer.id,
         coPerformer.name,
-        coPerformer.isFavorite,
         coPerformer.imageFile,
         coPerformer.bannerFile,
         coPerformer.imagePositionX,
@@ -442,7 +457,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
               mediaItems,
               and(
                 eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-                visibleItems(),
+                visibleItems(profile),
                 inArray(mediaItems.itemTypeId, videoTypeIds)
               )
             )
@@ -460,7 +475,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         mediaItems,
         and(
           eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-          visibleItems(),
+          visibleItems(profile),
           inArray(mediaItems.itemTypeId, videoTypeIds)
         )
       )
@@ -473,7 +488,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       name: performer.name,
       hasImage: performer.imageFile !== null,
       hasBanner: performer.bannerFile !== null,
-      isFavorite: performer.isFavorite,
+      isFavorite: (await isFavoritePerformer(profile, performer.id)),
       archivedAt: performer.archivedAt,
       // Detail only, deliberately: a bio is prose, and the performers grid
       // renders every performer as a card that would carry text nothing shows.
@@ -677,6 +692,18 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
     "/api/performers/:id",
     async (request, reply) => {
       const id = Number(request.params.id);
+      const profile = profileId(request);
+      // The one per-profile field on a library-wide record: a non-owner may
+      // favourite a performer and nothing else (auth/ownerRoutes.ts).
+      const body = request.body ?? {};
+      if (!request.profile?.isOwner && Object.keys(body).some((key) => key !== "isFavorite")) {
+        reply.code(403);
+        return { error: "Only the owner profile can edit performers", code: "owner_only" };
+      }
+      if (body.isFavorite !== undefined && typeof body.isFavorite !== "boolean") {
+        reply.code(400);
+        return { error: "isFavorite must be a boolean" };
+      }
       const {
         bio,
         isFavorite,
@@ -694,7 +721,6 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       // the drag controls and the bio editor both patch a single field.
       const partial: Partial<typeof performers.$inferInsert> = {};
 
-      if (isFavorite !== undefined) partial.isFavorite = isFavorite;
       if (archived !== undefined) partial.archivedAt = archived ? new Date() : null;
 
       if (bio !== undefined) {
@@ -720,17 +746,31 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       if (avatarScale !== undefined)
         partial.avatarScale = avatarScale === null ? null : clamp(avatarScale, 100, 300);
 
-      if (request.body.name === undefined && Object.keys(partial).length > 0) {
-        const updated = await db
-          .update(performers)
-          .set(partial)
-          .where(eq(performers.id, id))
-          .returning();
+      // Answered with this profile's favourite folded in, under the name
+      // the column used to have.
+      const respond = async (row: typeof performers.$inferSelect) => ({
+        performer: { ...row, isFavorite: await isFavoritePerformer(profile, row.id) },
+      });
+
+      if (isFavorite !== undefined) {
+        const [exists] = await db.select({ id: performers.id }).from(performers).where(eq(performers.id, id));
+        if (!exists) {
+          reply.code(404);
+          return { error: "Not found" };
+        }
+        await setPerformerFavorite(profile, id, isFavorite);
+      }
+
+      if (request.body.name === undefined && (Object.keys(partial).length > 0 || isFavorite !== undefined)) {
+        const updated =
+          Object.keys(partial).length > 0
+            ? await db.update(performers).set(partial).where(eq(performers.id, id)).returning()
+            : await db.select().from(performers).where(eq(performers.id, id));
         if (updated.length === 0) {
           reply.code(404);
           return { error: "Not found" };
         }
-        return { performer: updated[0] };
+        return respond(updated[0]);
       }
 
       const name = normalizeName(request.body.name ?? "");
@@ -759,7 +799,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         reply.code(404);
         return { error: "Not found" };
       }
-      return { performer: updated[0] };
+      return respond(updated[0]);
     }
   );
 

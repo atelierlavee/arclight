@@ -1,3 +1,4 @@
+import { pkey } from "@/lib/profileStorage";
 import {
   Bell,
   CheckCircle2,
@@ -16,7 +17,7 @@ const DISMISSED_KEY = "dismissed-notifications";
 function readDismissed(): Set<string> {
   try {
     const value = JSON.parse(
-      localStorage.getItem(DISMISSED_KEY) ?? "[]",
+      localStorage.getItem(pkey(DISMISSED_KEY)) ?? "[]",
     ) as unknown;
     return new Set(
       Array.isArray(value)
@@ -30,7 +31,7 @@ function readDismissed(): Set<string> {
 
 function writeDismissed(ids: Set<string>): void {
   try {
-    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids]));
+    localStorage.setItem(pkey(DISMISSED_KEY), JSON.stringify([...ids]));
   } catch {
     // Dismissal is optional when browser storage is unavailable.
   }

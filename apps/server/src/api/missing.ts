@@ -1,11 +1,12 @@
-import { and, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { logActivity } from "../activity/log.js";
 import { privacyLocked } from "../auth/privacyUnlock.js";
 import { isScanRunning } from "../scanner/pipeline.js";
 import { isVaultUnlocked } from "../auth/vaultUnlock.js";
+import { profileId, unlockKey } from "../auth/profileContext.js";
 import { db } from "../db/client.js";
-import { mediaItems } from "../db/schema.js";
+import { mediaItems, profileItemState } from "../db/schema.js";
 import {
   forgetAllMissingVideos,
   forgetItems,
@@ -21,15 +22,22 @@ import {
  * gone. Scoping the endpoint to those means a stray id cannot delete an item
  * that is sitting on disk perfectly fine, whatever the caller intended.
  */
-/** Drops vault items from a list, keeping its order. */
-async function withoutHidden<T extends { id: number }>(items: T[]): Promise<T[]> {
+/** Drops this profile's vault items from a list, keeping its order. */
+async function withoutHidden<T extends { id: number }>(profile: number, items: T[]): Promise<T[]> {
   if (items.length === 0) return items;
   const hidden = await db
     .select({ id: mediaItems.id })
-    .from(mediaItems)
+    .from(profileItemState)
+    .innerJoin(mediaItems, eq(mediaItems.id, profileItemState.mediaItemId))
     // Every hidden missing item rather than "these ids": the list can be
     // long, and one bound parameter per id is a limit waiting to be hit.
-    .where(and(isNotNull(mediaItems.hiddenAt), isNotNull(mediaItems.missingSince)));
+    .where(
+      and(
+        eq(profileItemState.profileId, profile),
+        isNotNull(profileItemState.hiddenAt),
+        isNotNull(mediaItems.missingSince),
+      ),
+    );
   if (hidden.length === 0) return items;
   const hiddenIds = new Set(hidden.map((row) => row.id));
   return items.filter((item) => !hiddenIds.has(item.id));
@@ -43,9 +51,9 @@ export async function missingRoutes(app: FastifyInstance): Promise<void> {
     // request away. A hidden video whose file has gone is still a vault item,
     // so it stays out of this list unless this session has the vault open.
     const all = await listMissingVideos();
-    const items = isVaultUnlocked(request.user?.sessionId)
+    const items = isVaultUnlocked(unlockKey(request))
       ? all
-      : await withoutHidden(all);
+      : await withoutHidden(profileId(request), all);
     return { items };
   });
 

@@ -1,6 +1,7 @@
 import { and, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { mediaItemTags, mediaItems, mediaItemTypes, playbackStates, tags } from "../db/schema.js";
+import { itemIsFavorite, itemRating } from "../library/profileState.js";
 
 export type SmartCondition =
   | { field: "tags"; op: "contains"; value: string }
@@ -29,7 +30,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // The playback conditions are subqueries rather than a join, for the same
 // reason itemType's join is the caller's business: this only ever produces a
 // WHERE condition, and a never-played item has no playback row to join to.
-function compileCondition(condition: SmartCondition): SQL {
+function compileCondition(condition: SmartCondition, profile: number): SQL {
   switch (condition.field) {
     case "tags": {
       const matchingItemIds = db
@@ -61,22 +62,22 @@ function compileCondition(condition: SmartCondition): SQL {
       // Unrated items fail this (NULL >= n is not true), which is what a
       // rating rule means: things you rated that highly, not things you
       // haven't rated yet.
-      return gte(mediaItems.rating, condition.value);
+      return gte(itemRating(profile, mediaItems.id), condition.value);
     }
     case "favorite": {
-      return eq(mediaItems.isFavorite, condition.value);
+      return eq(itemIsFavorite(profile, mediaItems.id), condition.value);
     }
     case "watched": {
       const watched = sql`exists (
         select 1 from ${playbackStates} ps
-        where ps.media_item_id = ${mediaItems.id} and ps.completed_at is not null
+        where ps.media_item_id = ${mediaItems.id} and ps.profile_id = ${profile} and ps.completed_at is not null
       )`;
       return condition.value ? watched : sql`not ${watched}`;
     }
     case "playCount": {
       return sql`coalesce((
         select ps.play_count from ${playbackStates} ps
-        where ps.media_item_id = ${mediaItems.id}
+        where ps.media_item_id = ${mediaItems.id} and ps.profile_id = ${profile}
       ), 0) >= ${condition.value}`;
     }
     case "durationMinutes": {
@@ -93,7 +94,7 @@ function compileCondition(condition: SmartCondition): SQL {
       const cutoff = new Date(Date.now() - condition.value * DAY_MS);
       return sql`exists (
         select 1 from ${playbackStates} ps
-        where ps.media_item_id = ${mediaItems.id}
+        where ps.media_item_id = ${mediaItems.id} and ps.profile_id = ${profile}
           and (ps.play_count > 0 or ps.position_seconds > 0 or ps.completed_at is not null)
           and ps.updated_at < ${cutoff}
       )`;
@@ -101,8 +102,13 @@ function compileCondition(condition: SmartCondition): SQL {
   }
 }
 
-export function compileSmartRule(rule: SmartRule): SQL {
-  const compiled = rule.conditions.map(compileCondition);
+/**
+ * Collections are shared, but favourite, rating and watch history are per
+ * profile — so a rule is compiled for the profile looking at it, and "my
+ * 5-star favourites" means the viewer's own.
+ */
+export function compileSmartRule(rule: SmartRule, profile: number): SQL {
+  const compiled = rule.conditions.map((condition) => compileCondition(condition, profile));
   if (compiled.length === 0) {
     // An empty rule matches nothing, rather than everything by accident.
     return eq(mediaItems.id, -1);

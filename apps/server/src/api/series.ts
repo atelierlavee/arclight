@@ -4,6 +4,8 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { mediaItems, mediaItemTypes, playbackStates, series } from "../db/schema.js";
 
+import { profileId } from "../auth/profileContext.js";
+import { playbackJoin } from "./mediaItemQueries.js";
 export async function seriesRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { name: string; mediaItemId: number } }>("/api/series", async (request, reply) => {
     const name = request.body.name?.trim();
@@ -36,7 +38,8 @@ export async function seriesRoutes(app: FastifyInstance): Promise<void> {
     return existing;
   });
 
-  app.get("/api/series", async () => {
+  app.get("/api/series", async (request) => {
+    const profile = profileId(request);
     const videoType = db
       .select({ id: mediaItemTypes.id })
       .from(mediaItemTypes)
@@ -50,14 +53,15 @@ export async function seriesRoutes(app: FastifyInstance): Promise<void> {
         unwatched: sql<number>`count(*) filter (where ${playbackStates.completedAt} is null)`,
       })
       .from(series)
-      .leftJoin(mediaItems, and(eq(mediaItems.seriesId, series.id), visibleItems(), eq(mediaItems.itemTypeId, videoType)))
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+      .leftJoin(mediaItems, and(eq(mediaItems.seriesId, series.id), visibleItems(profile), eq(mediaItems.itemTypeId, videoType)))
+      .leftJoin(playbackStates, playbackJoin(profile))
       .groupBy(series.id)
       .orderBy(series.name);
     return { series: rows };
   });
 
   app.get<{ Params: { id: string } }>("/api/series/:id", async (request, reply) => {
+    const profile = profileId(request);
     const id = Number(request.params.id);
     const [entity] = await db.select().from(series).where(eq(series.id, id));
     if (!entity) {
@@ -78,8 +82,8 @@ export async function seriesRoutes(app: FastifyInstance): Promise<void> {
         lastPositionSeconds: playbackStates.positionSeconds,
       })
       .from(mediaItems)
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
-      .where(and(eq(mediaItems.seriesId, id), visibleItems()))
+      .leftJoin(playbackStates, playbackJoin(profile))
+      .where(and(eq(mediaItems.seriesId, id), visibleItems(profile)))
       .orderBy(asc(mediaItems.seasonNumber), asc(mediaItems.episodeNumber), desc(mediaItems.createdAt));
 
     const seasons = new Map<number, typeof episodes>();

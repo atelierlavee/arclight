@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { AuthGate } from "@/components/AuthGate";
 import { ErrorBoundary, ErrorFallback } from "@/components/ErrorBoundary";
+import { installFetchGuard } from "@/lib/fetchGuard";
 import { AppearanceProvider } from "@/lib/appearance";
 import { QueueProvider } from "@/lib/queue";
 import { ToastProvider } from "@/lib/toast";
@@ -11,6 +12,10 @@ import "./index.css";
 import { router } from "./router";
 
 const queryClient = new QueryClient();
+
+// Shows the profile picker on a 409 profile_required from any request, and a
+// toast on a 403 owner_only — see lib/fetchGuard.ts.
+installFetchGuard(queryClient);
 
 /**
  * Tears down the old service worker.

@@ -29,6 +29,7 @@ import {
 import { useToast } from "@/lib/toast";
 import { qk } from "@/lib/queryKeys";
 import { invalidatePerformer } from "@/lib/invalidate";
+import { useIsOwner } from "@/lib/profile";
 
 const routeApi = getRouteApi("/performer/$performerId");
 
@@ -84,6 +85,7 @@ export function PerformerPage() {
   });
 
   const { toast } = useToast();
+  const isOwner = useIsOwner();
   const archive = useMutation({
     mutationFn: (next: boolean) => setPerformerArchived(id, next),
     onSuccess: (_, next) => {
@@ -179,7 +181,7 @@ export function PerformerPage() {
               )}
             </div>
 
-            {performer && (
+            {performer && isOwner && (
               <PerformerImageMenu
                 performerId={performer.id}
                 kind="avatar"
@@ -229,7 +231,7 @@ export function PerformerPage() {
                   />
                 </button>
               )}
-              {performer && !performer.archivedAt && (
+              {performer && isOwner && !performer.archivedAt && (
                 <button
                   type="button"
                   onClick={() => archive.mutate(true)}
@@ -253,7 +255,7 @@ export function PerformerPage() {
                     year: "numeric",
                   })}
                 </span>
-                <button
+                {isOwner && <button
                   type="button"
                   onClick={() => archive.mutate(false)}
                   disabled={archive.isPending}
@@ -261,7 +263,7 @@ export function PerformerPage() {
                 >
                   <ArchiveRestore className="size-3" />
                   Restore
-                </button>
+                </button>}
               </div>
             )}
             {/* Gated on `reframing` rather than rendering an empty wrapper on

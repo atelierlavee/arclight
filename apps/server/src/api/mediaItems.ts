@@ -26,21 +26,24 @@ import {
 } from "../db/schema.js";
 import { visibleItems } from "../library/visibility.js";
 import {
-  PAGE_SIZE,
-  RESOLUTIONS,
   escapeLike,
   fetchPerformersByItemIds,
   fetchRelated,
-  itemColumns,
+  itemColumnsFor,
   orderFor,
+  PAGE_SIZE,
   parseId,
   parsePage,
   playbackColumns,
+  playbackJoin,
+  RESOLUTIONS,
   searchOrder,
   searchTerms,
   withPlayback,
 } from "./mediaItemQueries.js";
 
+import { profileId } from "../auth/profileContext.js";
+import { itemFavoriteFilter, itemRating } from "../library/profileState.js";
 export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
   app.get<{
     Querystring: {
@@ -72,6 +75,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       minRating?: string;
     };
   }>("/api/media-items", async (request, reply) => {
+    const profile = profileId(request);
     const {
       libraryId,
       type,
@@ -126,7 +130,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
 
     // Items whose folder was removed from the scan list stay in the database
     // but drop out of every view, so removing a folder reads as a clean slate.
-    const conditions: SQL[] = [visibleItems()];
+    const conditions: SQL[] = [visibleItems(profile)];
     if (libraryIdNum !== null) {
       conditions.push(eq(mediaItems.libraryId, libraryIdNum));
     }
@@ -241,7 +245,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       conditions.push(
         sql`exists (
           select 1 from ${playbackStates} ps
-          where ps.media_item_id = ${mediaItems.id}
+          where ps.media_item_id = ${mediaItems.id} and ps.profile_id = ${profile}
             and ps.position_seconds > 15
             and ps.completed_at is null
         )`
@@ -252,11 +256,11 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
     // you rated, not things you haven't got round to.
     const ratingFloor = Number(request.query.minRating);
     if (Number.isInteger(ratingFloor) && ratingFloor >= 1 && ratingFloor <= 5) {
-      conditions.push(gte(mediaItems.rating, ratingFloor));
+      conditions.push(sql`${itemRating(profile, mediaItems.id)} >= ${ratingFloor}`);
     }
     const favoritesOnly = favorite === "true";
     if (favoritesOnly) {
-      conditions.push(eq(mediaItems.isFavorite, true));
+      conditions.push(itemFavoriteFilter(profile, mediaItems.id));
     }
 
     /**
@@ -313,7 +317,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       conditions.push(
         sql`not exists (
           select 1 from ${playbackStates} ps
-          where ps.media_item_id = ${mediaItems.id}
+          where ps.media_item_id = ${mediaItems.id} and ps.profile_id = ${profile}
             and ps.completed_at is not null
         )`
       );
@@ -398,11 +402,11 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const query = db
-      .select({ ...itemColumns, ...playbackColumns })
+      .select({ ...itemColumnsFor(profile), ...playbackColumns })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id));
+      .leftJoin(playbackStates, playbackJoin(profile));
 
     // Fetching one extra row answers "is there another page?" without a
     // second COUNT(*) over the same filtered set.
@@ -410,7 +414,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       .orderBy(
         ...(search && (!sort || sort === "newest")
           ? searchOrder(search)
-          : orderFor(sort, randomSeed))
+          : orderFor(sort, randomSeed, profile))
       )
       .limit(PAGE_SIZE + 1)
       .offset((pageNum - 1) * PAGE_SIZE);
@@ -441,7 +445,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
           .from(mediaItems)
           .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
           .leftJoin(studios, eq(studios.id, mediaItems.studioId))
-          .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id));
+          .leftJoin(playbackStates, playbackJoin(profile));
         const [counted] = await (conditions.length > 0
           ? counter.where(and(...conditions))
           : counter);
@@ -472,6 +476,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
    * typing now, not for re-running the whole query.
    */
   app.get<{ Querystring: { q?: string } }>("/api/search/suggestions", async (request) => {
+    const profile = profileId(request);
     const raw = request.query.q?.trim() ?? "";
     if (raw.length < 2) return { performers: [], studios: [], items: [] };
 
@@ -507,7 +512,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       .leftJoin(mediaItemPerformers, eq(mediaItemPerformers.performerId, performers.id))
       .leftJoin(
         mediaItems,
-        and(eq(mediaItems.id, mediaItemPerformers.mediaItemId), visibleItems())
+        and(eq(mediaItems.id, mediaItemPerformers.mediaItemId), visibleItems(profile))
       )
       // Archived performers stay findable through their videos, just not
       // suggested by name.
@@ -552,7 +557,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .where(
         and(
-          visibleItems(),
+          visibleItems(profile),
           ne(mediaItemTypes.name, "photo"),
           ilike(mediaItems.title, pattern)
         )
@@ -581,7 +586,8 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
    * paginated, so the client only ever holds one page and could never see
    * every year from it.
    */
-  app.get("/api/release-years", async () => {
+  app.get("/api/release-years", async (request) => {
+    const profile = profileId(request);
     const rows = await db
       .select({
         year: sql<number>`extract(year from ${mediaItems.releaseDate})::int`,
@@ -591,7 +597,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .where(
         and(
-          visibleItems(),
+          visibleItems(profile),
           ne(mediaItemTypes.name, "photo"),
           isNotNull(mediaItems.releaseDate)
         )
@@ -614,7 +620,8 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
    * render a flat list without flattening it again, and a library covers
    * decades at most — a few hundred rows, once.
    */
-  app.get("/api/timeline", async () => {
+  app.get("/api/timeline", async (request) => {
+    const profile = profileId(request);
     const rows = await db
       .select({
         year: sql<number>`extract(year from ${mediaItems.releaseDate})::int`,
@@ -625,7 +632,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .where(
         and(
-          visibleItems(),
+          visibleItems(profile),
           ne(mediaItemTypes.name, "photo"),
           isNotNull(mediaItems.releaseDate)
         )

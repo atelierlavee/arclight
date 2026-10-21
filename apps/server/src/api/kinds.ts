@@ -8,9 +8,11 @@ import { streamFile } from "../media/streamer.js";
 import { categorySlugs } from "./mediaItemQueries.js";
 import { getKindCovers, kindCoverFor, setKindCover } from "./settings.js";
 
+import { profileId } from "../auth/profileContext.js";
 export async function kindRoutes(app: FastifyInstance): Promise<void> {
   // Backs the category tiles on the home page.
-  app.get("/api/kinds", async () => {
+  app.get("/api/kinds", async (request) => {
+    const profile = profileId(request);
     const rows = await db
       .select({
         kind: mediaItems.kind,
@@ -19,7 +21,7 @@ export async function kindRoutes(app: FastifyInstance): Promise<void> {
         representativeItemId: sql<number | null>`max(${mediaItems.id})`,
       })
       .from(mediaItems)
-      .where(visibleItems())
+      .where(visibleItems(profile))
       .groupBy(mediaItems.kind);
 
     const byKind = new Map(rows.map((r) => [r.kind, r]));

@@ -5,6 +5,8 @@ import { AppShell } from "@/components/AppShell";
 import { MissingSection } from "@/components/MissingSection";
 import { PrivacyUnlockForm } from "@/components/PrivacyUnlockForm";
 import { usePrivacyGuard } from "@/lib/privacyGuard";
+import { useIsOwner } from "@/lib/profile";
+import { OwnerOnlyPage } from "@/components/OwnerOnly";
 
 /**
  * Missing videos, behind the privacy credential.
@@ -15,7 +17,12 @@ import { usePrivacyGuard } from "@/lib/privacyGuard";
  * what this component decides to render, so getting past this screen by other
  * means gains nothing.
  */
+/** The owner profile's page; anyone else is told so. */
 export function MissingPage() {
+  return useIsOwner() ? <MissingPageContent /> : <OwnerOnlyPage title="Missing videos" />;
+}
+
+function MissingPageContent() {
   const { guarded, hasPassword, hasPasskey } = usePrivacyGuard();
   const [unlocked, setUnlocked] = useState(false);
 

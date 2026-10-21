@@ -1,3 +1,4 @@
+import { pkey } from "./profileStorage";
 /**
  * The last few things typed into the command palette (§7).
  *
@@ -20,7 +21,7 @@ const MIN_LENGTH = 2;
 export function readRecentSearches(): string[] {
   try {
     const value = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) ?? "[]",
+      localStorage.getItem(pkey(STORAGE_KEY)) ?? "[]",
     ) as unknown;
     if (!Array.isArray(value)) return [];
     return value.filter((entry): entry is string => typeof entry === "string");
@@ -42,7 +43,7 @@ export function recordRecentSearch(query: string): string[] {
   ].slice(0, MAX_RECENT);
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(pkey(STORAGE_KEY), JSON.stringify(next));
   } catch {
     // History is a convenience; losing it is survivable.
   }
@@ -51,7 +52,7 @@ export function recordRecentSearch(query: string): string[] {
 
 export function clearRecentSearches(): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(pkey(STORAGE_KEY));
   } catch {
     // As above.
   }

@@ -11,6 +11,7 @@ import {
   linkTag,
   makePhoto,
   makeFolder,
+  ownerProfileId,
 } from "../test/fixtures.js";
 import { db } from "../db/client.js";
 import { playbackHeatmap, playbackStates } from "../db/schema.js";
@@ -192,9 +193,9 @@ describe("GET /api/media-items/:id/heatmap", () => {
     const id = await makeItem(libraryId, { durationSeconds: 600 });
 
     await db.insert(playbackHeatmap).values([
-      { mediaItemId: id, bucket: 0, count: 5 },
-      { mediaItemId: id, bucket: 25, count: 3 },
-      { mediaItemId: id, bucket: 49, count: 1 },
+      { profileId: await ownerProfileId(), mediaItemId: id, bucket: 0, count: 5 },
+      { profileId: await ownerProfileId(), mediaItemId: id, bucket: 25, count: 3 },
+      { profileId: await ownerProfileId(), mediaItemId: id, bucket: 49, count: 1 },
     ]);
 
     const res = await get(`/api/media-items/${id}/heatmap`);
@@ -215,9 +216,9 @@ describe("heatmap recording via playback", () => {
     const fiveSecondsAgo = new Date(Date.now() - 5000);
     await db
       .insert(playbackStates)
-      .values({ mediaItemId: id, positionSeconds: 8 })
+      .values({ profileId: await ownerProfileId(), mediaItemId: id, positionSeconds: 8 })
       .onConflictDoUpdate({
-        target: playbackStates.mediaItemId,
+        target: [playbackStates.profileId, playbackStates.mediaItemId],
         set: { positionSeconds: 8, updatedAt: fiveSecondsAgo },
       });
 
@@ -244,9 +245,9 @@ describe("heatmap recording via playback", () => {
     const fiveSecondsAgo = new Date(Date.now() - 5000);
     await db
       .insert(playbackStates)
-      .values({ mediaItemId: id, positionSeconds: 8 })
+      .values({ profileId: await ownerProfileId(), mediaItemId: id, positionSeconds: 8 })
       .onConflictDoUpdate({
-        target: playbackStates.mediaItemId,
+        target: [playbackStates.profileId, playbackStates.mediaItemId],
         set: { positionSeconds: 8, updatedAt: fiveSecondsAgo },
       });
 
@@ -268,14 +269,14 @@ describe("heatmap recording via playback", () => {
   it("increments count on repeat visits to the same bucket", async () => {
     const id = await makeItem(libraryId, { durationSeconds: 100 });
 
-    await db.insert(playbackHeatmap).values({ mediaItemId: id, bucket: 5, count: 3 });
+    await db.insert(playbackHeatmap).values({ profileId: await ownerProfileId(), mediaItemId: id, bucket: 5, count: 3 });
 
     const fiveSecondsAgo = new Date(Date.now() - 5000);
     await db
       .insert(playbackStates)
-      .values({ mediaItemId: id, positionSeconds: 9 })
+      .values({ profileId: await ownerProfileId(), mediaItemId: id, positionSeconds: 9 })
       .onConflictDoUpdate({
-        target: playbackStates.mediaItemId,
+        target: [playbackStates.profileId, playbackStates.mediaItemId],
         set: { positionSeconds: 9, updatedAt: fiveSecondsAgo },
       });
 

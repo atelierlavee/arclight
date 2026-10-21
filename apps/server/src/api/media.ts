@@ -2,7 +2,7 @@ import path from "node:path";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { isAuthorisedCastStream } from "../auth/castTokens.js";
-import { canSeeHidden, hiddenGate } from "../library/visibility.js";
+import { canSeeHidden, hiddenGate, viewerProfile } from "../library/visibility.js";
 import { db } from "../db/client.js";
 import { libraryRoots, mediaFiles, mediaItems, mediaItemTypes } from "../db/schema.js";
 import {
@@ -15,6 +15,7 @@ import { previewPathFor } from "../media/preview.js";
 import { ensureScrubSprite, spritePathFor } from "../media/scrubSprite.js";
 import { getOrCreatePhotoThumbnail, getPosterPath } from "../media/thumbnails.js";
 
+import { itemHiddenAt } from "../library/profileState.js";
 type ResolvedFile = {
   itemType: string;
   hidden: boolean;
@@ -38,11 +39,15 @@ function isPathUnderRoot(filePath: string, root: string): boolean {
 // for an item the issuing session could see). Otherwise it is "not found",
 // the same as an id that does not exist: ids are sequential, and the bytes of
 // a hidden video are the thing the vault exists to keep out of reach.
-async function resolveItemFile(itemId: number, allowHidden: boolean): Promise<ResolvedFile | null> {
+async function resolveItemFile(
+  itemId: number,
+  allowHidden: boolean,
+  profile: number,
+): Promise<ResolvedFile | null> {
   const [row] = await db
     .select({
       itemType: mediaItemTypes.name,
-      hidden: sql<boolean>`(${mediaItems.hiddenAt} is not null)`,
+      hidden: sql<boolean>`(${itemHiddenAt(profile, mediaItems.id)} is not null)`,
       libraryId: mediaItems.libraryId,
       filePath: mediaFiles.path,
       mimeType: mediaFiles.mimeType,
@@ -51,7 +56,7 @@ async function resolveItemFile(itemId: number, allowHidden: boolean): Promise<Re
     .from(mediaItems)
     .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
     .innerJoin(mediaFiles, eq(mediaFiles.mediaItemId, mediaItems.id))
-    .where(and(eq(mediaItems.id, itemId), allowHidden ? undefined : isNull(mediaItems.hiddenAt)));
+    .where(and(eq(mediaItems.id, itemId), allowHidden ? undefined : isNull(itemHiddenAt(profile, mediaItems.id))));
 
   if (!row) return null;
 
@@ -101,7 +106,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     // open/stream the file just to have Fastify's default auto-HEAD discard it.
     { exposeHeadRoute: false },
     async (request, reply) => {
-      const file = await resolveItemFile(Number(request.params.itemId), streamMayShowHidden(request));
+      const file = await resolveItemFile(Number(request.params.itemId), streamMayShowHidden(request), viewerProfile(request));
       if (!file) {
         reply.code(404);
         return { error: "Not found" };
@@ -119,7 +124,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.head<{ Params: { itemId: string } }>("/api/stream/:itemId", async (request, reply) => {
-    const file = await resolveItemFile(Number(request.params.itemId), streamMayShowHidden(request));
+    const file = await resolveItemFile(Number(request.params.itemId), streamMayShowHidden(request), viewerProfile(request));
     if (!file) {
       reply.code(404).send();
       return;
@@ -140,7 +145,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/preview",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const file = await resolveItemFile(id, canSeeHidden(request));
+      const file = await resolveItemFile(id, canSeeHidden(request), viewerProfile(request));
       if (!file || file.itemType !== "video") {
         reply.code(404);
         return { error: "Not found" };
@@ -168,7 +173,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/scrub",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const file = await resolveItemFile(id, canSeeHidden(request));
+      const file = await resolveItemFile(id, canSeeHidden(request), viewerProfile(request));
       const [item] = await db
         .select({ durationSeconds: mediaItems.durationSeconds })
         .from(mediaItems)
@@ -193,7 +198,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/scrub.jpg",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const file = await resolveItemFile(id, canSeeHidden(request));
+      const file = await resolveItemFile(id, canSeeHidden(request), viewerProfile(request));
       if (!file || file.itemType !== "video") {
         reply.code(404);
         return { error: "Not found" };
@@ -279,7 +284,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/thumbnail",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const file = await resolveItemFile(id, canSeeHidden(request));
+      const file = await resolveItemFile(id, canSeeHidden(request), viewerProfile(request));
       if (!file) {
         reply.code(404);
         return { error: "Not found" };

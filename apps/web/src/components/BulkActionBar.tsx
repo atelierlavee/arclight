@@ -15,6 +15,7 @@ import {
   setWatchedOnItems,
 } from "@/lib/bulkActions";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
 
 type Collection = { id: number; name: string; type: "manual" | "smart" };
 
@@ -47,6 +48,7 @@ export function BulkActionBar({
   collectionId?: number;
 }) {
   const [tagInput, setTagInput] = useState("");
+  const isOwner = useIsOwner();
   const [performerInput, setPerformerInput] = useState("");
   const [studioInput, setStudioInput] = useState("");
   const queryClient = useQueryClient();
@@ -261,6 +263,9 @@ export function BulkActionBar({
         <EyeOff className="size-3.5" /> Unwatched
       </button>
 
+      {/* Metadata and collections are the owner profile's to change;
+          favourite, watched and rating are everyone's own. */}
+      {isOwner && (<>
       <span aria-hidden className="mx-1 h-4 w-px bg-border" />
 
       <form
@@ -302,6 +307,7 @@ export function BulkActionBar({
           <X className="size-3.5" /> Remove
         </button>
       </form>
+      </>)}
 
       <span aria-hidden className="mx-1 h-4 w-px bg-border" />
 
@@ -330,6 +336,7 @@ export function BulkActionBar({
         </select>
       </label>
 
+      {isOwner && (<>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -450,6 +457,7 @@ export function BulkActionBar({
           <X className="size-3.5" /> Remove from this collection
         </button>
       )}
+      </>)}
 
       <button
         type="button"

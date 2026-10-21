@@ -1,12 +1,11 @@
-import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db } from "../db/client.js";
-import { appSettings } from "../db/schema.js";
+import { profileId } from "../auth/profileContext.js";
+import { getProfileSetting, setProfileSetting } from "../library/profileSettings.js";
 
 const APPEARANCE_KEY = "appearance";
 
 /**
- * How the app looks, stored per install rather than per browser.
+ * How the app looks, stored per profile rather than per browser.
  *
  * These began in localStorage, which meant a different tile size in Safari
  * than in Chrome and nothing at all on a second machine. The server is the
@@ -183,23 +182,18 @@ function clean(input: unknown): Record<string, unknown> {
 }
 
 export async function appearanceRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/appearance", async () => {
-    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, APPEARANCE_KEY));
+  app.get("/api/appearance", async (request) => {
     // An empty object means "never set" — the client fills in its own
     // defaults rather than the server having a second opinion about them.
-    return { appearance: clean(row?.value) };
+    return { appearance: clean(await getProfileSetting(profileId(request), APPEARANCE_KEY)) };
   });
 
   app.put<{ Body: Record<string, unknown> }>("/api/appearance", async (request) => {
     // Merged, not replaced: a client that predates a setting would otherwise
     // wipe it by saving without it.
-    const [row] = await db.select().from(appSettings).where(eq(appSettings.key, APPEARANCE_KEY));
-    const value = { ...clean(row?.value), ...clean(request.body) };
-
-    await db
-      .insert(appSettings)
-      .values({ key: APPEARANCE_KEY, value })
-      .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
+    const id = profileId(request);
+    const value = { ...clean(await getProfileSetting(id, APPEARANCE_KEY)), ...clean(request.body) };
+    await setProfileSetting(id, APPEARANCE_KEY, value);
     return { appearance: value };
   });
 }

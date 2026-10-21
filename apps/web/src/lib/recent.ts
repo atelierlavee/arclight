@@ -1,3 +1,4 @@
+import { pkey } from "./profileStorage";
 /**
  * What you have recently looked at, played, edited and favourited (§3).
  *
@@ -61,7 +62,7 @@ function nextStamp(): string {
 export function readRecent(kind: RecentKind): RecentEntry[] {
   try {
     const value = JSON.parse(
-      localStorage.getItem(storageKey(kind)) ?? "[]",
+      localStorage.getItem(pkey(storageKey(kind))) ?? "[]",
     ) as unknown;
     if (!Array.isArray(value)) return [];
     return value.filter(
@@ -105,7 +106,7 @@ export function recordRecent(
       ...existing,
     ].slice(0, MAX_PER_KIND);
 
-    localStorage.setItem(storageKey(kind), JSON.stringify(next));
+    localStorage.setItem(pkey(storageKey(kind)), JSON.stringify(next));
     window.dispatchEvent(new Event(CHANGE_EVENT));
   } catch {
     // History is a convenience; losing it is survivable, crashing isn't.
@@ -114,7 +115,7 @@ export function recordRecent(
 
 export function clearRecent(kind: RecentKind): void {
   try {
-    localStorage.removeItem(storageKey(kind));
+    localStorage.removeItem(pkey(storageKey(kind)));
     window.dispatchEvent(new Event(CHANGE_EVENT));
   } catch {
     // As above.
@@ -132,7 +133,7 @@ export function forgetRecent(id: number): void {
       const entries = readRecent(kind);
       const kept = entries.filter((entry) => entry.id !== id);
       if (kept.length !== entries.length) {
-        localStorage.setItem(storageKey(kind), JSON.stringify(kept));
+        localStorage.setItem(pkey(storageKey(kind)), JSON.stringify(kept));
       }
     }
     window.dispatchEvent(new Event(CHANGE_EVENT));

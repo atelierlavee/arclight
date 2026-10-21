@@ -1,19 +1,29 @@
-import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db } from "../db/client.js";
-import { appSettings, users } from "../db/schema.js";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../auth/passwords.js";
 import { markUnlocked } from "../auth/privacyUnlock.js";
+import { profileId, unlockKey } from "../auth/profileContext.js";
+import { proveProfile } from "../auth/profileProof.js";
 import { sweeper } from "../auth/sweep.js";
+import {
+  deleteProfileSetting,
+  getProfileSetting,
+  setProfileSetting,
+} from "../library/profileSettings.js";
 
 const PRIVACY_KEY = "privacy";
 
 type PrivacySettings = { passwordHash: string };
 
-async function getPrivacyHash(): Promise<string | null> {
-  const [row] = await db.select().from(appSettings).where(eq(appSettings.key, PRIVACY_KEY));
-  const value = row?.value as Partial<PrivacySettings> | null;
+/** Each profile has its own discreet-mode password (profile_settings). */
+export async function getPrivacyHash(profile: number): Promise<string | null> {
+  const value = (await getProfileSetting(profile, PRIVACY_KEY)) as Partial<PrivacySettings> | null;
   return typeof value?.passwordHash === "string" ? value.passwordHash : null;
+}
+
+/** Sets (or with null, clears) one profile's privacy password. */
+export async function setPrivacyPassword(profile: number, password: string | null): Promise<void> {
+  if (password === null) await deleteProfileSetting(profile, PRIVACY_KEY);
+  else await setProfileSetting(profile, PRIVACY_KEY, { passwordHash: await hashPassword(password) });
 }
 
 /**
@@ -51,39 +61,34 @@ const sweepAttempts = sweeper(
   (record, now) => record.blockedUntil <= now && now - record.lastAt > FORGET_AFTER_MS,
 );
 export async function privacyRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/privacy", async () => {
+  app.get("/api/privacy", async (request) => {
     // Only whether one exists — never the hash itself.
-    return { hasPassword: (await getPrivacyHash()) !== null };
+    return { hasPassword: (await getPrivacyHash(profileId(request))) !== null };
   });
 
   /**
    * Sets or replaces the privacy password.
    *
-   * Requires the account password, not the current privacy one: if you've
-   * forgotten the privacy password you would otherwise be stuck with discreet
-   * mode permanently, and the account password is already the stronger
-   * credential.
+   * Requires the account password (owner profile) or the profile's own PIN
+   * (any other profile, when it has one) — not the current privacy one: if
+   * you've forgotten the privacy password you would otherwise be stuck with
+   * discreet mode permanently. See auth/profileProof.ts.
    */
-  app.put<{ Body: { password?: string; accountPassword?: string } }>(
+  app.put<{ Body: { password?: string; accountPassword?: string; profilePin?: string } }>(
     "/api/privacy/password",
     async (request, reply) => {
-      const { password, accountPassword } = request.body ?? {};
+      const { password } = request.body ?? {};
+      const profile = profileId(request);
 
-      const userId = request.user?.id;
-      if (userId === undefined) {
-        reply.code(401);
-        return { error: "Not signed in" };
-      }
-
-      const [account] = await db.select().from(users).where(eq(users.id, userId));
-      if (!account || !(await verifyPassword(accountPassword ?? "", account.passwordHash))) {
+      const failure = await proveProfile(request, request.body ?? {});
+      if (failure) {
         reply.code(403);
-        return { error: "That account password isn't right" };
+        return failure;
       }
 
       // An empty password clears it — discreet mode then unlocks freely.
       if (!password) {
-        await db.delete(appSettings).where(eq(appSettings.key, PRIVACY_KEY));
+        await setPrivacyPassword(profile, null);
         return { hasPassword: false };
       }
 
@@ -92,11 +97,7 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
         return { error: `Use at least ${MIN_PASSWORD_LENGTH} characters` };
       }
 
-      const value: PrivacySettings = { passwordHash: await hashPassword(password) };
-      await db
-        .insert(appSettings)
-        .values({ key: PRIVACY_KEY, value })
-        .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
+      await setPrivacyPassword(profile, password);
       return { hasPassword: true };
     }
   );
@@ -107,7 +108,8 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
       reply.code(401);
       return { error: "Not signed in" };
     }
-    const sessionId = request.user.sessionId;
+    // Counted per session and profile, like the unlock itself.
+    const sessionId = unlockKey(request)!;
 
     sweepAttempts();
     const record = attempts.get(sessionId);
@@ -120,7 +122,7 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
       };
     }
 
-    const stored = await getPrivacyHash();
+    const stored = await getPrivacyHash(profileId(request));
     // Nothing set means nothing to unlock — the client shouldn't be asking,
     // but saying yes is better than trapping someone in discreet mode.
     if (stored === null) return { ok: true };

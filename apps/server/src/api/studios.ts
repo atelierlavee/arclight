@@ -12,6 +12,9 @@ import {
 } from "../db/schema.js";
 import { visibleItems } from "../library/visibility.js";
 
+import { profileId } from "../auth/profileContext.js";
+import { performerIsFavorite } from "../library/profileState.js";
+import { playbackJoin } from "./mediaItemQueries.js";
 /**
  * Studios: who released a scene, derived from the filename's leading
  * [Studio] tag or the folder above it.
@@ -21,10 +24,10 @@ import { visibleItems } from "../library/visibility.js";
  */
 export async function studioRoutes(app: FastifyInstance): Promise<void> {
   /** Videos of a given studio that are actually visible in the library. */
-  function studioVideos(studioId: number, videoTypeIds: ReturnType<typeof videoTypes>) {
+  function studioVideos(studioId: number, videoTypeIds: ReturnType<typeof videoTypes>, profile: number) {
     return and(
       eq(mediaItems.studioId, studioId),
-      visibleItems(),
+      visibleItems(profile),
       inArray(mediaItems.itemTypeId, videoTypeIds)
     );
   }
@@ -36,7 +39,8 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(mediaItemTypes.name, "video"));
   }
 
-  app.get("/api/studios", async () => {
+  app.get("/api/studios", async (request) => {
+    const profile = profileId(request);
     const videoTypeIds = videoTypes();
 
     const rows = await db
@@ -73,7 +77,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
         mediaItems,
         and(
           eq(mediaItems.studioId, studios.id),
-          visibleItems(),
+          visibleItems(profile),
           inArray(mediaItems.itemTypeId, videoTypeIds)
         )
       )
@@ -88,6 +92,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
    * in one request rather than five.
    */
   app.get<{ Params: { id: string } }>("/api/studios/:id", async (request, reply) => {
+    const profile = profileId(request);
     const id = Number(request.params.id);
 
     const [studio] = await db
@@ -100,7 +105,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const videoTypeIds = videoTypes();
-    const belongsHere = studioVideos(id, videoTypeIds);
+    const belongsHere = studioVideos(id, videoTypeIds, profile);
 
     const [totals] = await db
       .select({
@@ -131,7 +136,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
         unwatched: sql<number>`count(*) filter (where ${playbackStates.id} is null)::int`,
       })
       .from(mediaItems)
-      .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
+      .leftJoin(playbackStates, playbackJoin(profile))
       .where(belongsHere);
 
     // Who appears on this studio's videos, most-credited first. A LEFT JOIN
@@ -143,7 +148,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
       .select({
         id: performers.id,
         name: performers.name,
-        isFavorite: performers.isFavorite,
+        isFavorite: performerIsFavorite(profile, performers.id),
         hasImage: sql<boolean>`(${performers.imageFile} is not null)`,
         hasBanner: sql<boolean>`(${performers.bannerFile} is not null)`,
         imagePositionX: performers.imagePositionX,
@@ -159,7 +164,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
       .groupBy(
         performers.id,
         performers.name,
-        performers.isFavorite,
+        performerIsFavorite(profile, performers.id),
         performers.imageFile,
         performers.bannerFile,
         performers.imagePositionX,
@@ -184,7 +189,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
               mediaItems,
               and(
                 eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-                visibleItems(),
+                visibleItems(profile),
                 inArray(mediaItems.itemTypeId, videoTypeIds)
               )
             )

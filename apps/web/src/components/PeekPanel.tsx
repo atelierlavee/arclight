@@ -9,6 +9,7 @@ import { EditableTitle } from "./EditableTitle";
 import { Portal } from "./Portal";
 import { TagEditor } from "./TagEditor";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
 
 /** Below this, "resume" would put you back where starting over does anyway. */
 const MIN_RESUMABLE_SECONDS = 15;
@@ -51,7 +52,9 @@ export function PeekPanel({
   const { discreet, discreetBlurPercent } = useAppearance();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [editing, setEditing] = useState(false);
+  const [editingRequested, setEditing] = useState(false);
+  const isOwner = useIsOwner();
+  const editing = editingRequested && isOwner;
 
   const { data: item, isLoading } = useQuery({
     queryKey: qk.mediaItem.detail(itemId),
@@ -267,7 +270,7 @@ export function PeekPanel({
                   )}
                 </>
               )}
-              <button
+              {isOwner && <button
                 type="button"
                 onClick={() => setEditing((value) => !value)}
                 aria-pressed={editing}
@@ -282,7 +285,7 @@ export function PeekPanel({
                     <Pencil className="size-3.5" /> Edit
                   </>
                 )}
-              </button>
+              </button>}
             </div>
 
             <section className="space-y-1.5">

@@ -1,10 +1,10 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../buildApp.js";
 import { db, runMigrations } from "../db/client.js";
 import { seed, seedCategories } from "../db/seed.js";
 import { hashPassword } from "../auth/passwords.js";
-import { sessions, users } from "../db/schema.js";
+import { profiles, sessions, users } from "../db/schema.js";
 import { SESSION_COOKIE } from "../auth/sessions.js";
 import { randomBytes } from "node:crypto";
 
@@ -74,9 +74,41 @@ export async function signIn(): Promise<string> {
     .insert(users)
     .values({ username: "tester", passwordHash: await hashPassword("test-password") })
     .returning();
+  // What first-run setup does: the account comes with its owner profile,
+  // and the session is on it — so every existing test acts as the owner.
+  const [owner] = await db
+    .insert(profiles)
+    .values({ userId: user.id, name: "tester", isOwner: true })
+    .returning();
+  return sessionCookie(user.id, owner.id);
+}
 
+/** A session cookie for an existing user, on `profileId` (or none picked). */
+export async function sessionCookie(userId: number, profileId: number | null): Promise<string> {
   const id = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-  await db.insert(sessions).values({ id, userId: user.id, expiresAt });
+  await db.insert(sessions).values({ id, userId, profileId, expiresAt });
   return `${SESSION_COOKIE}=${id}`;
+}
+
+/** The ids behind `signIn()`: the one test user and its owner profile. */
+export async function testAccount(): Promise<{ userId: number; ownerProfileId: number }> {
+  const [owner] = await db.select().from(profiles).where(eq(profiles.isOwner, true));
+  return { userId: owner.userId, ownerProfileId: owner.id };
+}
+
+/**
+ * A second, non-owner profile on the signed-in account and a session acting
+ * as it — for tests that check one profile cannot see or do another's.
+ */
+export async function signInOtherProfile(
+  name = "guest",
+  pin?: string,
+): Promise<{ cookie: string; profileId: number }> {
+  const { userId } = await testAccount();
+  const [profile] = await db
+    .insert(profiles)
+    .values({ userId, name, pinHash: pin ? await hashPassword(pin) : null })
+    .returning();
+  return { cookie: await sessionCookie(userId, profile.id), profileId: profile.id };
 }

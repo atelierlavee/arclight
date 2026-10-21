@@ -1,8 +1,10 @@
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
-import { appSettings, mediaItemTypes, mediaItems, users } from "../db/schema.js";
+import { mediaItemTypes, mediaItems, profileItemState } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../auth/passwords.js";
+import { profileId, unlockKey } from "../auth/profileContext.js";
+import { proveProfile } from "../auth/profileProof.js";
 import {
   VAULT_KEY,
   getVaultPinHash,
@@ -10,6 +12,7 @@ import {
   lockVault,
   unlockVault,
 } from "../auth/vaultUnlock.js";
+import { deleteProfileSetting, setProfileSetting } from "../library/profileSettings.js";
 import { logActivity } from "../activity/log.js";
 import { sweeper } from "../auth/sweep.js";
 
@@ -75,49 +78,65 @@ export function resetVaultAttempts(): void {
   globalAttempts.lastAt = 0;
 }
 
-const hiddenNow = () =>
+/** Sets (or with null, removes) one profile's vault PIN. */
+export async function setVaultPin(profile: number, pin: string | null): Promise<void> {
+  if (pin === null) await deleteProfileSetting(profile, VAULT_KEY);
+  else await setProfileSetting(profile, VAULT_KEY, { pinHash: await hashPassword(pin) });
+}
+
+/**
+ * This profile's vault: its own profile_item_state rows with hidden_at set.
+ * Used with an inner join on profile_item_state for `profile`.
+ */
+const hiddenNow = (profile: number) =>
   and(
-    isNotNull(mediaItems.hiddenAt),
+    eq(profileItemState.profileId, profile),
+    isNotNull(profileItemState.hiddenAt),
     eq(mediaItems.inScope, true),
     sql`${mediaItems.missingSince} is null`,
   );
 
 export async function vaultRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/vault", async (request) => {
-    const hasPin = (await getVaultPinHash()) !== null;
-    const unlocked = hasPin && isVaultUnlocked(request.user?.sessionId);
+    const profile = profileId(request);
+    const hasPin = (await getVaultPinHash(profile)) !== null;
+    const unlocked = hasPin && isVaultUnlocked(unlockKey(request));
     let count: number | null = null;
     if (unlocked) {
       const [row] = await db
         .select({ n: sql<number>`count(*)::int` })
-        .from(mediaItems)
-        .where(hiddenNow());
+        .from(profileItemState)
+        .innerJoin(mediaItems, eq(mediaItems.id, profileItemState.mediaItemId))
+        .where(hiddenNow(profile));
       count = row?.n ?? 0;
     }
     return { hasPin, unlocked, count };
   });
 
   /** Sets, replaces, or (with an empty pin) removes the PIN. */
-  app.put<{ Body: { pin?: string; accountPassword?: string } }>(
+  // Proof: the account password for the owner profile, the profile's own
+  // PIN for anyone else (see auth/profileProof.ts).
+  app.put<{ Body: { pin?: string; accountPassword?: string; profilePin?: string } }>(
     "/api/vault/pin",
     async (request, reply) => {
-      const userId = request.user?.id;
-      if (userId === undefined) {
-        reply.code(401);
-        return { error: "Not signed in" };
-      }
-      const { pin, accountPassword } = request.body ?? {};
+      const { pin } = request.body ?? {};
+      const profile = profileId(request);
+      const key = unlockKey(request)!;
 
-      const [account] = await db.select().from(users).where(eq(users.id, userId));
-      if (!account || !(await verifyPassword(accountPassword ?? "", account.passwordHash))) {
+      const failure = await proveProfile(request, request.body ?? {});
+      if (failure) {
         reply.code(403);
-        return { error: "That account password isn't right" };
+        return failure;
       }
+
+      // Only the owner's changes reach the activity log: it is library-wide
+      // and the owner reads it, so another profile's vault is not its story.
+      const log = request.profile?.isOwner ? logActivity : async () => {};
 
       if (!pin) {
-        await db.delete(appSettings).where(eq(appSettings.key, VAULT_KEY));
-        lockVault(request.user!.sessionId);
-        await logActivity("vault", "Vault PIN removed");
+        await setVaultPin(profile, null);
+        lockVault(key);
+        await log("vault", "Vault PIN removed");
         return { hasPin: false };
       }
       if (!PIN_PATTERN.test(pin)) {
@@ -125,14 +144,10 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Use 4 to 12 digits" };
       }
 
-      const value = { pinHash: await hashPassword(pin) };
-      await db
-        .insert(appSettings)
-        .values({ key: VAULT_KEY, value })
-        .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
-      unlockVault(request.user!.sessionId);
+      await setVaultPin(profile, pin);
+      unlockVault(key);
       resetVaultAttempts();
-      await logActivity("vault", "Vault PIN changed");
+      await log("vault", "Vault PIN changed");
       return { hasPin: true };
     },
   );
@@ -144,7 +159,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     }
 
     sweepAttempts();
-    const sessionId = request.user.sessionId;
+    const sessionId = unlockKey(request)!;
     const now = Date.now();
     const record = sessionAttempts.get(sessionId) ?? { count: 0, blockedUntil: 0, lastAt: now };
     const blockedUntil = Math.max(record.blockedUntil, globalAttempts.blockedUntil);
@@ -157,7 +172,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       };
     }
 
-    const stored = await getVaultPinHash();
+    const stored = await getVaultPinHash(profileId(request));
     if (stored === null) {
       reply.code(400);
       return { ok: false, error: "Set a PIN first" };
@@ -178,23 +193,26 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       };
     }
 
-    // A right PIN proves the owner is here, so the slate is wiped for every
-    // session — including whatever was guessing alongside.
-    resetVaultAttempts();
-    unlockVault(request.user.sessionId);
+    // A right PIN clears this session+profile's own slate. Not everyone's:
+    // with profiles, knowing your own PIN proves nothing about anyone
+    // else's vault, so it must not buy fresh guesses at theirs.
+    sessionAttempts.delete(sessionId);
+    unlockVault(sessionId);
     return { ok: true };
   });
 
   app.post("/api/vault/lock", async (request) => {
-    if (request.user) lockVault(request.user.sessionId);
+    const key = unlockKey(request);
+    if (key) lockVault(key);
     return { ok: true };
   });
 
   app.get<{ Querystring: { page?: string } }>("/api/vault/items", async (request, reply) => {
-    if (!isVaultUnlocked(request.user?.sessionId)) {
+    if (!isVaultUnlocked(unlockKey(request))) {
       reply.code(403);
       return { error: "The vault is locked" };
     }
+    const profile = profileId(request);
     const page = Math.max(1, Number(request.query.page ?? 1) || 1);
 
     const rows = await db
@@ -207,12 +225,13 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
         thumbnailPositionY: mediaItems.thumbnailPositionY,
         thumbnailScale: mediaItems.thumbnailScale,
         durationSeconds: mediaItems.durationSeconds,
-        hiddenAt: mediaItems.hiddenAt,
+        hiddenAt: profileItemState.hiddenAt,
       })
-      .from(mediaItems)
+      .from(profileItemState)
+      .innerJoin(mediaItems, eq(mediaItems.id, profileItemState.mediaItemId))
       .innerJoin(mediaItemTypes, eq(mediaItemTypes.id, mediaItems.itemTypeId))
-      .where(hiddenNow())
-      .orderBy(desc(mediaItems.hiddenAt), desc(mediaItems.id))
+      .where(hiddenNow(profile))
+      .orderBy(desc(profileItemState.hiddenAt), desc(mediaItems.id))
       .limit(PAGE_SIZE + 1)
       .offset((page - 1) * PAGE_SIZE);
 

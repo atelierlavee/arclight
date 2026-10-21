@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "../db/client.js";
 import { libraryRoots, mediaFiles, mediaItems, performers, studios } from "../db/schema.js";
-import { resetDatabase, testApp } from "../test/harness.js";
+import { resetDatabase, signIn, testApp } from "../test/harness.js";
 import {
   attachFile,
   linkPerformer,
@@ -11,6 +11,7 @@ import {
   makeLibrary,
   makePerformer,
   makeStudio,
+  setPerformerFavoriteFor,
 } from "../test/fixtures.js";
 import { purgeEmptyEntities, recomputeScope } from "./scope.js";
 
@@ -143,7 +144,10 @@ describe("purgeEmptyEntities", () => {
       .insert(performers)
       .values({ name: "Typed In", origin: "user" })
       .returning();
-    await db.insert(performers).values({ name: "Loved", isFavorite: true });
+    // Favourited by any profile — one is enough to keep them.
+    const [loved] = await db.insert(performers).values({ name: "Loved" }).returning();
+    await signIn();
+    await setPerformerFavoriteFor(loved.id, true);
     await db.insert(performers).values({ name: "Shelved", archivedAt: new Date() });
     await makePerformer("Debris");
 

@@ -4,6 +4,7 @@ import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { db } from "../db/client.js";
 import { webauthnCredentials, users } from "../db/schema.js";
 import { resetDatabase, signIn, testApp } from "../test/harness.js";
+import { ownerProfileId } from "../test/fixtures.js";
 import { createSession } from "../auth/sessions.js";
 import { isVaultUnlocked } from "../auth/vaultUnlock.js";
 import { isUnlocked } from "../auth/privacyUnlock.js";
@@ -26,6 +27,7 @@ beforeEach(async () => {
   await db.insert(webauthnCredentials).values({
     id: "test-passkey",
     userId: user.id,
+    profileId: await ownerProfileId(),
     publicKey: Buffer.from([1, 2, 3]).toString("base64"),
     counter: 0,
     label: "Test",
@@ -77,7 +79,7 @@ describe("passkey sign-in", () => {
     describe("passkey vault unlock", () => {
       async function prepare() {
         const [user] = await db.select().from(users);
-        const sessionId = await createSession(user.id);
+        const sessionId = await createSession(user.id, await ownerProfileId());
         const cookie = `media_session=${sessionId}`;
         await app.inject({
           method: "PUT", url: "/api/vault/pin", headers: { cookie },
@@ -107,15 +109,15 @@ describe("passkey sign-in", () => {
           method: "POST", url: "/api/webauthn/auth", headers: { cookie }, payload,
         });
         expect(result.statusCode).toBe(200);
-        expect(isVaultUnlocked(sessionId)).toBe(true);
-        expect(isUnlocked(sessionId)).toBe(false);
+        expect(isVaultUnlocked(`${sessionId}:${await ownerProfileId()}`)).toBe(true);
+        expect(isUnlocked(`${sessionId}:${await ownerProfileId()}`)).toBe(false);
         const [user] = await db.select().from(users);
-        expect(isVaultUnlocked(await createSession(user.id))).toBe(false);
+        expect(isVaultUnlocked(`${await createSession(user.id, await ownerProfileId())}:${await ownerProfileId()}`)).toBe(false);
         expect((await app.inject({
           method: "POST", url: "/api/webauthn/auth", headers: { cookie }, payload,
         })).statusCode).toBe(400);
         await app.inject({ method: "POST", url: "/api/vault/lock", headers: { cookie } });
-        expect(isVaultUnlocked(sessionId)).toBe(false);
+        expect(isVaultUnlocked(`${sessionId}:${await ownerProfileId()}`)).toBe(false);
       });
 
       it("does not accept a privacy challenge for the vault or a failed assertion", async () => {
@@ -137,7 +139,7 @@ describe("passkey sign-in", () => {
           method: "POST", url: "/api/webauthn/auth", headers: { cookie },
           payload: { response: assertion, purpose: "vault" },
         })).statusCode).toBe(403);
-        expect(isVaultUnlocked(sessionId)).toBe(false);
+        expect(isVaultUnlocked(`${sessionId}:${await ownerProfileId()}`)).toBe(false);
       });
     });
   it("creates a real session only after successful verification and rejects replay", async () => {
@@ -208,7 +210,7 @@ describe("passkey registration", () => {
 
   async function cookie() {
     const [user] = await db.select().from(users);
-    return `media_session=${await createSession(user.id)}`;
+    return `media_session=${await createSession(user.id, await ownerProfileId())}`;
   }
 
   it("needs the account password, not just a session", async () => {

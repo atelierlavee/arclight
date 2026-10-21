@@ -1,7 +1,9 @@
+import { proofBody, type Proof } from "./profilesApi";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { throwIfNotOk } from "./privacyLock";
 
-export type Passkey = { id: string; label: string };
+/** `profileId` is the profile that registered it; absent on a server without profiles. */
+export type Passkey = { id: string; label: string; profileId?: number | null };
 
 export async function fetchPasskeys(): Promise<Passkey[]> {
   const res = await fetch("/api/webauthn/credentials");
@@ -38,11 +40,9 @@ export async function registerPasskey(
    * Required by the server: a passkey unlocks discreet mode and the vault on
    * its own, so enrolling one has to prove more than an open session.
    */
-  accountPassword: string,
+  proof: string | Proof | null,
 ): Promise<void> {
-  const options = (await post("/api/webauthn/register/options", {
-    accountPassword,
-  })) as Parameters<
+  const options = (await post("/api/webauthn/register/options", proofBody(proof))) as Parameters<
     typeof startRegistration
   >[0]["optionsJSON"];
 

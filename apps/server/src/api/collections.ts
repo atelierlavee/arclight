@@ -7,6 +7,7 @@ import { collectionItems, collections, mediaItemTypes, mediaItems } from "../db/
 import { playbackWarningFor } from "../media/compatibility.js";
 import { isId, parseId, parsePage } from "./mediaItemQueries.js";
 
+import { profileId } from "../auth/profileContext.js";
 const PAGE_SIZE = 50;
 const MAX_NAME_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 2000;
@@ -119,6 +120,7 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string }; Querystring: { page?: string } }>(
     "/api/collections/:id/items",
     async (request, reply) => {
+      const profile = profileId(request);
       const id = parseId(request.params.id);
       const pageNum = parsePage(request.query.page);
       if (id === null) {
@@ -147,14 +149,14 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
       if (collection.type === "manual") {
         rows = await baseQuery
           .innerJoin(collectionItems, eq(collectionItems.mediaItemId, mediaItems.id))
-          .where(and(eq(collectionItems.collectionId, id), visibleItems()))
+          .where(and(eq(collectionItems.collectionId, id), visibleItems(profile)))
           .orderBy(asc(collectionItems.position), ...defaultOrder)
           .limit(PAGE_SIZE + 1)
           .offset((pageNum - 1) * PAGE_SIZE);
       } else {
         const rule = collection.smartRule as SmartRule;
         rows = await baseQuery
-          .where(and(compileSmartRule(rule), visibleItems()))
+          .where(and(compileSmartRule(rule, profile), visibleItems(profile)))
           .orderBy(...defaultOrder)
           .limit(PAGE_SIZE + 1)
           .offset((pageNum - 1) * PAGE_SIZE);

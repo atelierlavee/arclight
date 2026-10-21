@@ -175,6 +175,8 @@ export const qk = {
   settings: ["settings"] as const,
 
   authStatus: ["auth-status"] as const,
+  /** The signed-in account's profiles; survives a profile switch, like auth status. */
+  profiles: ["profiles"] as const,
   privacy: ["privacy"] as const,
   passkeys: ["passkeys"] as const,
   vault: ["vault"] as const,

@@ -12,10 +12,11 @@ import {
   makeLibraryAt,
   makePerformer,
   makeStudio,
+  ownerProfileId,
 } from "../test/fixtures.js";
 import { db } from "../db/client.js";
 import {
-  appSettings,
+  profileSettings,
   bookmarks,
   mediaItemPerformers,
   mediaItems,
@@ -101,11 +102,12 @@ describe("hidden items stay out of aggregate views", () => {
   it("insights: log, items, performer and studio counts", async () => {
     const { shown, secret } = await pair();
     const hour = new Date("2026-01-01T10:00:00Z");
+    const pid = await ownerProfileId();
     await db.insert(watchLog).values([
-      { mediaItemId: shown, hour, seconds: 60 },
-      { mediaItemId: secret, hour, seconds: 600 },
+      { profileId: pid, mediaItemId: shown, hour, seconds: 60 },
+      { profileId: pid, mediaItemId: secret, hour, seconds: 600 },
     ]);
-    await db.insert(bookmarks).values({ mediaItemId: secret, positionSeconds: 5 });
+    await db.insert(bookmarks).values({ profileId: pid, mediaItemId: secret, positionSeconds: 5 });
 
     const body = (await get("/api/insights")).json();
     expect(body.log.map((e: { mediaItemId: number }) => e.mediaItemId)).toEqual([shown]);
@@ -119,10 +121,11 @@ describe("hidden items stay out of aggregate views", () => {
     const { shown, secret } = await pair();
     const other = await makeItem(libraryId, { title: "Other" });
     const hour = new Date("2026-01-01T10:00:00Z");
+    const pid = await ownerProfileId();
     await db.insert(watchLog).values([
-      { mediaItemId: shown, hour, seconds: 60 },
-      { mediaItemId: other, hour, seconds: 30 },
-      { mediaItemId: secret, hour, seconds: 600 },
+      { profileId: pid, mediaItemId: shown, hour, seconds: 60 },
+      { profileId: pid, mediaItemId: other, hour, seconds: 30 },
+      { profileId: pid, mediaItemId: secret, hour, seconds: 600 },
     ]);
     expect((await get("/api/streak")).json()).toEqual({
       log: [{ hour: hour.toISOString(), seconds: 90 }],
@@ -173,7 +176,7 @@ describe("hidden items stay out of aggregate views", () => {
     const { secret } = await pair();
     const twin = await makePerformer("Twin");
     await linkPerformer(secret, twin);
-    await db.insert(watchLog).values({ mediaItemId: secret, hour: new Date(), seconds: 600 });
+    await db.insert(watchLog).values({ profileId: await ownerProfileId(), mediaItemId: secret, hour: new Date(), seconds: 600 });
     expect((await get("/api/taste-twins")).json()).toEqual({ performers: [] });
   });
 });
@@ -256,7 +259,8 @@ describe("a hidden item by id", () => {
 
 describe("destructive routes need the privacy credential", () => {
   beforeEach(async () => {
-    await db.insert(appSettings).values({
+    await db.insert(profileSettings).values({
+      profileId: await ownerProfileId(),
       key: "privacy",
       value: { passwordHash: await hashPassword("correct horse") },
     });

@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { parseOrigins } from "../api/webauthn.js";
 import { isAuthorisedCastStream } from "./castTokens.js";
 import { isApiUrl } from "./paths.js";
+import { OWNER_ONLY_ROUTES, PROFILE_OPTIONAL_ROUTES, routeKey } from "./ownerRoutes.js";
+import "./profileContext.js";
 import { resolveSession, SESSION_COOKIE, type SessionUser } from "./sessions.js";
 
 declare module "fastify" {
@@ -82,8 +84,11 @@ export function registerAuthGuard(app: FastifyInstance): void {
     }
   });
 
+  app.decorateRequest("profile", null);
+
   app.addHook("preHandler", async (request, reply) => {
     request.user = (await resolveSession(request.cookies[SESSION_COOKIE])) ?? undefined;
+    request.profile = request.user?.profile ?? null;
 
     // Decided on the route that actually matched, which is what will run,
     // and on the normalised path as a backstop for requests no route matched
@@ -96,8 +101,33 @@ export function registerAuthGuard(app: FastifyInstance): void {
     // can line up with an entry the router would not have matched itself.
     if (routeUrl !== undefined && PUBLIC_API_PATHS.has(routeUrl)) return;
 
-    if (!request.user && !isAuthorisedCastStream(request.method, request.url)) {
-      reply.code(401).send({ error: "Authentication required" });
+    if (!request.user) {
+      // A cast token stands in for a session on exactly one stream URL; the
+      // stream itself decides what that token may see (see castTokens.ts).
+      if (!isAuthorisedCastStream(request.method, request.url)) {
+        reply.code(401).send({ error: "Authentication required" });
+      }
+      return;
+    }
+
+    // Signed in, but nobody has said who is watching. Everything personal
+    // depends on that answer, so only the picker and its way out work until
+    // it is given. Unmatched URLs (no route) fall through to the 404.
+    // HEAD is answered by the GET route, so it is judged as that GET.
+    const method = request.method === "HEAD" ? "GET" : request.method;
+    const key = routeUrl === undefined ? undefined : routeKey(method, routeUrl);
+    if (!request.profile) {
+      if (key !== undefined && !PROFILE_OPTIONAL_ROUTES.has(key)) {
+        reply.code(409).send({ error: "Choose a profile first", code: "profile_required" });
+      }
+      return;
+    }
+
+    // Library and site management belongs to the owner profile. Declared in
+    // one table (ownerRoutes.ts) rather than in each handler, for the same
+    // reason this guard is deny-by-default.
+    if (!request.profile.isOwner && key !== undefined && OWNER_ONLY_ROUTES.has(key)) {
+      reply.code(403).send({ error: "Only the owner profile can do that", code: "owner_only" });
     }
   });
 }

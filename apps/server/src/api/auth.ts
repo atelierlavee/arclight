@@ -1,9 +1,10 @@
 import { and, eq, ne, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { db } from "../db/client.js";
-import { sessions, users } from "../db/schema.js";
+import { profiles, sessions, users } from "../db/schema.js";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../auth/passwords.js";
 import {
+  autoSelectProfile,
   createSession,
   destroySession,
   hasAnyUser,
@@ -99,10 +100,24 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // Lets the frontend decide between the setup screen, the login screen and
   // the app without guessing from a 401.
   app.get("/api/auth/status", async (request) => {
-    return {
-      needsSetup: !(await hasAnyUser()),
-      user: request.user ?? null,
-    };
+    let profile = null;
+    if (request.profile) {
+      const [row] = await db.select().from(profiles).where(eq(profiles.id, request.profile.id));
+      if (row) {
+        profile = {
+          id: row.id,
+          name: row.name,
+          color: row.color,
+          isOwner: row.isOwner,
+          hasPin: row.pinHash !== null,
+        };
+      }
+    }
+    const user = request.user
+      ? { id: request.user.id, username: request.user.username, sessionId: request.user.sessionId }
+      : null;
+    // `profile` null with a user means "show the picker".
+    return { needsSetup: !(await hasAnyUser()), user, profile };
   });
 
   app.post<{ Body: { username?: string; password?: string } }>(
@@ -141,14 +156,23 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         const [existing] = await tx.select({ id: users.id }).from(users).limit(1);
         if (existing) return null;
         const [created] = await tx.insert(users).values({ username, passwordHash }).returning();
-        return created;
+        // The owner profile is born with the account, in the same
+        // transaction: an account without one could never manage its own
+        // library, and nothing else is allowed to create an owner.
+        const [owner] = await tx
+          .insert(profiles)
+          .values({ userId: created.id, name: username, isOwner: true })
+          .returning({ id: profiles.id });
+        return { ...created, ownerProfileId: owner.id };
       });
       if (!user) {
         reply.code(409);
         return { error: "An account already exists" };
       }
 
-      const sessionId = await createSession(user.id);
+      // Straight in as the owner: the account was created a moment ago and
+      // the owner profile is the only one there is.
+      const sessionId = await createSession(user.id, user.ownerProfileId);
       setSessionCookie(reply, sessionId, request.protocol === "https");
       return { user: { id: user.id, username: user.username } };
     }
@@ -182,7 +206,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
 
       attempts.delete(ip);
-      const sessionId = await createSession(user.id);
+      const sessionId = await createSession(user.id, await autoSelectProfile(user.id));
       setSessionCookie(reply, sessionId, request.protocol === "https");
       return { user: { id: user.id, username: user.username } };
     }

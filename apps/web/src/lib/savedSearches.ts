@@ -1,3 +1,4 @@
+import { pkey } from "./profileStorage";
 import { EMPTY_FILTERS, filtersFromSearch, type Filters } from "./filters";
 
 /**
@@ -31,7 +32,7 @@ const MAX_SAVED = 30;
 export function readSavedSearches(): SavedSearch[] {
   try {
     const value = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) ?? "[]",
+      localStorage.getItem(pkey(STORAGE_KEY)) ?? "[]",
     ) as unknown;
     if (!Array.isArray(value)) return [];
     return value.filter(
@@ -49,7 +50,7 @@ export function readSavedSearches(): SavedSearch[] {
 
 function write(entries: SavedSearch[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    localStorage.setItem(pkey(STORAGE_KEY), JSON.stringify(entries));
     window.dispatchEvent(new Event(CHANGE_EVENT));
   } catch {
     // Saved searches are optional when browser storage is unavailable.
@@ -81,7 +82,7 @@ export function removeSavedSearch(id: string): void {
 /** Every saved search, for signing out. */
 export function clearSavedSearches(): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(pkey(STORAGE_KEY));
     window.dispatchEvent(new Event(CHANGE_EVENT));
   } catch {
     // As above.

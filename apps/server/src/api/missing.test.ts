@@ -13,7 +13,7 @@ import {
   playbackStates,
   tags,
 } from "../db/schema.js";
-import { appSettings } from "../db/schema.js";
+import { profileSettings } from "../db/schema.js";
 import { hashPassword } from "../auth/passwords.js";
 import { resetDatabase, signIn, testApp } from "../test/harness.js";
 import {
@@ -23,6 +23,7 @@ import {
   makeLibrary,
   makePerformer,
   makePhoto,
+  ownerProfileId,
 } from "../test/fixtures.js";
 
 let app: FastifyInstance;
@@ -115,7 +116,7 @@ describe("forgetting missing videos", () => {
       .values({ name: "Mine", type: "manual" })
       .returning();
     await db.insert(collectionItems).values({ collectionId: collection.id, mediaItemId: item });
-    await db.insert(playbackStates).values({ mediaItemId: item, positionSeconds: 12 });
+    await db.insert(playbackStates).values({ profileId: await ownerProfileId(), mediaItemId: item, positionSeconds: 12 });
 
     // A foreign key violation here is the failure this whole path risks.
     const res = await post("/api/missing/forget", { ids: [item] });
@@ -187,7 +188,8 @@ describe("forgetting missing videos", () => {
 
 describe("the privacy lock", () => {
   async function setPrivacyPassword(password: string) {
-    await db.insert(appSettings).values({
+    await db.insert(profileSettings).values({
+      profileId: await ownerProfileId(),
       key: "privacy",
       value: { passwordHash: await hashPassword(password) },
     });

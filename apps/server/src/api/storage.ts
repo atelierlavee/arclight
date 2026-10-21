@@ -5,6 +5,7 @@ import { db } from "../db/client.js";
 import { libraryRoots } from "../db/schema.js";
 import { visibleItemsSql } from "../library/visibility.js";
 
+import { profileId } from "../auth/profileContext.js";
 type GroupRow = {
   id: number | null;
   name: string | null;
@@ -101,7 +102,8 @@ function topWithRest<T extends Group>(rows: T[]): T[] {
  * this can tell you what is worth removing but the removing is yours.
  */
 export async function storageRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/storage/insights", async () => {
+  app.get("/api/storage/insights", async (request) => {
+    const profile = profileId(request);
     // One CTE for "visible item and its size", shared by every query below,
     // so the definition of both cannot drift between the panels.
     const sized = sql`
@@ -121,7 +123,7 @@ export async function storageRoutes(app: FastifyInstance): Promise<void> {
           coalesce((select sum(mf.size_bytes) from media_files mf where mf.media_item_id = mi.id), 0)::bigint as bytes
         from media_items mi
         join media_item_types mit on mit.id = mi.item_type_id
-        where ${visibleItemsSql("mi")} and mit.name in ('video', 'photo')
+        where ${visibleItemsSql("mi", profile)} and mit.name in ('video', 'photo')
       )`;
 
     // Counted apart because they are not comparable: one studio's "8" is
@@ -343,6 +345,7 @@ export async function storageRoutes(app: FastifyInstance): Promise<void> {
    * subfolders, and the loose files directly inside it as a single block.
    */
   app.get<{ Querystring: { path?: string } }>("/api/storage/treemap", async (request, reply) => {
+    const profile = profileId(request);
     const roots = (await db.select({ path: libraryRoots.path }).from(libraryRoots)).map(
       (r) => r.path,
     );
@@ -354,7 +357,7 @@ export async function storageRoutes(app: FastifyInstance): Promise<void> {
         from media_files mf
         join media_items mi on mi.id = mf.media_item_id
         where starts_with(mf.path, ${prefix}::text)
-          and ${visibleItemsSql("mi")}
+          and ${visibleItemsSql("mi", profile)}
       `);
       const row = result.rows[0];
       return { files: row?.files ?? 0, bytes: Number(row?.bytes ?? 0) };
@@ -397,7 +400,7 @@ export async function storageRoutes(app: FastifyInstance): Promise<void> {
       from media_files mf
       join media_items mi on mi.id = mf.media_item_id
       where starts_with(mf.path, ${prefix}::text)
-        and ${visibleItemsSql("mi")}
+        and ${visibleItemsSql("mi", profile)}
       group by segment, is_dir
       order by bytes desc
     `);

@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { savePerformerBio } from "@/lib/performerApi";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
 
 /**
  * Click-to-edit free text on a performer's profile.
@@ -21,6 +22,8 @@ export function PerformerBio({ performerId, bio }: { performerId: number; bio: s
   const [value, setValue] = useState(bio ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
+  // Only the owner profile edits performers; everyone else just reads.
+  const isOwner = useIsOwner();
 
   // Resync when the query refetches, or when the profile switches performer.
   useEffect(() => setValue(bio ?? ""), [bio]);
@@ -60,6 +63,12 @@ export function PerformerBio({ performerId, bio }: { performerId: number; bio: s
         className="w-full max-w-2xl resize-y rounded-md border border-border bg-secondary/40 p-3 text-sm leading-relaxed outline-none focus:border-ring/60"
       />
     );
+  }
+
+  if (!isOwner) {
+    return bio ? (
+      <ClampedText text={bio} className="max-w-2xl text-sm leading-relaxed text-muted-foreground" />
+    ) : null;
   }
 
   if (!bio) {
