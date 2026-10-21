@@ -4,6 +4,10 @@
 #
 #   scripts/restore.sh backups/media-server-<timestamp>.tar.gz --yes
 #
+# Restores into the stack `make up` runs. Set DEV=1 to restore into the one
+# `make dev` runs instead, or COMPOSE_PROJECT=<name> for a stack started some
+# other way (`docker compose ls` lists them).
+#
 # This REPLACES the current database. Everything presently in it is lost, so
 # the --yes argument is required rather than a prompt you can hold enter on.
 #
@@ -25,7 +29,16 @@ ARCHIVE="${1:-}"
 CONFIRM="${2:-}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE="docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml"
+# Must name the same compose project as the Makefile. Without -p, compose
+# derives the project from the docker/ folder, so this script stopped, restored
+# into and copied images for a stack `make up` never started.
+if [[ "${DEV:-}" == "1" ]]; then
+  PROJECT="${COMPOSE_PROJECT:-media-server-dev}"
+  COMPOSE="docker compose -p $PROJECT -f docker/docker-compose.yml -f docker/docker-compose.dev.yml"
+else
+  PROJECT="${COMPOSE_PROJECT:-media-server}"
+  COMPOSE="docker compose -p $PROJECT -f docker/docker-compose.yml"
+fi
 
 if [[ -z "$ARCHIVE" || ! -f "$ARCHIVE" ]]; then
   echo "usage: scripts/restore.sh <backup.tar.gz> --yes" >&2
@@ -60,18 +73,24 @@ echo "==> stopping the app"
 $COMPOSE stop app >/dev/null
 
 echo "==> restoring the database"
-# The dump was taken with --clean --if-exists, so it drops and recreates each
-# object itself. ON_ERROR_STOP turns a partial restore into a loud failure
-# rather than a database that looks fine and isn't.
-$COMPOSE exec -T postgres psql -v ON_ERROR_STOP=1 -U media -d media < "$WORK_DIR/db.sql" >/dev/null
+# --clean only drops what the dump knows about, so a table added since the
+# backup was taken (with a foreign key into media_items) would block the
+# drops. The in-app restore clears the schema first for that reason; this
+# reuses its exact SQL, read out of restore.ts, so the two cannot drift.
+# --single-transaction with ON_ERROR_STOP rolls the clear back too if the dump
+# fails, rather than leaving a database that looks fine and isn't.
+PRELUDE="$(sed -n '/^const RESTORE_PRELUDE = `$/,/^`;$/p' apps/server/src/backup/restore.ts | sed '1d;$d')"
+[[ -n "$PRELUDE" ]] || { echo "could not read RESTORE_PRELUDE from apps/server/src/backup/restore.ts" >&2; exit 1; }
+{ printf '%s\n' "$PRELUDE"; cat "$WORK_DIR/db.sql"; } \
+  | $COMPOSE exec -T postgres psql -X -v ON_ERROR_STOP=1 --single-transaction -U media -d media >/dev/null
 
 echo "==> restoring uploaded images"
 # The app container is stopped, so a throwaway container mounts the named
-# volume directly. Volume name is <project>_app-data; the project is the
-# compose directory name.
-VOLUME="$(basename "$REPO_ROOT")_app-data"
+# volume directly. Volume name is <project>_app-data.
+VOLUME="${PROJECT}_app-data"
 if ! docker volume inspect "$VOLUME" >/dev/null 2>&1; then
-  VOLUME="docker_app-data" # compose project defaults to the docker/ dir
+  echo "no volume $VOLUME — has this stack been started with make?" >&2
+  exit 1
 fi
 docker run --rm \
   -v "$VOLUME":/app-data \

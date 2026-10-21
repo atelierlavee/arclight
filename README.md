@@ -37,9 +37,6 @@ the files themselves are opened read-only.
 - **Maps who works with whom** — Performers → Network draws a graph linking
   performers by the videos they share or the studios they have in common,
   with focus, hide and shortest-path tools
-- **Explores the library as a map** — performers, studios, tags, albums and
-  series connect wherever they share visible media; search to pull any entity
-  and its strongest links into view
 - **Previews the seek bar**: hover or drag along it to see the frame you're
   about to jump to, bookmark moments inside a video, and attach private notes
   to those timestamps
