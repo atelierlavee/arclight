@@ -18,8 +18,9 @@ const VIDEO_MIME_TYPES: Record<string, string> = {
   // any current browser can decode. Scanning, metadata, poster frames and
   // preview clips all work regardless (ffmpeg decodes it fine, and previews
   // are re-encoded to H.264), so these files are worth cataloguing; the
-  // codec allow-list in media/compatibility.ts is what warns that direct
-  // play won't work until there's a transcoding fallback.
+  // codec allow-list in media/compatibility.ts is what warns that it won't
+  // play. There will never be a transcoding fallback: the app is MP4-only
+  // for playback by design (README → Formats).
   wmv: "video/x-ms-wmv",
 };
 

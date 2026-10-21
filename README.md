@@ -621,19 +621,32 @@ external drive or a synced folder.
 
 ## Formats
 
-Scanned: `mp4` `mkv` `avi` `mov` `webm` `m4v` `f4v` `wmv`, and `jpg` `jpeg`
-`png` `gif` `webp` `heic`.
+**Arc Light is an MP4 player.** Videos are played exactly as they sit on disk,
+and the app will never transcode, remux or convert anything — not on the fly,
+not in the background, not as an option. If you want a file to play, keep it
+as MP4.
 
-Everything scannable gets a poster and a hover preview, because ffmpeg reads
-far more than a browser plays. **Playback is direct-play only** — there is no
-transcoding. Where a file's container or codec won't play in a browser (an
-H.264 MKV, say, or VC-1 in WMV), the detail view says so and names which of the
-two is the problem, since a container needs only a fast remux while a codec
-needs a full re-encode.
+| | |
+|---|---|
+| **Plays** | `.mp4` and `.m4v` (H.264, or another codec your browser decodes) |
+| **Never plays** | `.mkv` `.avi` `.wmv` and anything else a browser can't open by itself |
+
+This is a decision, not a missing feature. Transcoding is what turns a media
+server into something that needs a GPU, a cache of temporary files and a
+settings page of quality presets; leaving it out keeps playback instant, seeking
+exact and the server idle while you watch. Requests to add it will be declined.
+
+Files in other formats are still scanned — `mkv` `avi` `mov` `webm` `f4v` `wmv`
+alongside `mp4` and `m4v` — so they show up with a poster and hover preview
+(ffmpeg reads far more than a browser plays). The detail view says when one
+won't play and why. Convert it to MP4 outside the app if you want to watch it.
+
+Photos: `jpg` `jpeg` `png` `gif` `webp` `heic`.
 
 ## Status
 
 Built for one person's library and used daily against it. There is no
-multi-user support, no transcoding, and no native mobile app — the web app
+multi-user support, no transcoding (by design — see [Formats](#formats)), and
+no native mobile app — the web app
 is laid out for phones instead. The API is stable enough
 to build against but not versioned.
