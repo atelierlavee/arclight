@@ -1,7 +1,8 @@
 import { basename } from "node:path";
 import { stat } from "node:fs/promises";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import pLimit from "p-limit";
+import { anyInt, anyText } from "../db/anyOf.js";
 import { db } from "../db/client.js";
 import {
   albums,
@@ -90,7 +91,7 @@ export async function startScan(): Promise<number> {
  * the set of columns cannot drift apart: adding an outcome without a column
  * fails to compile here rather than silently counting nothing.
  */
-function outcomeIncrement(outcome: FileOutcome) {
+function outcomeIncrement(outcome: FileOutcome | "failed") {
   switch (outcome) {
     case "new":
       return { itemsNew: sql`${scanJobs.itemsNew} + 1` };
@@ -100,10 +101,17 @@ function outcomeIncrement(outcome: FileOutcome) {
       return { itemsMoved: sql`${scanJobs.itemsMoved} + 1` };
     case "skipped":
       return { itemsSkipped: sql`${scanJobs.itemsSkipped} + 1` };
+    case "failed":
+      return { itemsFailed: sql`${scanJobs.itemsFailed} + 1` };
   }
 }
 
 async function runScan(jobId: number): Promise<void> {
+  // Declared outside the try so the failure path can wait for them too. If
+  // the walk itself threw part-way, files already handed to p-limit keep
+  // running; clearing runningJobId under them would let a second scan (or a
+  // restore) start while they were still writing.
+  const tasks: Promise<void>[] = [];
   try {
     const typeRows = await db.select().from(mediaItemTypes);
     const itemTypeIdByKind = new Map(typeRows.map((t) => [t.name, t.id]));
@@ -122,7 +130,6 @@ async function runScan(jobId: number): Promise<void> {
     // folder-derived performer exists.
     const rootLevelPaths: string[] = [];
     const limit = pLimit(CONCURRENCY);
-    const tasks: Promise<void>[] = [];
 
     for (const root of roots) {
       for await (const filePath of walk(root.path)) {
@@ -135,26 +142,9 @@ async function runScan(jobId: number): Promise<void> {
         }
 
         tasks.push(
-          limit(async () => {
-            const outcome = await processFile(
-              filePath,
-              kind,
-              root,
-              itemTypeIdByKind,
-            );
-            // Atomic DB-side increments: concurrent tasks finishing out of
-            // order must not clobber each other's counts (a JS-side counter
-            // read-then-write across an `await` would race here). The
-            // outcome tally has exactly the same hazard as filesScanned, so
-            // it is incremented the same way and in the same statement.
-            await db
-              .update(scanJobs)
-              .set({
-                filesScanned: sql`${scanJobs.filesScanned} + 1`,
-                ...outcomeIncrement(outcome),
-              })
-              .where(eq(scanJobs.id, jobId));
-          }),
+          limit(() =>
+            scanOneFile(jobId, filePath, kind, root, itemTypeIdByKind),
+          ),
         );
       }
     }
@@ -202,19 +192,77 @@ async function runScan(jobId: number): Promise<void> {
       moved: finished?.itemsMoved ?? 0,
       missing: finished?.itemsMissing ?? 0,
       skipped: finished?.itemsSkipped ?? 0,
+      failed: finished?.itemsFailed ?? 0,
     });
   } catch (err) {
+    // Never rejects (scanOneFile catches its own errors), so this only waits.
+    await Promise.allSettled(tasks);
+    // Guarded: runScan is fired with `void`, and app.ts exits the process on
+    // an unhandled rejection. A database outage that failed the scan would
+    // otherwise fail this bookkeeping too and take the server down with it.
+    try {
+      await db
+        .update(scanJobs)
+        .set({
+          status: "failed",
+          finishedAt: new Date(),
+          error: err instanceof Error ? err.message : String(err),
+        })
+        .where(eq(scanJobs.id, jobId));
+      await logActivity("scan", "Library scan failed", { jobId });
+    } catch (bookkeepingErr) {
+      console.error("scan: could not record failure of job", jobId, bookkeepingErr);
+    }
+  } finally {
+    runningJobId = null;
+  }
+}
+
+/**
+ * Processes one file and records its outcome, never throwing.
+ *
+ * Every task is created during the walk but only awaited after it, so a task
+ * that rejected in the meantime had no handler attached — an unhandled
+ * rejection, which app.ts turns into a process exit. A file deleted between
+ * the walk and the stat, or one ffprobe or the database chokes on, took the
+ * whole server down. Isolated here instead: logged, counted as failed, and
+ * the scan carries on with everything else.
+ */
+async function scanOneFile(
+  jobId: number,
+  filePath: string,
+  kind: MediaKind,
+  root: { id: number; libraryId: number; path: string },
+  itemTypeIdByKind: Map<string, number>,
+): Promise<void> {
+  let outcome: FileOutcome | "failed";
+  try {
+    outcome = await processFile(filePath, kind, root, itemTypeIdByKind);
+  } catch (err) {
+    console.warn(
+      `scan: skipped ${filePath}:`,
+      err instanceof Error ? err.message : err,
+    );
+    outcome = "failed";
+  }
+
+  try {
+    // Atomic DB-side increments: concurrent tasks finishing out of order must
+    // not clobber each other's counts (a JS-side counter read-then-write
+    // across an `await` would race here). The outcome tally has exactly the
+    // same hazard as filesScanned, so it is incremented the same way and in
+    // the same statement.
     await db
       .update(scanJobs)
       .set({
-        status: "failed",
-        finishedAt: new Date(),
-        error: err instanceof Error ? err.message : String(err),
+        filesScanned: sql`${scanJobs.filesScanned} + 1`,
+        ...outcomeIncrement(outcome),
       })
       .where(eq(scanJobs.id, jobId));
-    await logActivity("scan", "Library scan failed", { jobId });
-  } finally {
-    runningJobId = null;
+  } catch (err) {
+    // A progress counter is not worth crashing for; the end-of-scan steps
+    // will surface a real database outage on their own.
+    console.warn("scan: could not update progress:", err instanceof Error ? err.message : err);
   }
 }
 
@@ -254,24 +302,39 @@ async function processFile(
     await syncReleaseDateWithFilename(existingFile.mediaItemId, filePath);
     await syncSeriesFromFilename(existingFile.mediaItemId, libraryId, filePath);
 
-    if (kind === "video") {
-      await ensureArtworkForItem(
-        existingFile.mediaItemId,
-        filePath,
-        existingFile.contentHash,
-      );
-    }
-
     const unchanged =
       Number(existingFile.sizeBytes) === stats.size &&
       existingFile.mtime.getTime() === stats.mtime.getTime();
-    if (unchanged) return "skipped";
 
+    if (unchanged) {
+      if (kind === "video") {
+        await ensureArtworkForItem(
+          existingFile.mediaItemId,
+          filePath,
+          existingFile.contentHash,
+        );
+      }
+      return "skipped";
+    }
+
+    // The file was rewritten in place (re-encoded, trimmed, replaced). The
+    // new hash is saved *before* any artwork is built: artwork is keyed by
+    // hash, so building it first used the stale one — a poster and preview of
+    // the old content, filed under a name nothing would look up again once
+    // the hash below landed, while the real one was never generated.
     const contentHash = await partialContentHash(filePath, stats.size);
     await db
       .update(mediaFiles)
       .set({ sizeBytes: stats.size, mtime: stats.mtime, contentHash })
       .where(eq(mediaFiles.id, existingFile.id));
+
+    if (kind === "video") {
+      // Duration and codec describe the old encode too. Re-probed here rather
+      // than left to ensureArtworkForItem, which only fills a *missing*
+      // duration — and the preview offsets are computed from this one.
+      await reprobeVideo(existingFile.mediaItemId, filePath);
+      await ensureArtworkForItem(existingFile.mediaItemId, filePath, contentHash);
+    }
     return "updated";
   }
 
@@ -279,29 +342,16 @@ async function processFile(
 
   // Same content already tracked at a different path: treat as a move/rename
   // rather than a new item, so tags/collections attached later won't be lost.
-  const [movedFile] = await db
-    .select()
-    .from(mediaFiles)
-    .where(eq(mediaFiles.contentHash, contentHash));
-
-  if (movedFile) {
-    await db
-      .update(mediaFiles)
-      .set({
-        path: filePath,
-        sizeBytes: stats.size,
-        mtime: stats.mtime,
-        rootId: root.id,
-      })
-      .where(eq(mediaFiles.id, movedFile.id));
-    await clearMissingSince(movedFile.mediaItemId);
-    await syncTitleWithFilename(movedFile.mediaItemId, filePath);
+  const moved = await claimMovedFile(filePath, contentHash, stats, root.id);
+  if (moved) {
+    await clearMissingSince(moved.mediaItemId);
+    await syncTitleWithFilename(moved.mediaItemId, filePath);
     // A file relocated into a different performer's folder follows it, in
     // exactly the way its title follows a rename.
-    await syncPerformersWithPath(movedFile.mediaItemId, filePath, root.path);
-    await syncStudioWithFilename(movedFile.mediaItemId, filePath, root.path);
-    await syncReleaseDateWithFilename(movedFile.mediaItemId, filePath);
-    await syncSeriesFromFilename(movedFile.mediaItemId, libraryId, filePath);
+    await syncPerformersWithPath(moved.mediaItemId, filePath, root.path);
+    await syncStudioWithFilename(moved.mediaItemId, filePath, root.path);
+    await syncReleaseDateWithFilename(moved.mediaItemId, filePath);
+    await syncSeriesFromFilename(moved.mediaItemId, libraryId, filePath);
     return "moved";
   }
 
@@ -335,30 +385,37 @@ async function processFile(
     extraMetadata = { cameraModel: exif.cameraModel, gps: exif.gps };
   }
 
-  const [item] = await db
-    .insert(mediaItems)
-    .values({
-      libraryId,
-      itemTypeId,
-      title,
-      durationSeconds,
-      takenAt,
-      extraMetadata,
-      seriesId,
-      seasonNumber: parsedSeries?.seasonNumber ?? null,
-      episodeNumber: parsedSeries?.episodeNumber ?? null,
-      episodeTitle: parsedSeries?.episodeTitle ?? null,
-    })
-    .returning();
+  // One transaction for the pair. An item inserted without its file — the
+  // file insert failing on a unique path, or the process dying between the
+  // two — is invisible to every path-based lookup, so no later scan could
+  // ever find and repair it; it just sat there as an empty tile.
+  const item = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(mediaItems)
+      .values({
+        libraryId,
+        itemTypeId,
+        title,
+        durationSeconds,
+        takenAt,
+        extraMetadata,
+        seriesId,
+        seasonNumber: parsedSeries?.seasonNumber ?? null,
+        episodeNumber: parsedSeries?.episodeNumber ?? null,
+        episodeTitle: parsedSeries?.episodeTitle ?? null,
+      })
+      .returning();
 
-  await db.insert(mediaFiles).values({
-    mediaItemId: item.id,
-    path: filePath,
-    rootId: root.id,
-    sizeBytes: stats.size,
-    mtime: stats.mtime,
-    contentHash,
-    mimeType: mimeTypeFor(filePath),
+    await tx.insert(mediaFiles).values({
+      mediaItemId: created.id,
+      path: filePath,
+      rootId: root.id,
+      sizeBytes: stats.size,
+      mtime: stats.mtime,
+      contentHash,
+      mimeType: mimeTypeFor(filePath),
+    });
+    return created;
   });
 
   await syncPerformersWithPath(item.id, filePath, root.path);
@@ -373,6 +430,102 @@ async function processFile(
   await logActivity("add", `Added "${title}"`, { kind }, item.id);
 
   return "new";
+}
+
+/**
+ * Finds a known file this one is a move of, and re-points it here.
+ *
+ * Equal content is necessary but not sufficient. Two copies of the same video
+ * hash identically, and treating the second as a "move" of the first while
+ * the first is still on disk made them flip-flop: each scan dragged the one
+ * row back and forth between the two paths, rewriting its title and
+ * performers every time. A move therefore also requires that the old path is
+ * gone; while it still exists, this is a copy and becomes an item of its own.
+ *
+ * Empty files are never matched. They all hash the same, so every zero-byte
+ * placeholder would otherwise be a "move" of every other.
+ *
+ * The re-point is conditional on the row still having the old path, so two
+ * copies of a moved file processed concurrently can't both claim it: the
+ * loser finds nothing updated and is added as a new item instead.
+ */
+async function claimMovedFile(
+  filePath: string,
+  contentHash: string,
+  stats: { size: number; mtime: Date },
+  rootId: number,
+): Promise<{ mediaItemId: number } | null> {
+  if (stats.size === 0) return null;
+
+  const candidates = await db
+    .select({
+      id: mediaFiles.id,
+      path: mediaFiles.path,
+      mediaItemId: mediaFiles.mediaItemId,
+    })
+    .from(mediaFiles)
+    .where(eq(mediaFiles.contentHash, contentHash));
+
+  for (const candidate of candidates) {
+    if (candidate.path === filePath) continue;
+    if (await pathExists(candidate.path)) continue; // a copy, not a move
+
+    const claimed = await db
+      .update(mediaFiles)
+      .set({
+        path: filePath,
+        sizeBytes: stats.size,
+        mtime: stats.mtime,
+        rootId,
+      })
+      .where(and(eq(mediaFiles.id, candidate.id), eq(mediaFiles.path, candidate.path)))
+      .returning({ mediaItemId: mediaFiles.mediaItemId });
+    if (claimed.length > 0) return claimed[0];
+  }
+  return null;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await stat(filePath);
+    return true;
+  } catch (err) {
+    // Only "it isn't there" means moved. A permission error or an unplugged
+    // drive's EIO says nothing about where the file went, and guessing
+    // "moved" there would steal the item from a file that still exists.
+    const code = (err as NodeJS.ErrnoException).code;
+    return !(code === "ENOENT" || code === "ENOTDIR");
+  }
+}
+
+/** Refreshes what ffprobe says about a video whose file changed in place. */
+async function reprobeVideo(mediaItemId: number, filePath: string): Promise<void> {
+  const probe = await probeVideo(filePath);
+  // A failed probe (timeout, ffprobe missing) returns all nulls; keep what we
+  // had rather than wiping a known duration on a transient failure.
+  if (probe.durationSeconds === null && probe.codec === null) return;
+
+  const [item] = await db
+    .select({ extraMetadata: mediaItems.extraMetadata })
+    .from(mediaItems)
+    .where(eq(mediaItems.id, mediaItemId));
+  if (!item) return;
+
+  await db
+    .update(mediaItems)
+    .set({
+      durationSeconds: probe.durationSeconds,
+      extraMetadata: {
+        ...((item.extraMetadata as Record<string, unknown> | null) ?? {}),
+        width: probe.width,
+        height: probe.height,
+        codec: probe.codec,
+        containerFormat: probe.containerFormat,
+        embeddedTitle: probe.embeddedTitle,
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(mediaItems.id, mediaItemId));
 }
 
 async function ensureSeriesId(libraryId: number, name: string): Promise<number> {
@@ -398,7 +551,33 @@ async function syncSeriesFromFilename(
 ): Promise<void> {
   const parsed = parseSeriesEpisode(filePath);
   if (!parsed) return;
+
+  const [item] = await db
+    .select({
+      seriesId: mediaItems.seriesId,
+      seasonNumber: mediaItems.seasonNumber,
+      episodeNumber: mediaItems.episodeNumber,
+      episodeTitle: mediaItems.episodeTitle,
+      seriesSource: mediaItems.seriesSource,
+    })
+    .from(mediaItems)
+    .where(eq(mediaItems.id, mediaItemId));
+  // Same contract as titles and studios: once you've corrected the series or
+  // episode numbers in the app, the filename stops being authoritative.
+  if (!item || item.seriesSource !== "scanner") return;
+
   const seriesId = await ensureSeriesId(libraryId, parsed.name);
+  // Already agrees; don't churn updatedAt on every scan. It used to write
+  // unconditionally, so every episode looked freshly edited after each scan.
+  if (
+    item.seriesId === seriesId &&
+    item.seasonNumber === parsed.seasonNumber &&
+    item.episodeNumber === parsed.episodeNumber &&
+    item.episodeTitle === parsed.episodeTitle
+  ) {
+    return;
+  }
+
   await db
     .update(mediaItems)
     .set({
@@ -762,7 +941,10 @@ async function assignPerformersFromFilenames(
     })
     .from(mediaFiles)
     .innerJoin(mediaItems, eq(mediaItems.id, mediaFiles.mediaItemId))
-    .where(inArray(mediaFiles.path, filePaths));
+    // One array parameter rather than inArray's one-per-path: a library with
+    // tens of thousands of root-level files exceeds Postgres's 65,535
+    // bind-parameter limit, and the whole end-of-scan pass failed with it.
+    .where(anyText(mediaFiles.path, filePaths));
 
   for (const row of rows) {
     if (row.performersSource !== "scanner") continue;
@@ -863,10 +1045,13 @@ async function syncTitleWithFilename(
 }
 
 async function clearMissingSince(mediaItemId: number): Promise<void> {
+  // Conditional, because every known file passes through here on every scan:
+  // an unconditional UPDATE wrote (and WAL-logged, and bloated) a row per file
+  // per scan to change nothing.
   await db
     .update(mediaItems)
     .set({ missingSince: null })
-    .where(eq(mediaItems.id, mediaItemId));
+    .where(and(eq(mediaItems.id, mediaItemId), isNotNull(mediaItems.missingSince)));
 }
 
 /**
@@ -881,7 +1066,9 @@ async function markMissingFiles(
   seenPaths: Set<string>,
   rootPaths: string[],
 ): Promise<number> {
-  const allFiles = await db.select().from(mediaFiles);
+  const allFiles = await db
+    .select({ path: mediaFiles.path, mediaItemId: mediaFiles.mediaItemId })
+    .from(mediaFiles);
   const now = new Date();
   // Counted here rather than re-queried afterwards: this is the only place
   // that knows which items went missing *on this scan*, as opposed to which
@@ -894,22 +1081,29 @@ async function markMissingFiles(
       (root) => filePath === root || filePath.startsWith(root + "/"),
     );
 
+  const unseenItemIds = new Set<number>();
   for (const file of allFiles) {
     if (seenPaths.has(file.path)) continue;
     if (!isWatched(file.path)) continue;
-
-    const [item] = await db
-      .select()
-      .from(mediaItems)
-      .where(eq(mediaItems.id, file.mediaItemId));
-    if (item && !item.missingSince) {
-      await db
-        .update(mediaItems)
-        .set({ missingSince: now })
-        .where(eq(mediaItems.id, item.id));
-      newlyMissing += 1;
-    }
+    unseenItemIds.add(file.mediaItemId);
   }
+  if (unseenItemIds.size === 0) return 0;
+
+  // One statement rather than a select and an update per file. The
+  // `missing_since is null` condition is what makes the count "newly missing
+  // on this scan": items already flagged by an earlier scan are left alone
+  // and so aren't returned.
+  const flagged = await db
+    .update(mediaItems)
+    .set({ missingSince: now })
+    .where(
+      and(
+        anyInt(mediaItems.id, [...unseenItemIds]),
+        isNull(mediaItems.missingSince),
+      ),
+    )
+    .returning({ id: mediaItems.id });
+  newlyMissing = flagged.length;
 
   return newlyMissing;
 }

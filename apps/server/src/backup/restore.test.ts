@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   RestoreError,
   assertRestorable,
+  findForbiddenMetaCommand,
   validateArchiveMembers,
+  validateArchiveTypes,
 } from "./restore.js";
+import { pgEnvFromUrl } from "./pgEnv.js";
 import { backupsToPrune } from "./create.js";
 import { latestMigration } from "../db/journal.js";
 
@@ -103,5 +106,78 @@ describe("pruning", () => {
     expect(backupsToPrune(eleven, "media-server-11.tar.gz")).toEqual([
       "media-server-1.tar.gz",
     ]);
+  });
+});
+
+describe("archive member types", () => {
+  it("accepts plain files and directories", () => {
+    expect(() =>
+      validateArchiveTypes([
+        "-rw-r--r-- app/app     2 2026-10-21 10:13 db.sql",
+        "drwxr-xr-x app/app     0 2026-10-21 10:13 uploads/",
+        "",
+      ]),
+    ).not.toThrow();
+  });
+
+  it("refuses symlinks and hard links", () => {
+    // A symlink member lets a later member be written through it to anywhere
+    // the app can write; a hard link aliases a file the app can read.
+    expect(() =>
+      validateArchiveTypes(["lrwxrwxrwx app/app 0 2026-10-21 10:13 uploads/a -> /etc"]),
+    ).toThrow(RestoreError);
+    expect(() =>
+      validateArchiveTypes(["hrw-r--r-- app/app 0 2026-10-21 10:13 uploads/a link to db.sql"]),
+    ).toThrow(RestoreError);
+  });
+});
+
+describe("dump meta-command check", () => {
+  it("allows what pg_dump writes, including COPY data starting with a backslash", async () => {
+    const dump = [
+      "\\restrict abc123",
+      "SET statement_timeout = 0;",
+      "\\connect media",
+      "COPY public.app_settings (key, value) FROM stdin;",
+      "\\N\t{}",
+      "\\\\leading-backslash\t{}",
+      "\\.",
+      "-- PostgreSQL database dump complete",
+      "\\unrestrict abc123",
+    ];
+    expect(await findForbiddenMetaCommand(dump)).toBeNull();
+  });
+
+  it("refuses a shell escape or any other meta-command", async () => {
+    expect(await findForbiddenMetaCommand(["SELECT 1;", "\\! rm -rf /"])).toBe("\\! rm -rf /");
+    expect(await findForbiddenMetaCommand(["\\o /tmp/x"])).toBe("\\o /tmp/x");
+    // Leaving COPY mode at `\.` means checking resumes after the data.
+    expect(
+      await findForbiddenMetaCommand([
+        "COPY t (a) FROM stdin;",
+        "1",
+        "\\.",
+        "\\! id",
+      ]),
+    ).toBe("\\! id");
+  });
+});
+
+describe("pg environment", () => {
+  it("moves every part of the URL into PG* variables, decoded", () => {
+    expect(
+      pgEnvFromUrl("postgres://us%40er:p%40ss%2Fw@db.example:6543/my_db?sslmode=require"),
+    ).toEqual({
+      PGHOST: "db.example",
+      PGPORT: "6543",
+      PGUSER: "us@er",
+      PGPASSWORD: "p@ss/w",
+      PGDATABASE: "my_db",
+      PGSSLMODE: "require",
+    });
+  });
+
+  it("refuses something that isn't a postgres URL", () => {
+    expect(() => pgEnvFromUrl("mysql://x@y/z")).toThrow();
   });
 });

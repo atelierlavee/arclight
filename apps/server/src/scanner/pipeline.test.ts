@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../db/client.js";
-import { albums, libraries, libraryRoots, mediaFiles, mediaItems, performers, studios } from "../db/schema.js";
+import { albums, libraries, libraryRoots, mediaFiles, mediaItems, performers, scanJobs, series, studios } from "../db/schema.js";
 import { resetDatabase, testApp } from "../test/harness.js";
 import { seed } from "../db/seed.js";
 import { startScan, isScanRunning } from "./pipeline.js";
@@ -335,5 +335,117 @@ describe("scanning", () => {
     await startScan();
     await expect(startScan()).rejects.toThrow(/already running/i);
     await settle();
+  });
+});
+
+describe("reliability", () => {
+  const latestJob = async () =>
+    (await db.select().from(scanJobs).orderBy(desc(scanJobs.id)).limit(1))[0];
+
+  it("isolates a file that fails mid-scan instead of aborting or crashing", async () => {
+    // An unreadable file stats fine during the walk and then fails when it is
+    // hashed — the same shape as one deleted between the walk and the stat.
+    // That rejection used to go unhandled until after the walk, and app.ts
+    // exits the process on an unhandled rejection.
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown) => rejections.push(reason);
+    process.on("unhandledRejection", onRejection);
+    try {
+      const bad = await put("Alice/unreadable.mp4", "bad-file-bytes");
+      await chmod(bad, 0o000);
+      await put("Alice/fine.mp4", "fine-file-bytes");
+      await scan();
+
+      expect(await titles()).toEqual(["fine"]);
+      const job = await latestJob();
+      expect(job.status).toBe("completed");
+      expect(job.itemsFailed).toBe(1);
+      expect(job.itemsNew).toBe(1);
+      expect(job.filesScanned).toBe(2);
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onRejection);
+    }
+  });
+
+  it("keeps copies of the same file as separate, stable items", async () => {
+    // Equal content used to be read as a move even with the original still
+    // on disk, so one row flip-flopped between the two paths every scan.
+    await put("Alice/original.mp4", "identical-bytes");
+    await scan();
+    await put("Bella/copy.mp4", "identical-bytes");
+    await scan();
+    await scan();
+
+    const files = await db.select().from(mediaFiles);
+    expect(files.map((f) => path.relative(root, f.path)).sort()).toEqual([
+      "Alice/original.mp4",
+      "Bella/copy.mp4",
+    ]);
+    expect(new Set(files.map((f) => f.mediaItemId)).size).toBe(2);
+    expect(await titles()).toEqual(["copy", "original"]);
+  });
+
+  it("never treats empty files as moves of one another", async () => {
+    const first = await put("Alice/empty-one.mp4", "");
+    await scan();
+    await rm(first);
+    await put("Alice/empty-two.mp4", "");
+    await scan();
+
+    // The first is missing, not renamed into the second.
+    expect(await titles()).toEqual(["empty one", "empty two"]);
+  });
+
+  it("re-hashes a file rewritten in place", async () => {
+    const file = await put("Alice/movie.mp4", "first-encode");
+    await scan();
+    const [before] = await db.select().from(mediaFiles);
+
+    await writeFile(file, "second-encode-which-is-longer");
+    await scan();
+    const [after] = await db.select().from(mediaFiles);
+
+    expect(after.id).toBe(before.id);
+    expect(after.contentHash).not.toBe(before.contentHash);
+    expect(Number(after.sizeBytes)).toBe("second-encode-which-is-longer".length);
+    expect((await latestJob()).itemsUpdated).toBe(1);
+  });
+
+  it("does not rewrite episodes on every scan, nor undo a user's series edit", async () => {
+    await put("Show Name/Season 1/S01E02 - The Return.mp4", "episode-bytes");
+    await scan();
+    const [item] = await db.select().from(mediaItems);
+    expect(item.seasonNumber).toBe(1);
+    expect(item.episodeNumber).toBe(2);
+
+    await scan();
+    const [unchanged] = await db.select().from(mediaItems);
+    expect(unchanged.updatedAt).toEqual(item.updatedAt);
+
+    await db
+      .update(mediaItems)
+      .set({ episodeNumber: 7, seriesSource: "user" })
+      .where(eq(mediaItems.id, item.id));
+    await scan();
+    const [edited] = await db.select().from(mediaItems);
+    expect(edited.episodeNumber).toBe(7);
+    expect(await db.select().from(series)).toHaveLength(1);
+  });
+
+  it("flags a missing file once, and clears it when it comes back", async () => {
+    const file = await put("Alice/movie.mp4", "comes-and-goes");
+    await scan();
+    await rename(file, `${file}.away`);
+    await scan();
+    expect((await latestJob()).itemsMissing).toBe(1);
+    await scan();
+    // Already flagged by the previous scan, so not "newly" missing again.
+    expect((await latestJob()).itemsMissing).toBe(0);
+
+    await rename(`${file}.away`, file);
+    await scan();
+    const [item] = await db.select().from(mediaItems);
+    expect(item.missingSince).toBeNull();
   });
 });

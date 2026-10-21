@@ -41,9 +41,12 @@ export function releaseRestore(): void {
  * process dying mid-restore, which an in-memory flag cannot.
  *
  * The database half is atomic (psql runs the dump in a single transaction, so
- * a crash rolls it back whole), so this only ever flags an interrupted
- * *uploads* swap. That is recoverable from the safety backup it names, which
- * is why boot logs it rather than refusing to start.
+ * a crash rolls it back whole). The marker therefore means one of the steps
+ * *after* the database was replaced did not finish — the uploads swap, the
+ * migrations, the seed — whether because the process died or because the
+ * step failed (restoreBackup leaves the marker in place in that case). That
+ * is recoverable from the safety backup it names, which is why boot logs it
+ * rather than refusing to start.
  */
 export const RESTORE_MARKER_PATH = path.join(
   APP_DATA_ROOT,

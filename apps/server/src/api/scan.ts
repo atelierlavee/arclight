@@ -11,7 +11,18 @@ export async function scanRoutes(app: FastifyInstance): Promise<void> {
       return { error: "A scan is already running" };
     }
 
-    const id = await startScan();
+    // startScan re-checks synchronously and throws if another request won
+    // the race since the check above; that is still a 409, not a 500.
+    let id: number;
+    try {
+      id = await startScan();
+    } catch (err) {
+      if (isScanRunning()) {
+        reply.code(409);
+        return { error: "A scan is already running" };
+      }
+      throw err;
+    }
     reply.code(202);
     return { id };
   });

@@ -52,7 +52,10 @@ function compileCondition(condition: SmartCondition): SQL {
       return gte(mediaItems.createdAt, cutoff);
     }
     case "title": {
-      return ilike(mediaItems.title, `%${condition.value}%`);
+      // Escaped, because `%` and `_` are LIKE wildcards and `\` is its escape
+      // character: a rule for titles containing "100%" matched every title
+      // containing "100", and "a_b" matched "axb".
+      return ilike(mediaItems.title, `%${escapeLike(String(condition.value))}%`);
     }
     case "rating": {
       // Unrated items fail this (NULL >= n is not true), which is what a
@@ -156,4 +159,9 @@ export function smartRuleError(rule: unknown): string | null {
     if (!valid) return `${where} is not a valid rule`;
   }
   return null;
+}
+
+/** Makes a string match itself literally inside a LIKE/ILIKE pattern. */
+export function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }

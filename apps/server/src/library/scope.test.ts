@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "../db/client.js";
-import { mediaItems, performers, studios } from "../db/schema.js";
+import { libraryRoots, mediaFiles, mediaItems, performers, studios } from "../db/schema.js";
 import { resetDatabase, testApp } from "../test/harness.js";
 import {
   attachFile,
@@ -50,6 +50,30 @@ describe("recomputeScope", () => {
 
     const [item] = await db.select().from(mediaItems).where(eq(mediaItems.id, id));
     expect(item.inScope).toBe(true);
+  });
+
+  it("lets the deepest of two nested folders own a file", async () => {
+    const [nested] = await db
+      .insert(libraryRoots)
+      .values({ libraryId, path: "/media/sub" })
+      .returning();
+    const id = await makeItem(libraryId, { title: "Nested" });
+    await attachFile(id, null as unknown as number, "/media/sub/a.mp4");
+    await recomputeScope();
+
+    const [file] = await db.select().from(mediaFiles).where(eq(mediaFiles.mediaItemId, id));
+    expect(file.rootId).toBe(nested.id);
+  });
+
+  it("does not mistake a sibling folder sharing a prefix for a child", async () => {
+    // "/media" must not own "/media-other/a.mp4" — the reason matching is on
+    // the path plus a slash, never a bare prefix.
+    const id = await makeItem(libraryId, { title: "Sibling" });
+    await attachFile(id, rootId, "/media-other/a.mp4");
+    await recomputeScope();
+
+    const [item] = await db.select().from(mediaItems).where(eq(mediaItems.id, id));
+    expect(item.inScope).toBe(false);
   });
 
   it("does not delete anything, so removing a folder is reversible", async () => {
@@ -110,6 +134,24 @@ describe("purgeEmptyEntities", () => {
     await makePerformer("Typo Name");
     await purgeEmptyEntities();
     expect(await db.select().from(performers)).toEqual([]);
+  });
+
+  it("never purges a performer created by hand, favourited or archived", async () => {
+    // All three have no items by design or by circumstance, and each is a
+    // deliberate act about that performer that a scan must not undo.
+    const [byHand] = await db
+      .insert(performers)
+      .values({ name: "Typed In", origin: "user" })
+      .returning();
+    await db.insert(performers).values({ name: "Loved", isFavorite: true });
+    await db.insert(performers).values({ name: "Shelved", archivedAt: new Date() });
+    await makePerformer("Debris");
+
+    await purgeEmptyEntities();
+    expect((await db.select().from(performers)).map((p) => p.name).sort()).toEqual(
+      ["Loved", "Shelved", "Typed In"],
+    );
+    expect(byHand.origin).toBe("user");
   });
 
   it("keeps a studio whose items are only hidden", async () => {

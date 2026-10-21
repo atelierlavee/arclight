@@ -16,6 +16,7 @@ import { promisify } from "node:util";
 import { UPLOAD_DIRS } from "../media/cache.js";
 import { latestMigration } from "../db/journal.js";
 import { logActivity } from "../activity/log.js";
+import { pgChildEnv } from "./pgEnv.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -218,9 +219,14 @@ export async function createBackup(
   // Built under a .partial name so a crash never leaves a truncated archive
   // sitting there looking restorable.
   const partialPath = `${finalPath}.partial`;
-  const workDir = await mkdtemp(path.join(tmpdir(), "media-backup-"));
+  // Inside the try, not before it: mkdtemp failing (full disk, unwritable
+  // tmp) used to throw with `running` already set and nothing to clear it,
+  // so every later backup — and every restore, which takes one first — was
+  // refused as "already running" until the process restarted.
+  let workDir: string | null = null;
 
   try {
+    workDir = await mkdtemp(path.join(tmpdir(), "media-backup-"));
     await mkdir(BACKUP_DIR, { recursive: true });
 
     const databaseUrl = process.env.DATABASE_URL;
@@ -231,10 +237,11 @@ export async function createBackup(
     // replays migration 0000 against tables that already exist and dies.
     // --clean/--if-exists make restoring over a populated database idempotent;
     // --no-owner/--no-privileges avoid failures if the role differs.
+    //
+    // Connection settings go in the environment, never argv — see pgEnv.ts.
     await execFileAsync(
       "pg_dump",
       [
-        databaseUrl,
         "--clean",
         "--if-exists",
         "--no-owner",
@@ -242,7 +249,7 @@ export async function createBackup(
         "--file",
         path.join(workDir, "db.sql"),
       ],
-      { timeout: DUMP_TIMEOUT_MS },
+      { timeout: DUMP_TIMEOUT_MS, env: pgChildEnv(databaseUrl) },
     );
 
     // Uploads are copied *after* the dump, deliberately. An upload writes its
@@ -253,15 +260,21 @@ export async function createBackup(
     const uploadsDir = path.join(workDir, "uploads");
     await mkdir(uploadsDir, { recursive: true });
     for (const upload of UPLOAD_DIRS) {
-      await mkdir(path.join(uploadsDir, upload.name), { recursive: true });
-      await execFileAsync("sh", [
-        "-c",
-        // The trailing /. copies contents rather than the directory itself,
-        // and `|| true` keeps an empty or missing source from failing.
-        `cp -R ${JSON.stringify(upload.dir)}/. ${JSON.stringify(
-          path.join(uploadsDir, upload.name),
-        )}/ 2>/dev/null || true`,
-      ]);
+      const destination = path.join(uploadsDir, upload.name);
+      await mkdir(destination, { recursive: true });
+      // A directory that was never created just means nothing of that kind
+      // has been uploaded yet — the one case that is legitimately empty.
+      if (!(await isDirectory(upload.dir))) continue;
+      // execFile with an argument array, not `sh -c`: the old shell string
+      // quoted paths with JSON.stringify, which does not escape `$` or
+      // backticks. And no `|| true` with stderr thrown away — that turned a
+      // copy that failed half-way (full disk, unreadable file) into a backup
+      // reported as successful and missing your artwork, discovered only at
+      // restore time. A failed copy now fails the backup, loudly.
+      // The trailing /. copies the contents rather than the directory itself.
+      await execFileAsync("cp", ["-R", `${upload.dir}/.`, `${destination}/`], {
+        timeout: DUMP_TIMEOUT_MS,
+      });
     }
 
     // What this archive can be restored onto. Restoring a dump that is NEWER
@@ -327,11 +340,36 @@ export async function createBackup(
     });
     return backup;
   } catch (err) {
-    await rm(partialPath, { force: true });
-    await logActivity("backup", "Backup failed");
+    // Each cleanup step guarded on its own: one of them throwing here would
+    // replace the real error with a less useful one.
+    await rm(partialPath, { force: true }).catch(() => {});
+    await logActivity("backup", "Backup failed", {
+      error: scrubSecrets(err instanceof Error ? err.message : String(err)),
+    }).catch(() => {});
     throw err;
   } finally {
-    await rm(workDir, { recursive: true, force: true });
-    running = false;
+    try {
+      if (workDir) await rm(workDir, { recursive: true, force: true });
+    } finally {
+      running = false;
+    }
   }
+}
+
+async function isDirectory(dir: string): Promise<boolean> {
+  try {
+    return (await stat(dir)).isDirectory();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
+}
+
+/**
+ * Keeps the connection string out of anything shown or logged. It is no
+ * longer passed on the command line, so this is belt and braces.
+ */
+function scrubSecrets(message: string): string {
+  const databaseUrl = process.env.DATABASE_URL;
+  return databaseUrl ? message.split(databaseUrl).join("<database url>") : message;
 }

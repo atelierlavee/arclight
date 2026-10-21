@@ -1,4 +1,5 @@
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
+import { anyInt } from "../db/anyOf.js";
 import { db } from "../db/client.js";
 import {
   albums,
@@ -96,7 +97,7 @@ async function missingVideoIdsAmong(ids: number[]): Promise<number[]> {
     .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
     .where(
       and(
-        inArray(mediaItems.id, ids),
+        anyInt(mediaItems.id, ids),
         eq(mediaItemTypes.name, "video"),
         eq(mediaItems.inScope, true),
         isNotNull(mediaItems.missingSince),
@@ -139,48 +140,48 @@ export async function deleteItems(targets: number[]): Promise<number> {
       contentHash: mediaFiles.contentHash,
     })
     .from(mediaFiles)
-    .where(inArray(mediaFiles.mediaItemId, targets));
+    .where(anyInt(mediaFiles.mediaItemId, targets));
 
   const thumbnails = await db
     .select({ thumbnailFile: mediaItems.thumbnailFile })
     .from(mediaItems)
-    .where(inArray(mediaItems.id, targets));
+    .where(anyInt(mediaItems.id, targets));
 
   await db.transaction(async (tx) => {
     await tx
       .delete(playbackStates)
-      .where(inArray(playbackStates.mediaItemId, targets));
+      .where(anyInt(playbackStates.mediaItemId, targets));
     await tx
       .delete(playbackHeatmap)
-      .where(inArray(playbackHeatmap.mediaItemId, targets));
-    await tx.delete(bookmarks).where(inArray(bookmarks.mediaItemId, targets));
-    await tx.delete(watchLog).where(inArray(watchLog.mediaItemId, targets));
+      .where(anyInt(playbackHeatmap.mediaItemId, targets));
+    await tx.delete(bookmarks).where(anyInt(bookmarks.mediaItemId, targets));
+    await tx.delete(watchLog).where(anyInt(watchLog.mediaItemId, targets));
     await tx
       .delete(collectionItems)
-      .where(inArray(collectionItems.mediaItemId, targets));
+      .where(anyInt(collectionItems.mediaItemId, targets));
     await tx
       .delete(mediaItemTags)
-      .where(inArray(mediaItemTags.mediaItemId, targets));
+      .where(anyInt(mediaItemTags.mediaItemId, targets));
     await tx
       .delete(mediaItemPerformers)
-      .where(inArray(mediaItemPerformers.mediaItemId, targets));
-    await tx.delete(mediaFiles).where(inArray(mediaFiles.mediaItemId, targets));
+      .where(anyInt(mediaItemPerformers.mediaItemId, targets));
+    await tx.delete(mediaFiles).where(anyInt(mediaFiles.mediaItemId, targets));
 
     // Nulled rather than deleted: an album keeps existing, it just goes back
     // to picking its own cover, which is what a null here already means.
     await tx
       .update(albums)
       .set({ coverItemId: null })
-      .where(inArray(albums.coverItemId, targets));
+      .where(anyInt(albums.coverItemId, targets));
 
     // A video holds no children today, but the column allows it and an
     // orphaned parent_id would be a foreign key violation on delete.
     await tx
       .update(mediaItems)
       .set({ parentId: null })
-      .where(inArray(mediaItems.parentId, targets));
+      .where(anyInt(mediaItems.parentId, targets));
 
-    await tx.delete(mediaItems).where(inArray(mediaItems.id, targets));
+    await tx.delete(mediaItems).where(anyInt(mediaItems.id, targets));
   });
 
   // After the transaction, and never allowed to fail it. A cache file left on

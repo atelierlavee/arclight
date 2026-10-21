@@ -26,18 +26,22 @@ process.on("unhandledRejection", (reason) => {
 });
 
 // A restore writes this before touching anything and deletes it on success,
-// so finding one means the process died part-way through. The database half
-// is safe regardless — psql runs the dump in a single transaction, so a crash
-// rolls it back whole — which leaves only a half-swapped set of uploaded
-// images. That is recoverable from the safety backup named here, so this
-// reports rather than refusing to start.
+// so finding one means it did not finish: either the process died part-way,
+// or a step after the database was replaced (swapping uploads, migrating,
+// seeding) failed. The database itself is all-or-nothing — psql runs the
+// dump in one transaction — and the migrations and seed below re-run on this
+// boot regardless, so what can actually be left wrong is a half-swapped set
+// of uploaded images. That is recoverable from the safety backup named here,
+// so this reports rather than refusing to start.
 const interrupted = await readRestoreMarker();
 if (interrupted) {
   console.warn(
     `restore: a restore from ${interrupted.source} started at ` +
-      `${interrupted.startedAt} did not finish. Uploaded images may be ` +
-      `incomplete; the safety backup taken first was ` +
-      `${interrupted.safetyBackup ?? "(none)"}.`,
+      `${interrupted.startedAt} did not finish. The database may already be ` +
+      `the restored one; uploaded images may be incomplete. The safety ` +
+      `backup taken first was ${interrupted.safetyBackup ?? "(none)"}. ` +
+      `Delete restore-in-progress.json from the app data directory once ` +
+      `you have checked.`,
   );
 }
 

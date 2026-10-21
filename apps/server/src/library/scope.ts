@@ -1,6 +1,7 @@
-import { readdir, rm } from "node:fs/promises";
+import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { eq, inArray, sql } from "drizzle-orm";
+import { anyInt } from "../db/anyOf.js";
 import { db } from "../db/client.js";
 import {
   albums,
@@ -12,7 +13,7 @@ import {
   series,
   studios,
 } from "../db/schema.js";
-import { POSTERS_DIR, PREVIEWS_DIR } from "../media/cache.js";
+import { POSTERS_DIR, PREVIEWS_DIR, SPRITES_DIR, THUMBNAILS_DIR } from "../media/cache.js";
 
 /**
  * Whether a file path sits inside a configured folder.
@@ -33,58 +34,61 @@ export function isUnderRoot(filePath: string, rootPath: string): boolean {
  * adding a folder, removing one, and finishing a scan. Anything else risks the
  * two columns disagreeing.
  *
+ * Set-based SQL rather than the JS loop it replaces. That loop collected every
+ * id in the library and handed them to `inArray`, one bind parameter each —
+ * past 65,535 files Postgres refuses the statement outright, so the end of
+ * every scan on a large library failed. It also rewrote every row on every
+ * call; the IS DISTINCT FROM conditions below touch only rows whose answer
+ * actually changed.
+ *
+ * Prefix matching uses starts_with() rather than LIKE for the reason
+ * isUnderRoot exists: `_` and `%` are legal in folder names and are LIKE
+ * wildcards. When roots nest, the deepest one owns the file.
+ *
  * Folder items are deliberately untouched — they have no file at all, so any
  * "has a file under a watched folder" rule would be false for every one of
  * them and blank the folder picker.
  */
 export async function recomputeScope(): Promise<void> {
-  const roots = await db
-    .select({ id: libraryRoots.id, path: libraryRoots.path })
-    .from(libraryRoots);
-  const files = await db
-    .select({ id: mediaFiles.id, path: mediaFiles.path, mediaItemId: mediaFiles.mediaItemId })
-    .from(mediaFiles);
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      update ${mediaFiles} f
+      set root_id = owner.root_id
+      from (
+        select f2.id as file_id, (
+          select r.id from ${libraryRoots} r
+          where f2.path = r.path or starts_with(f2.path, r.path || '/')
+          order by length(r.path) desc
+          limit 1
+        ) as root_id
+        from ${mediaFiles} f2
+      ) owner
+      where f.id = owner.file_id
+        and f.root_id is distinct from owner.root_id
+    `);
 
-  const inScopeItemIds: number[] = [];
-  const outOfScopeItemIds: number[] = [];
-  // Grouped so each root is a single UPDATE rather than one per file.
-  const filesByRoot = new Map<number | null, number[]>();
+    // Visible while any of the item's files sits under a watched folder.
+    await tx.execute(sql`
+      update ${mediaItems} mi
+      set in_scope = s.in_scope
+      from (
+        select media_item_id, bool_or(root_id is not null) as in_scope
+        from ${mediaFiles}
+        group by media_item_id
+      ) s
+      where mi.id = s.media_item_id
+        and mi.in_scope is distinct from s.in_scope
+    `);
 
-  for (const file of files) {
-    const owningRoot = roots.find((root) => isUnderRoot(file.path, root.path));
-    const key = owningRoot?.id ?? null;
-    const bucket = filesByRoot.get(key) ?? [];
-    bucket.push(file.id);
-    filesByRoot.set(key, bucket);
-    (owningRoot ? inScopeItemIds : outOfScopeItemIds).push(file.mediaItemId);
-  }
-
-  for (const [rootId, fileIds] of filesByRoot) {
-    if (fileIds.length === 0) continue;
-    await db.update(mediaFiles).set({ rootId }).where(inArray(mediaFiles.id, fileIds));
-  }
-
-  if (inScopeItemIds.length > 0) {
-    await db
+    // Folders hold no bytes and are never produced by a scan, so they stay
+    // visible regardless of which folders are being watched.
+    await tx
       .update(mediaItems)
       .set({ inScope: true })
-      .where(inArray(mediaItems.id, inScopeItemIds));
-  }
-  if (outOfScopeItemIds.length > 0) {
-    await db
-      .update(mediaItems)
-      .set({ inScope: false })
-      .where(inArray(mediaItems.id, outOfScopeItemIds));
-  }
-
-  // Folders hold no bytes and are never produced by a scan, so they stay
-  // visible regardless of which folders are being watched.
-  await db
-    .update(mediaItems)
-    .set({ inScope: true })
-    .where(
-      sql`${mediaItems.itemTypeId} in (select id from media_item_types where name = 'folder')`
-    );
+      .where(
+        sql`${mediaItems.inScope} = false and ${mediaItems.itemTypeId} in (select id from media_item_types where name = 'folder')`
+      );
+  });
 }
 
 /** Convenience for the delete-root handler, which knows the root already. */
@@ -124,6 +128,11 @@ export async function purgeEmptyEntities(): Promise<{
   // the filename pass can match them on the next scan — and that performer
   // has no join rows at all, so without this the very next scan deleted them
   // along with any bio or artwork you had added.
+  //
+  // `origin` is the direct statement of that; the bio/artwork checks remain
+  // for performers created by hand before the column existed, which were
+  // backfilled as 'scanner'. Favouriting or archiving someone is also a
+  // deliberate act about that performer, so either one keeps them too.
   const deadPerformers = await db
     .select({ id: performers.id })
     .from(performers)
@@ -132,6 +141,9 @@ export async function purgeEmptyEntities(): Promise<{
         select 1 from ${mediaItemPerformers} mip
         where mip.performer_id = ${performers.id}
       )
+      and ${performers.origin} = 'scanner'
+      and ${performers.isFavorite} = false
+      and ${performers.archivedAt} is null
       and ${performers.bio} is null
       and ${performers.imageFile} is null
       and ${performers.bannerFile} is null`
@@ -162,8 +174,8 @@ export async function purgeEmptyEntities(): Promise<{
     await db
       .update(albums)
       .set({ performerId: null })
-      .where(inArray(albums.performerId, ids));
-    await db.delete(performers).where(inArray(performers.id, ids));
+      .where(anyInt(albums.performerId, ids));
+    await db.delete(performers).where(anyInt(performers.id, ids));
   }
 
   if (deadStudios.length > 0) {
@@ -171,8 +183,8 @@ export async function purgeEmptyEntities(): Promise<{
     await db
       .update(albums)
       .set({ studioId: null })
-      .where(inArray(albums.studioId, ids));
-    await db.delete(studios).where(inArray(studios.id, ids));
+      .where(anyInt(albums.studioId, ids));
+    await db.delete(studios).where(anyInt(studios.id, ids));
   }
 
   // Albums whose files are all gone. media_items.album_id still points at
@@ -190,8 +202,8 @@ export async function purgeEmptyEntities(): Promise<{
 
   if (emptyAlbums.length > 0) {
     const ids = emptyAlbums.map((a) => a.id);
-    await db.update(mediaItems).set({ albumId: null }).where(inArray(mediaItems.albumId, ids));
-    await db.delete(albums).where(inArray(albums.id, ids));
+    await db.update(mediaItems).set({ albumId: null }).where(anyInt(mediaItems.albumId, ids));
+    await db.delete(albums).where(anyInt(albums.id, ids));
   }
 
   // Series, on the same rule as albums: media_items.series_id references
@@ -209,8 +221,8 @@ export async function purgeEmptyEntities(): Promise<{
 
   if (emptySeries.length > 0) {
     const ids = emptySeries.map((row) => row.id);
-    await db.update(mediaItems).set({ seriesId: null }).where(inArray(mediaItems.seriesId, ids));
-    await db.delete(series).where(inArray(series.id, ids));
+    await db.update(mediaItems).set({ seriesId: null }).where(anyInt(mediaItems.seriesId, ids));
+    await db.delete(series).where(anyInt(series.id, ids));
   }
 
   return {
@@ -222,18 +234,50 @@ export async function purgeEmptyEntities(): Promise<{
 }
 
 /**
- * Deletes cached posters and preview clips whose item no longer exists.
+ * Cache filenames the app writes: `<itemId>-<hash|nohash>.<ext>`, with a
+ * `w<width>-` prefix for photo thumbnails. Anything else in these directories
+ * is a temp file from an in-flight (or crashed) write.
+ */
+const CACHE_NAME = /^(?:w\d+-)?(\d+)-([0-9a-f]+|nohash)\.[a-z0-9]+$/;
+
+/** Temp files older than this belong to a write that died. */
+const STALE_TEMP_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Deletes cached artwork that nothing will ever look up again: files for
+ * items that no longer exist, and files for an *old* version of a file that
+ * was since replaced in place.
  *
- * Safe by construction: everything here is regenerated from the source video
- * on the next scan, so the worst case of over-deleting is wasted CPU, never
- * lost data. Cache filenames start with "<itemId>-".
+ * The second case is the one that used to leak. Artwork is keyed by content
+ * hash, so when a video is re-encoded its new poster and preview are written
+ * under the new hash and the old pair sat there forever — a full preview clip
+ * per re-encode.
+ *
+ * Covers every derived directory (posters, previews, photo thumbnails, scrub
+ * sprites), not just the two the scanner itself writes.
+ *
+ * Safe by construction: everything here is regenerated from the source on the
+ * next scan or request, so the worst case of over-deleting is wasted CPU,
+ * never lost data.
  */
 export async function sweepOrphanedArtwork(): Promise<number> {
-  const items = await db.select({ id: mediaItems.id }).from(mediaItems);
-  const liveIds = new Set(items.map((i) => String(i.id)));
+  const rows = await db
+    .select({ id: mediaItems.id, contentHash: mediaFiles.contentHash })
+    .from(mediaItems)
+    .leftJoin(mediaFiles, eq(mediaFiles.mediaItemId, mediaItems.id));
+  // An item can have more than one file, and an item with no file at all (a
+  // folder) has no hash; both are represented, so neither loses its artwork.
+  const liveHashes = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const key = String(row.id);
+    const set = liveHashes.get(key) ?? new Set<string>();
+    set.add(row.contentHash ?? "nohash");
+    liveHashes.set(key, set);
+  }
 
   let removed = 0;
-  for (const dir of [POSTERS_DIR, PREVIEWS_DIR]) {
+  const now = Date.now();
+  for (const dir of [POSTERS_DIR, PREVIEWS_DIR, THUMBNAILS_DIR, SPRITES_DIR]) {
     let entries: string[];
     try {
       entries = await readdir(dir);
@@ -241,9 +285,22 @@ export async function sweepOrphanedArtwork(): Promise<number> {
       continue; // directory not created yet
     }
     for (const entry of entries) {
-      const itemId = entry.split("-")[0];
-      if (liveIds.has(itemId)) continue;
-      await rm(path.join(dir, entry), { force: true });
+      const full = path.join(dir, entry);
+      const match = CACHE_NAME.exec(entry);
+      if (!match) {
+        // A temp file. Left alone while it could still be being written —
+        // deleting a preview mid-encode would fail that encode — and removed
+        // once it is clearly the leftover of a write that never finished.
+        try {
+          if (now - (await stat(full)).mtimeMs < STALE_TEMP_MS) continue;
+        } catch {
+          continue;
+        }
+      } else {
+        const hashes = liveHashes.get(match[1]);
+        if (hashes?.has(match[2])) continue;
+      }
+      await rm(full, { force: true, recursive: true });
       removed += 1;
     }
   }

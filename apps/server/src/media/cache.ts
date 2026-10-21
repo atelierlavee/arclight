@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -180,4 +181,25 @@ export function cacheFilename(
   extension = "jpg"
 ): string {
   return `${mediaItemId}-${contentHash ?? "nohash"}.${extension}`;
+}
+
+/**
+ * A sibling path to write a cache file to before renaming it into place.
+ *
+ * Every "is it cached?" check in this app is a plain existence test, so a
+ * file written in place and cut short — ffmpeg killed by its timeout, the
+ * process restarted mid-encode, a full disk — was a truncated poster or clip
+ * that counted as cached forever. Writing here and renaming on success means
+ * the final name only ever appears complete.
+ *
+ * Same directory, so the rename never crosses a filesystem. Dot-prefixed and
+ * shaped unlike a cache name, so the orphan sweep leaves it alone while it is
+ * being written. The real extension stays last: ffmpeg picks its output
+ * format from it.
+ */
+export function tempPathFor(finalPath: string): string {
+  const dir = path.dirname(finalPath);
+  const ext = path.extname(finalPath);
+  const base = path.basename(finalPath, ext);
+  return path.join(dir, `.${base}.${randomBytes(6).toString("hex")}.tmp${ext}`);
 }

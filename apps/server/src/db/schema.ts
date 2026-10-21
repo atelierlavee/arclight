@@ -121,6 +121,12 @@ export const mediaItems = pgTable("media_items", {
   seasonNumber: integer("season_number"),
   episodeNumber: integer("episode_number"),
   episodeTitle: text("episode_title"),
+  // Same scanner-owns-it-until-you-edit-it contract as titleSource, covering
+  // the series link and the season/episode numbers together: they are parsed
+  // from the filename as one unit, so a user correcting any of them takes
+  // ownership of all of them. Without it every rescan silently re-applied
+  // whatever the filename implied over a hand-made correction.
+  seriesSource: text("series_source").notNull().default("scanner"),
   hiddenAt: timestamp("hidden_at"),
   triagedAt: timestamp("triaged_at"),
   durationSeconds: integer("duration_seconds"),
@@ -129,7 +135,16 @@ export const mediaItems = pgTable("media_items", {
   missingSince: timestamp("missing_since"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  // Every foreign key the scanner, cleanup and detail pages filter or join on.
+  // Postgres indexes the referenced side of a foreign key but never the
+  // referencing side, so without these each "items in this album/series/
+  // studio" lookup — and every purge's NOT EXISTS — was a sequential scan.
+  index("media_items_album_id_idx").on(table.albumId),
+  index("media_items_series_id_idx").on(table.seriesId),
+  index("media_items_studio_id_idx").on(table.studioId),
+  index("media_items_parent_id_idx").on(table.parentId),
+]);
 
 export const mediaFiles = pgTable("media_files", {
   id: serial("id").primaryKey(),
@@ -146,7 +161,13 @@ export const mediaFiles = pgTable("media_files", {
   // built from a user-chosen path — unsafe when a folder name contains _ or %.
   rootId: integer("root_id").references((): AnyPgColumn => libraryRoots.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  // The scanner looks up every new file by content hash to tell a move from
+  // an addition, and every item page goes item -> file. Both were sequential
+  // scans of the whole table.
+  index("media_files_content_hash_idx").on(table.contentHash),
+  index("media_files_media_item_id_idx").on(table.mediaItemId),
+]);
 
 export const scanJobs = pgTable("scan_jobs", {
   id: serial("id").primaryKey(),
@@ -168,6 +189,10 @@ export const scanJobs = pgTable("scan_jobs", {
   itemsMoved: integer("items_moved").notNull().default(0),
   itemsMissing: integer("items_missing").notNull().default(0),
   itemsSkipped: integer("items_skipped").notNull().default(0),
+  // Files that could not be processed — deleted between the walk and the
+  // stat, unreadable, or a probe/DB error. Counted rather than failing the
+  // scan: one bad file used to abort (and, worse, crash) the whole run.
+  itemsFailed: integer("items_failed").notNull().default(0),
   startedAt: timestamp("started_at").defaultNow().notNull(),
   finishedAt: timestamp("finished_at"),
   error: text("error"),
@@ -238,6 +263,12 @@ export const performers = pgTable(
     // for CSS object-position. The image is stored uncropped so this stays
     // adjustable forever; 50 is dead centre.
     bannerPositionY: integer("banner_position_y").notNull().default(50),
+    // Who brought this performer into existence: 'scanner' for a folder or
+    // filename, 'user' for one created by hand. The cleanup that removes
+    // performers left with no items only ever touches the scanner's — a
+    // performer you typed in before their files arrived has no items by
+    // design, and deleting them on the next scan was data loss.
+    origin: text("origin").notNull().default("scanner"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   // Unique on lower(name) rather than a plain .unique(): Postgres unique
@@ -273,7 +304,12 @@ export const mediaItemPerformers = pgTable(
       .references(() => performers.id),
     addedAt: timestamp("added_at").defaultNow().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.mediaItemId, table.performerId] })],
+  (table) => [
+    primaryKey({ columns: [table.mediaItemId, table.performerId] }),
+    // The primary key leads with media_item_id, so it cannot serve "items for
+    // this performer" — the performer page, and the purge's NOT EXISTS.
+    index("media_item_performers_performer_id_idx").on(table.performerId),
+  ],
 );
 
 export const collections = pgTable("collections", {
@@ -298,7 +334,12 @@ export const collectionItems = pgTable(
     position: integer("position"),
     addedAt: timestamp("added_at").defaultNow().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.collectionId, table.mediaItemId] })],
+  (table) => [
+    primaryKey({ columns: [table.collectionId, table.mediaItemId] }),
+    // Same reason as media_item_performers: the key leads with the other
+    // column, so "which collections hold this item" scanned the table.
+    index("collection_items_media_item_id_idx").on(table.mediaItemId),
+  ],
 );
 
 // Generic key/value so a new setting is a new key rather than a migration.
@@ -393,7 +434,14 @@ export const activityEvents = pgTable("activity_events", {
   metadata: jsonb("metadata"),
   mediaItemId: integer("media_item_id").references(() => mediaItems.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  // Both were created by hand in migration 0042 and never declared here, so
+  // every `db:generate` saw a schema without them. Declared now so the
+  // snapshot matches the database; the migration that introduced the
+  // declaration uses IF NOT EXISTS because the indexes are already there.
+  index("activity_events_type_idx").on(table.type),
+  index("activity_events_created_at_idx").on(table.createdAt.desc()),
+]);
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),

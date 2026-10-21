@@ -33,6 +33,25 @@ describe("compileSmartRule", () => {
     ).toEqual(["Hot Wife Vacation"]);
   });
 
+  it("treats LIKE wildcards in a title as literal characters", async () => {
+    // `%` and `_` are wildcards: unescaped, "100%" matched anything starting
+    // "100" and "a_b" matched "axb".
+    await makeItem(libraryId, { title: "100% Real" });
+    await makeItem(libraryId, { title: "1000 Ways" });
+    await makeItem(libraryId, { title: "a_b" });
+    await makeItem(libraryId, { title: "axb" });
+    await makeItem(libraryId, { title: "back\\slash" });
+    expect(
+      await matching({ op: "AND", conditions: [{ field: "title", op: "contains", value: "100%" }] })
+    ).toEqual(["100% Real"]);
+    expect(
+      await matching({ op: "AND", conditions: [{ field: "title", op: "contains", value: "a_b" }] })
+    ).toEqual(["a_b"]);
+    expect(
+      await matching({ op: "AND", conditions: [{ field: "title", op: "contains", value: "k\\s" }] })
+    ).toEqual(["back\\slash"]);
+  });
+
   it("matches on item type", async () => {
     await makeItem(libraryId, { title: "A Video" });
     await makePhoto(libraryId, "A Photo");

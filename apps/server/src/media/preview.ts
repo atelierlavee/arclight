@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
-import { access } from "node:fs/promises";
+import { access, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { cacheFilename, ensureCacheDirs, PREVIEWS_DIR } from "./cache.js";
+import { cacheFilename, ensureCacheDirs, PREVIEWS_DIR, tempPathFor } from "./cache.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -113,12 +113,20 @@ export async function generatePreviewClip(
 
   const offsets = previewSegmentOffsets(durationSeconds);
   const outputPath = previewPathFor(mediaItemId, contentHash);
+  // Encoded aside and renamed into place. The timeout below kills ffmpeg
+  // part-way through writing, and a half-written mp4 at the final name passed
+  // ensurePreviewClip's existence check — so it was "cached", unplayable, and
+  // never rebuilt.
+  const tempPath = tempPathFor(outputPath);
 
   try {
-    await execFileAsync("ffmpeg", buildFfmpegArgs(videoPath, outputPath, offsets), {
+    await execFileAsync("ffmpeg", buildFfmpegArgs(videoPath, tempPath, offsets), {
       timeout: ENCODE_TIMEOUT_MS,
+      killSignal: "SIGKILL",
     });
+    await rename(tempPath, outputPath);
   } catch (err) {
+    await rm(tempPath, { force: true }).catch(() => {});
     // Best-effort, exactly like posters: without a clip the UI falls back to
     // the still image rather than failing the scan. Logged rather than
     // swallowed so a systematically broken encode isn't invisible.

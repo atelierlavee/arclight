@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createReadStream } from "node:fs";
 import {
   access,
   copyFile,
@@ -7,8 +8,10 @@ import {
   readFile,
   rename,
   rm,
+  writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import { sql } from "drizzle-orm";
 import { logActivity } from "../activity/log.js";
@@ -30,6 +33,7 @@ import {
   releaseRestore,
   writeRestoreMarker,
 } from "./restoreState.js";
+import { pgChildEnv } from "./pgEnv.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -97,6 +101,100 @@ export function validateArchiveMembers(members: string[]): string[] {
 }
 
 /**
+ * Refuses any archive member that is not a plain file or directory.
+ *
+ * Paths alone are not enough: a symlink member `uploads/x -> /etc` passes the
+ * name check, and the next member written through it lands outside the
+ * extract directory; a hard link can alias any file the app can read into
+ * the restored uploads. Nothing a backup of ours writes is either, so any
+ * link is refused outright rather than reasoned about.
+ *
+ * Takes the lines of `tar -tvzf`, whose first character is the entry type —
+ * `-` file, `d` directory, `l` symlink, `h` hard link, and `c`/`b`/`p` for
+ * devices and FIFOs, which are refused for the same reason.
+ */
+export function validateArchiveTypes(verboseListing: string[]): void {
+  for (const line of verboseListing) {
+    if (line.trim() === "") continue;
+    const type = line[0];
+    if (type !== "-" && type !== "d") {
+      throw new RestoreError(
+        `Archive contains a link or special file, which a backup never ` +
+          `does: ${line.trim()}`,
+        400,
+      );
+    }
+    // GNU tar lists a hard link with a regular-file mode but a
+    // "link to <target>" suffix, so the type character alone misses it.
+    if (/ link to /.test(line) || / -> /.test(line)) {
+      throw new RestoreError(
+        `Archive contains a link, which a backup never does: ${line.trim()}`,
+        400,
+      );
+    }
+  }
+}
+
+/**
+ * The psql meta-commands a pg_dump file legitimately contains.
+ *
+ * `\connect` appears in dumps that switch databases; `\restrict` and
+ * `\unrestrict` bracket every dump from pg_dump 17.6 / 18 onward, precisely
+ * so that a dump cannot smuggle in other meta-commands.
+ */
+const ALLOWED_META_COMMANDS = new Set(["connect", "c", "restrict", "unrestrict"]);
+
+/**
+ * Refuses a dump containing psql meta-commands pg_dump would never write.
+ *
+ * psql executes whatever it is fed, and `\!` runs a shell command as the app
+ * user — so a crafted archive was code execution, not just a bad database.
+ * There is no psql switch that disables meta-commands, so the dump is
+ * checked before psql sees it.
+ *
+ * COPY-aware: inside a `COPY ... FROM stdin;` block every line is data, and
+ * data lines legitimately start with a backslash — `\N` for a null in the
+ * first column, `\\` for an escaped one, and the `\.` that ends the block.
+ */
+export async function findForbiddenMetaCommand(
+  lines: AsyncIterable<string> | Iterable<string>,
+): Promise<string | null> {
+  let inCopy = false;
+  for await (const line of lines) {
+    if (inCopy) {
+      if (line === "\\.") inCopy = false;
+      continue;
+    }
+    if (/^COPY .* FROM stdin;$/.test(line)) {
+      inCopy = true;
+      continue;
+    }
+    const meta = /^\s*\\([A-Za-z!?]*)/.exec(line);
+    if (meta && !ALLOWED_META_COMMANDS.has(meta[1])) return line;
+  }
+  return null;
+}
+
+async function assertDumpIsSafe(dumpPath: string): Promise<void> {
+  const reader = createInterface({
+    input: createReadStream(dumpPath, { encoding: "utf8" }),
+    crlfDelay: Infinity,
+  });
+  try {
+    const bad = await findForbiddenMetaCommand(reader);
+    if (bad !== null) {
+      throw new RestoreError(
+        `The database dump contains a psql command pg_dump never writes ` +
+          `(${bad.slice(0, 40)}), so it was not run.`,
+        400,
+      );
+    }
+  } finally {
+    reader.close();
+  }
+}
+
+/**
  * Refuses a dump taken by a newer version of the app.
  *
  * Drizzle's migrator only ever reads the *local* journal, comparing each entry
@@ -151,6 +249,10 @@ export async function restoreBackup(name: string): Promise<RestoreResult> {
   }
 
   let workDir: string | null = null;
+  // Set the moment psql returns successfully. From then on the old database
+  // is gone for good, and everything the error path says has to reflect that.
+  let committed = false;
+  let safetyName: string | null = null;
   try {
     if (isScanRunning()) {
       throw new RestoreError(
@@ -183,6 +285,10 @@ export async function restoreBackup(name: string): Promise<RestoreResult> {
       maxBuffer: PSQL_MAX_BUFFER,
     });
     const uploadDirs = validateArchiveMembers(listed.stdout.split("\n"));
+    const verbose = await execFileAsync("tar", ["-tvzf", localArchive], {
+      maxBuffer: PSQL_MAX_BUFFER,
+    });
+    validateArchiveTypes(verbose.stdout.split("\n"));
 
     const extractDir = path.join(workDir, "extracted");
     await execFileAsync("tar", [
@@ -200,11 +306,13 @@ export async function restoreBackup(name: string): Promise<RestoreResult> {
 
     const meta = await readArchiveMeta(extractDir);
     await assertRestorable(meta);
+    await assertDumpIsSafe(dumpPath);
 
     // After the gate, never before: anything written between this snapshot and
     // psql would be captured by neither the safety backup nor the dump, and so
     // would be lost with no way back.
     const safety = await takeSafetyBackup(name);
+    safetyName = safety?.name ?? null;
 
     // The barrier. An idle connection holds no locks, but one mid-query holds
     // ACCESS SHARE, which blocks the DROPs — forever, since nothing sets a
@@ -217,7 +325,8 @@ export async function restoreBackup(name: string): Promise<RestoreResult> {
       safetyBackup: safety?.name ?? null,
     });
 
-    await runPsql(dumpPath);
+    await runPsql(dumpPath, workDir);
+    committed = true;
 
     const uploads = await swapUploads(extractDir, uploadDirs);
 
@@ -247,12 +356,34 @@ export async function restoreBackup(name: string): Promise<RestoreResult> {
       uploads,
     };
   } catch (err) {
-    await clearRestoreMarker();
-    // Re-arm on the way out. psql runs the dump in a single transaction, so a
-    // failure there has left the database exactly as it was and there is a
-    // working library here to keep scanning.
+    if (!committed) {
+      // psql runs the dump in a single transaction, so a failure up to and
+      // including it has left the database exactly as it was: nothing to
+      // flag, and a working library to keep scanning.
+      await clearRestoreMarker().catch(() => {});
+      await restartScanSchedule().catch(() => {});
+      throw err;
+    }
+
+    // Past the commit. The database already IS the backup's, so the "rolled
+    // back, nothing changed" wording the earlier failures carry would be a
+    // lie here — and believing it, someone would carry on using a library
+    // whose uploads may be half-swapped or whose schema was never brought up
+    // to date. The marker stays on disk so the next boot says so too.
+    const message = err instanceof Error ? err.message : String(err);
     await restartScanSchedule().catch(() => {});
-    throw err;
+    await logActivity("backup", `Restore from ${name} did not finish`, {
+      name,
+      safetyBackup: safetyName,
+      error: message,
+    }).catch(() => {});
+    throw new RestoreError(
+      `The database was replaced with ${name}, but a later step failed: ` +
+        `${message}. Restart the app to retry the migrations; if uploaded ` +
+        `images are missing, restore the safety backup ` +
+        `${safetyName ?? "(none was taken)"}.`,
+      500,
+    );
   } finally {
     if (workDir) await rm(workDir, { recursive: true, force: true });
     releaseRestore();
@@ -296,40 +427,113 @@ async function takeSafetyBackup(source: string): Promise<BackupFile | null> {
   }
 }
 
-async function runPsql(dumpPath: string): Promise<void> {
+/**
+ * Clears out the current database in the same transaction the dump runs in.
+ *
+ * pg_dump --clean only drops the objects *in the dump*. Restoring a backup
+ * taken before watch_log or playback_heatmap existed therefore left those
+ * tables in place — and their foreign keys to media_items made the dump's own
+ * `DROP TABLE media_items` fail, so older backups simply could not be
+ * restored. Emptying the schemas first makes a restore a clean replace, and
+ * the migrations that run afterwards recreate the newer tables.
+ *
+ * Every relation in `public` is dropped rather than the schema itself: in
+ * Postgres 15+ `public` belongs to pg_database_owner, and dropping it needs
+ * privileges a database owner may not hold, while the tables are always the
+ * app's own. Extensions are left alone for the same reason. drizzle's own
+ * schema is the app's to drop outright, and the dump recreates it.
+ *
+ * Runs inside psql's single transaction alongside the dump, so a failure
+ * anywhere rolls the drops back too.
+ */
+const RESTORE_PRELUDE = `
+DO $$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT c.relname, c.relkind
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+      -- Partitions go with their parent; extension-owned relations with
+      -- their extension.
+      AND NOT c.relispartition
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_depend d
+        WHERE d.objid = c.oid AND d.deptype = 'e'
+      )
+  LOOP
+    EXECUTE format(
+      CASE r.relkind
+        WHEN 'v' THEN 'DROP VIEW IF EXISTS public.%I CASCADE'
+        WHEN 'm' THEN 'DROP MATERIALIZED VIEW IF EXISTS public.%I CASCADE'
+        WHEN 'f' THEN 'DROP FOREIGN TABLE IF EXISTS public.%I CASCADE'
+        ELSE 'DROP TABLE IF EXISTS public.%I CASCADE'
+      END,
+      r.relname
+    );
+  END LOOP;
+  -- Sequences not owned by a table (owned ones went with it above).
+  FOR r IN
+    SELECT c.relname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'S'
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_depend d
+        WHERE d.objid = c.oid AND d.deptype = 'e'
+      )
+  LOOP
+    EXECUTE format('DROP SEQUENCE IF EXISTS public.%I CASCADE', r.relname);
+  END LOOP;
+END
+$$;
+DROP SCHEMA IF EXISTS drizzle CASCADE;
+`;
+
+async function runPsql(dumpPath: string, workDir: string): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new RestoreError("DATABASE_URL is not set", 500);
+
+  const preludePath = path.join(workDir, "prelude.sql");
+  await writeFile(preludePath, RESTORE_PRELUDE);
 
   try {
     await execFileAsync(
       "psql",
       [
-        databaseUrl,
-        // --single-transaction is the whole safety story: the dump is taken
-        // --clean --if-exists, so every DROP is a no-op rather than an error
-        // on an object that isn't there, which is exactly what lets the run
-        // sit inside one transaction. A failure part-way therefore rolls back
-        // and leaves the database byte-identical to before, turning "your
-        // database is now wrecked" into "nothing happened".
+        // --single-transaction is the whole safety story. With more than one
+        // -f it wraps all of them, so the prelude's drops and the dump commit
+        // or roll back together: a failure part-way leaves the database
+        // byte-identical to before, turning "your database is now wrecked"
+        // into "nothing happened".
         "--single-transaction",
         "-v",
         "ON_ERROR_STOP=1",
+        // No ~/.psqlrc: whatever is in the app user's home directory has no
+        // business running inside a restore.
+        "-X",
         // Quiet, because the output is bounded by maxBuffer and a per-statement
         // command tag on a large dump is a lot of it.
         "-q",
+        "-f",
+        preludePath,
         "-f",
         dumpPath,
       ],
       {
         timeout: PSQL_TIMEOUT_MS,
         maxBuffer: PSQL_MAX_BUFFER,
-        env: {
-          ...process.env,
+        // Connection settings in the environment rather than argv, so the
+        // password is neither in the process table nor in an error message.
+        env: pgChildEnv(databaseUrl, {
           // A straggler connection we failed to drain should fail this fast
           // rather than block the DROP indefinitely — and with it every reader
           // that queues behind the lock request.
           PGOPTIONS: "-c lock_timeout=10s",
-        },
+        }),
       },
     );
   } catch (err) {
@@ -344,13 +548,14 @@ async function runPsql(dumpPath: string): Promise<void> {
 /**
  * The reason psql failed, without the connection string.
  *
- * execFile puts the whole argv in its message, and argv[0] here is
- * DATABASE_URL — password included. That message is surfaced verbatim in the
- * UI and written to the activity log, so it has to be scrubbed rather than
- * merely truncated. psql's own explanation is on stderr, which is the part
- * actually worth reading.
+ * The URL is no longer on the command line, so nothing should echo it; it is
+ * still scrubbed in case, since this text is surfaced verbatim in the UI and
+ * the activity log. The bare password is deliberately not scrubbed: psql has
+ * no way to learn it except from PGPASSWORD, which it never prints, and a
+ * short password ("media") replaced inside table names made the real error
+ * unreadable.
  */
-function psqlFailure(err: unknown, databaseUrl: string): string {
+export function psqlFailure(err: unknown, databaseUrl: string): string {
   const stderr =
     typeof err === "object" && err && "stderr" in err
       ? String((err as { stderr?: unknown }).stderr ?? "").trim()

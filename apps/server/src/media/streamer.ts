@@ -1,4 +1,6 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, type ReadStream } from "node:fs";
+import type { OutgoingHttpHeaders } from "node:http";
+import { pipeline } from "node:stream";
 import { stat } from "node:fs/promises";
 import type { FastifyReply } from "fastify";
 
@@ -10,18 +12,49 @@ import type { FastifyReply } from "fastify";
 // reply.hijack() bypasses Fastify's stream handling entirely and works
 // correctly, so every body-bearing response below goes through this path
 // instead of reply.send(stream).
+//
+// Headers set on the reply beforehand (reply.header) live on Fastify's reply,
+// not on the raw response, so they are merged in explicitly: a hijacked reply
+// otherwise silently dropped the vault's `Cache-Control: private, no-store`
+// and the backup download's Content-Disposition.
+function rawHeaders(
+  reply: FastifyReply,
+  headers: Record<string, string | number>
+): OutgoingHttpHeaders {
+  return { ...reply.getHeaders(), ...headers } as OutgoingHttpHeaders;
+}
+
 function pipeToRaw(
   reply: FastifyReply,
-  stream: NodeJS.ReadableStream,
+  stream: ReadStream,
   statusCode: number,
   headers: Record<string, string | number>
 ): void {
   reply.hijack();
-  reply.raw.writeHead(statusCode, headers);
-  stream.on("error", () => {
-    reply.raw.destroy();
+  reply.raw.writeHead(statusCode, rawHeaders(reply, headers));
+  // pipeline() rather than .pipe(): .pipe() does not destroy the source when
+  // the destination closes early, and closing early is the *normal* case for
+  // video — every seek aborts the previous range request. Each one leaked an
+  // open file descriptor until the process ran out of them. pipeline tears
+  // both ends down on completion, error or client abort alike.
+  pipeline(stream, reply.raw, () => {
+    // Errors here are a client hanging up mid-body or a read failing after
+    // headers went out; both ends are already destroyed, nothing to answer.
   });
-  stream.pipe(reply.raw);
+}
+
+/** A body-less response (HEAD), sent through the same hijacked path. */
+function headToRaw(
+  reply: FastifyReply,
+  statusCode: number,
+  headers: Record<string, string | number>
+): void {
+  // Hijacked like the body path. Writing to reply.raw without it left Fastify
+  // believing the reply was still pending, so it tried to send its own
+  // response afterwards and logged "Reply already sent" on every HEAD.
+  reply.hijack();
+  reply.raw.writeHead(statusCode, rawHeaders(reply, headers));
+  reply.raw.end();
 }
 
 export async function streamFile(
@@ -52,8 +85,7 @@ export async function streamFile(
       "Content-Length": size,
     };
     if (isHead) {
-      reply.raw.writeHead(200, headers);
-      reply.raw.end();
+      headToRaw(reply, 200, headers);
       return;
     }
     pipeToRaw(reply, createReadStream(filePath), 200, headers);
@@ -89,8 +121,7 @@ export async function streamFile(
   };
 
   if (isHead) {
-    reply.raw.writeHead(206, headers);
-    reply.raw.end();
+    headToRaw(reply, 206, headers);
     return;
   }
 

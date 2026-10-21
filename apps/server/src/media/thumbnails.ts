@@ -1,7 +1,7 @@
-import { access } from "node:fs/promises";
+import { access, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
-import { cacheFilename, ensureCacheDirs, POSTERS_DIR, THUMBNAILS_DIR } from "./cache.js";
+import { cacheFilename, ensureCacheDirs, POSTERS_DIR, tempPathFor, THUMBNAILS_DIR } from "./cache.js";
 
 // Album covers and photo grids render these several hundred pixels wide on a
 // full-width page, so 320 was being upscaled and looked soft. The width is
@@ -34,15 +34,20 @@ export async function getOrCreatePhotoThumbnail(
     return cachePath;
   }
 
+  // Aside and renamed, for the same reason as posters: the cache check above
+  // is an existence test, so a half-written file would be served forever.
+  const tempPath = tempPathFor(cachePath);
   try {
     await sharp(sourcePath)
       // withoutEnlargement: a photo smaller than the target should stay its
       // own size rather than being blown up into a blurry copy.
       .resize(THUMBNAIL_WIDTH, undefined, { withoutEnlargement: true })
       .jpeg({ quality: 82 })
-      .toFile(cachePath);
+      .toFile(tempPath);
+    await rename(tempPath, cachePath);
     return cachePath;
   } catch {
+    await rm(tempPath, { force: true }).catch(() => {});
     // Covers unsupported formats (e.g. HEIC without libheif support) — the
     // caller falls back to a generic icon rather than erroring out.
     return null;

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -10,6 +10,7 @@ import {
   resolveBackupPath,
   type BackupManifest,
 } from "./create.js";
+import { validateArchiveTypes } from "./restore.js";
 
 const execFileAsync = promisify(execFile);
 const EXTRACT_TIMEOUT_MS = 300_000;
@@ -29,7 +30,45 @@ const EXTRACT_TIMEOUT_MS = 300_000;
 export const DUMP_TERMINATOR = "-- PostgreSQL database dump complete";
 
 export function isDumpComplete(sql: string): boolean {
-  return sql.trimEnd().endsWith(DUMP_TERMINATOR);
+  // What pg_dump actually writes after the terminator: the closing `--` of
+  // its comment banner, blank lines, and — from pg_dump 17.6 / 18 — an
+  // `\unrestrict <key>` line. Checking the raw tail against the terminator
+  // therefore failed every real dump; only those trailers are skipped, so a
+  // statement after the terminator still fails the check.
+  const lines = sql.split("\n");
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1].trim();
+    if (last === "" || last === "--" || /^\\unrestrict\s+\S+$/.test(last)) {
+      lines.pop();
+      continue;
+    }
+    break;
+  }
+  return lines.join("\n").trimEnd().endsWith(DUMP_TERMINATOR);
+}
+
+/** How much of the dump's end is read to find the terminator. */
+const DUMP_TAIL_BYTES = 64 * 1024;
+
+/**
+ * Whether the dump file on disk is complete, reading only its tail.
+ *
+ * The whole dump used to be read into one string for this — a large library's
+ * dump is hundreds of megabytes, and V8 refuses strings past ~512 MB outright,
+ * so verifying the very backups that matter most crashed or failed. Only the
+ * last few lines can hold the terminator; the checksum pass streams the rest.
+ */
+export async function isDumpFileComplete(dumpPath: string): Promise<boolean> {
+  const handle = await open(dumpPath, "r");
+  try {
+    const { size } = await handle.stat();
+    const length = Math.min(size, DUMP_TAIL_BYTES);
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, size - length);
+    return isDumpComplete(buffer.toString("utf8"));
+  } finally {
+    await handle.close();
+  }
 }
 
 /**
@@ -115,9 +154,19 @@ export async function verifyBackup(name: string): Promise<VerifyResult> {
     // carry their own checksums, and a corrupt archive fails here rather
     // than producing partial files.
     try {
-      await execFileAsync("tar", ["-xzf", archivePath, "-C", workDir], {
+      // Listed before extracting, for the same reason restore does: a
+      // symlink member would let a later member be written through it to
+      // anywhere the app can write, temp directory or not.
+      const listing = await execFileAsync("tar", ["-tvzf", archivePath], {
         timeout: EXTRACT_TIMEOUT_MS,
+        maxBuffer: 32 * 1024 * 1024,
       });
+      validateArchiveTypes(listing.stdout.split("\n"));
+      await execFileAsync(
+        "tar",
+        ["-xzf", archivePath, "--no-same-owner", "-C", workDir],
+        { timeout: EXTRACT_TIMEOUT_MS },
+      );
       checks.push({
         name: "Archive integrity",
         ok: true,
@@ -165,7 +214,7 @@ export async function verifyBackup(name: string): Promise<VerifyResult> {
     const dumpPath = path.join(workDir, "db.sql");
     try {
       const info = await stat(dumpPath);
-      const complete = isDumpComplete(await readFile(dumpPath, "utf8"));
+      const complete = await isDumpFileComplete(dumpPath);
       checks.push({
         name: "Database dump",
         ok: complete && info.size > 0,

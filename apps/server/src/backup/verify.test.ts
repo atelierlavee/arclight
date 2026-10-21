@@ -32,6 +32,20 @@ describe("isDumpComplete", () => {
     expect(isDumpComplete("CREATE TABLE x (\nid integer,\n")).toBe(false);
   });
 
+  it("accepts the trailer real pg_dump output carries after the terminator", () => {
+    // pg_dump closes its banner with a bare `--`, and from 17.6 / 18 adds an
+    // `\unrestrict` line after it. Checking the raw tail failed every real
+    // dump as "truncated".
+    expect(
+      isDumpComplete(
+        `CREATE TABLE x ();\n--\n${DUMP_TERMINATOR}\n--\n\n\\unrestrict AbC123\n`,
+      ),
+    ).toBe(true);
+    expect(
+      isDumpComplete(`--\n${DUMP_TERMINATOR}\n--\n\n`),
+    ).toBe(true);
+  });
+
   it("rejects an empty file", () => {
     expect(isDumpComplete("")).toBe(false);
   });
