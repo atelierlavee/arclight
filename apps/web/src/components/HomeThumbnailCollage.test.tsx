@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomeThumbnailCollage } from "./HomeThumbnailCollage";
+import { qk } from "@/lib/queryKeys";
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
@@ -66,7 +67,7 @@ describe("HomeThumbnailCollage", () => {
     expect(container.querySelectorAll("img").length).toBeGreaterThan(48);
     expect(fetchMock).toHaveBeenCalledWith("/api/media-items?type=video");
     expect(container.querySelector("img")?.getAttribute("src")).toContain("/1/thumbnail");
-    await client.invalidateQueries({ queryKey: ["media-items"] });
+    await client.invalidateQueries({ queryKey: qk.mediaItems.all });
     await waitFor(() => {
       expect(container.querySelector("img")?.getAttribute("src")).toContain("/3/thumbnail");
     });

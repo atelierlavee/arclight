@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAppearance } from "@/lib/appearance";
 import type { hallOfFame, Insights, InsightItem } from "@/lib/insights";
 import { fetchItem } from "@/lib/mediaItemApi";
+import { qk } from "@/lib/queryKeys";
 
 export type Headline = { item: InsightItem; seconds: number; names: string; isPinned: boolean } | null;
 
@@ -9,7 +10,7 @@ export type Headline = { item: InsightItem; seconds: number; names: string; isPi
 export function useHeadline(data: Insights, auto: ReturnType<typeof hallOfFame>["mainEvent"]): Headline {
   const { hallOfFamePin } = useAppearance();
   const { data: pinned } = useQuery({
-    queryKey: ["media-item", hallOfFamePin],
+    queryKey: qk.mediaItem.detail(hallOfFamePin),
     queryFn: () => fetchItem(hallOfFamePin),
     enabled: hallOfFamePin > 0,
     retry: false,

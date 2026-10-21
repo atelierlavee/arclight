@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Star, X } from "lucide-react";
 import { updateItem, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
+import { invalidateItem } from "@/lib/invalidate";
 
 /**
  * Five stars, set in one click.
@@ -32,10 +34,10 @@ export function StarRating({
     // Optimistic: a star that lights up a round trip after the click reads
     // as a missed click, and you click it again.
     onMutate: async (next) => {
-      await queryClient.cancelQueries({ queryKey: ["media-item", itemId] });
-      const previous = queryClient.getQueryData<MediaItemDetail>(["media-item", itemId]);
+      await queryClient.cancelQueries({ queryKey: qk.mediaItem.detail(itemId) });
+      const previous = queryClient.getQueryData<MediaItemDetail>(qk.mediaItem.detail(itemId));
       if (previous) {
-        queryClient.setQueryData<MediaItemDetail>(["media-item", itemId], {
+        queryClient.setQueryData<MediaItemDetail>(qk.mediaItem.detail(itemId), {
           ...previous,
           rating: next,
         });
@@ -44,14 +46,13 @@ export function StarRating({
     },
     onError: (_error, _next, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(["media-item", itemId], context.previous);
+        queryClient.setQueryData(qk.mediaItem.detail(itemId), context.previous);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", itemId] });
       // Rating sorts and filters live in the grid queries.
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
-      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      invalidateItem(queryClient, itemId);
+      queryClient.invalidateQueries({ queryKey: qk.inbox.all });
     },
   });
 

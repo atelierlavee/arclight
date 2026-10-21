@@ -6,6 +6,7 @@ import { fetchPrivacyStatus, savePrivacyPassword } from "@/lib/privacyApi";
 import { withPrivacyUnlock } from "@/lib/privacyLock";
 import { deletePasskey, fetchPasskeys, registerPasskey } from "@/lib/webauthnApi";
 import { SettingsSection } from "./SettingsSection";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * The password that unlocks discreet mode.
@@ -30,8 +31,8 @@ export function PrivacySettingsSection() {
   const [enrollPassword, setEnrollPassword] = useState("");
   const queryClient = useQueryClient();
 
-  const { data } = useQuery({ queryKey: ["privacy"], queryFn: fetchPrivacyStatus });
-  const { data: passkeys } = useQuery({ queryKey: ["passkeys"], queryFn: fetchPasskeys });
+  const { data } = useQuery({ queryKey: qk.privacy, queryFn: fetchPrivacyStatus });
+  const { data: passkeys } = useQuery({ queryKey: qk.passkeys, queryFn: fetchPasskeys });
 
   const addPasskey = useMutation({
     // Named after the browser it's registered in, since that's what the
@@ -41,14 +42,14 @@ export function PrivacySettingsSection() {
       setPasskeyError(null);
       setEnrolling(false);
       setEnrollPassword("");
-      queryClient.invalidateQueries({ queryKey: ["passkeys"] });
+      queryClient.invalidateQueries({ queryKey: qk.passkeys });
     },
     onError: (err: Error) => setPasskeyError(err.message),
   });
 
   const removePasskey = useMutation({
     mutationFn: (id: string) => withPrivacyUnlock(() => deletePasskey(id)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["passkeys"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.passkeys }),
   });
 
   const save = useMutation({
@@ -58,7 +59,7 @@ export function PrivacySettingsSection() {
       setSaved(true);
       setPassword("");
       setAccountPassword("");
-      queryClient.invalidateQueries({ queryKey: ["privacy"] });
+      queryClient.invalidateQueries({ queryKey: qk.privacy });
     },
     onError: (err: Error) => {
       setSaved(false);

@@ -14,6 +14,7 @@ import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { cn } from "@/lib/utils";
 import { PlaySurface } from "@/components/PlaySurface";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { qk } from "@/lib/queryKeys";
 
 const routeApi = getRouteApi("/album/$albumId");
 
@@ -31,16 +32,16 @@ export function AlbumPage() {
       saveAlbumCover(id, patch),
     onSuccess: () => {
       setReframing(false);
-      queryClient.invalidateQueries({ queryKey: ["album", id] });
+      queryClient.invalidateQueries({ queryKey: qk.album.detail(id) });
       // Prefix match, so both the albums page and the row on each performer's
       // profile repaint with the new face.
-      queryClient.invalidateQueries({ queryKey: ["albums"] });
+      queryClient.invalidateQueries({ queryKey: qk.albums.all });
     },
   });
 
   const { data, isError, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
-      queryKey: ["album", id],
+      queryKey: qk.album.detail(id),
       queryFn: ({ pageParam }) => fetchAlbum(id, pageParam),
       initialPageParam: 1,
       getNextPageParam: (last) => (last.hasMore ? last.page + 1 : undefined),

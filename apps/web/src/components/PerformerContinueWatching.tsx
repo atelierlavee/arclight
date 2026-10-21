@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { MediaRow } from "./MediaRow";
 import type { MediaCardItem } from "./MediaCard";
 import type { PerformerDetail } from "@/lib/performerApi";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * This performer's part-watched videos.
@@ -20,7 +21,7 @@ export function PerformerContinueWatching({
   const enabled = performer.watch.inProgress > 0;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["performer-in-progress", performer.id],
+    queryKey: qk.performerInProgress.forPerformer(performer.id),
     queryFn: async (): Promise<{ items: MediaCardItem[] }> => {
       const params = new URLSearchParams({
         performer: performer.name,

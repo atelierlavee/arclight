@@ -5,6 +5,7 @@ import { ScrollRow } from "./ScrollRow";
 import { coverFramingStyle, fetchAlbums } from "@/lib/albumApi";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * The photo sets belonging to one performer or one studio.
@@ -21,7 +22,7 @@ export function AlbumRow({ performer, studio }: { performer?: string; studio?: s
   const { data, isLoading } = useQuery({
     // Both keys are always present, so a performer page and a studio page can
     // never share a cache entry by accident.
-    queryKey: ["albums", performer ?? null, studio ?? null],
+    queryKey: qk.albums.list(performer ?? null, studio ?? null),
     queryFn: () => fetchAlbums({ performer, studio }),
   });
   const albums = data?.albums ?? [];

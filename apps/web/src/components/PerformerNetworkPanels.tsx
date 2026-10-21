@@ -15,6 +15,7 @@ import {
   type SharedVideo,
 } from "@/lib/performerApi";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * The overlays the performer network draws over its canvas: the card that
@@ -25,7 +26,7 @@ import { cn } from "@/lib/utils";
 
 function useSharedVideos(a: NetworkNode | undefined, b: NetworkNode | undefined) {
   return useQuery({
-    queryKey: ["performers", "shared-videos", a?.name, b?.name],
+    queryKey: qk.performers.sharedVideos(a?.name, b?.name),
     queryFn: () => fetchSharedVideos(a!.name, b!.name),
     enabled: a != null && b != null,
     staleTime: 60_000,
@@ -201,7 +202,7 @@ export function PerformerPanel({
   onFindPath: (otherId: number) => void;
 }) {
   const { data: latest } = useQuery({
-    queryKey: ["performers", "latest-videos", performer.name],
+    queryKey: qk.performers.latestVideos(performer.name),
     queryFn: () => fetchLatestVideos(performer.name),
     staleTime: 60_000,
   });
@@ -463,7 +464,7 @@ export function StudioPanel({
   onPlayAll: (videos: SharedVideo[]) => void;
 }) {
   const { data: studioVideos } = useQuery({
-    queryKey: ["studios", "videos", studio.name],
+    queryKey: qk.studios.videos(studio.name),
     queryFn: () => fetchVideosWhere({ studio: studio.name }),
     staleTime: 60_000,
   });
@@ -549,7 +550,7 @@ export function StudioPanel({
 /** Hovering a performer: who, how much, and their latest few videos. */
 export function NodeHoverCard({ performer }: { performer: NetworkNode }) {
   const { data: latest } = useQuery({
-    queryKey: ["performers", "latest-videos", performer.name],
+    queryKey: qk.performers.latestVideos(performer.name),
     queryFn: () => fetchLatestVideos(performer.name),
     staleTime: 60_000,
   });

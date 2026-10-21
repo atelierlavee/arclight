@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarRange, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 type TimelineMonth = { year: number; month: number; total: number };
 
@@ -55,7 +56,7 @@ export function Timeline({
   const [expandedYear, setExpandedYear] = useState<number | null>(year ?? null);
 
   const { data } = useQuery({
-    queryKey: ["timeline"],
+    queryKey: qk.timeline,
     queryFn: fetchTimeline,
     enabled: open,
   });

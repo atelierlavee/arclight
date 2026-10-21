@@ -1,15 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchFolders, moveToFolder } from "@/lib/mediaItemApi";
+import { qk } from "@/lib/queryKeys";
+import { invalidateItem } from "@/lib/invalidate";
 
 export function FolderPicker({ itemId, parentId }: { itemId: number; parentId: number | null }) {
   const queryClient = useQueryClient();
-  const { data } = useQuery({ queryKey: ["folders"], queryFn: fetchFolders });
+  const { data } = useQuery({ queryKey: qk.folders, queryFn: fetchFolders });
 
   const mutation = useMutation({
     mutationFn: (newParentId: number | null) => moveToFolder(itemId, newParentId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", itemId] });
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
+      invalidateItem(queryClient, itemId);
     },
   });
 

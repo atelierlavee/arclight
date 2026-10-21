@@ -64,8 +64,6 @@ export type RemovableData = {
   series: number;
 };
 
-export const cleanupQueryKey = ["library-cleanup"] as const;
-
 export async function fetchRemovableData(): Promise<RemovableData> {
   const res = await fetch("/api/library/cleanup");
   if (!res.ok) throw new Error(`Failed to check: ${res.status}`);

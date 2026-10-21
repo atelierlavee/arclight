@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateItem } from "@/lib/mediaItemApi";
+import { invalidateItem } from "@/lib/invalidate";
 
 export function EditableTitle({
   itemId,
@@ -20,8 +21,7 @@ export function EditableTitle({
   const mutation = useMutation({
     mutationFn: (newTitle: string) => updateItem(itemId, { title: newTitle }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", itemId] });
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
+      invalidateItem(queryClient, itemId);
       setEditing(false);
     },
   });

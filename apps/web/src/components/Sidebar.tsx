@@ -50,6 +50,7 @@ import {
   removeSavedSearch,
   savedSearchesChangedEvent,
 } from "@/lib/savedSearches";
+import { qk } from "@/lib/queryKeys";
 
 type Collection = { id: number; name: string; type: "manual" | "smart" };
 type TagRow = { id: number; name: string };
@@ -76,7 +77,7 @@ function InboxLink({
   navItemClass: string;
 }) {
   const { data } = useQuery({
-    queryKey: ["inbox-count"],
+    queryKey: qk.inboxCount,
     queryFn: async () => {
       const res = await fetch("/api/inbox/count");
       if (!res.ok) return { count: 0 };
@@ -146,11 +147,11 @@ export function Sidebar({
   }, []);
 
   const { data: collections } = useQuery({
-    queryKey: ["collections"],
+    queryKey: qk.collections,
     queryFn: () => fetchJson<{ collections: Collection[] }>("/api/collections"),
   });
   const { data: tagData } = useQuery({
-    queryKey: ["tags"],
+    queryKey: qk.tags,
     queryFn: () => fetchJson<{ tags: TagRow[] }>("/api/tags"),
   });
   const { data: health } = useLibraryStats();
@@ -190,8 +191,8 @@ export function Sidebar({
         await removeItemsFromCollection(payload.ids, collection.id, () => {});
       },
       onSettled: () => {
-        queryClient.invalidateQueries({ queryKey: ["collection-items"] });
-        queryClient.invalidateQueries({ queryKey: ["media-items"] });
+        queryClient.invalidateQueries({ queryKey: qk.collectionItems.all });
+        queryClient.invalidateQueries({ queryKey: qk.mediaItems.all });
       },
     });
   }
@@ -202,7 +203,7 @@ export function Sidebar({
       if (!res.ok) throw new Error("Failed to delete collection");
     },
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["collections"] }),
+      queryClient.invalidateQueries({ queryKey: qk.collections }),
   });
 
   // Collapsed, every row becomes a centred icon with no room for a label.

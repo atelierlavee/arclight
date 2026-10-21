@@ -21,8 +21,6 @@ export type MissingVideo = {
   thumbnailScale: number;
 };
 
-export const missingQueryKey = ["missing-videos"] as const;
-
 async function failed(res: Response): Promise<Error> {
   if (res.status === 403) {
     const body = (await res.json().catch(() => null)) as { code?: string } | null;

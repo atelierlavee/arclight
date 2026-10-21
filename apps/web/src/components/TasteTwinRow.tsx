@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ScrollRow } from "./ScrollRow";
 import { performerPortraitUrl, portraitStyle } from "@/lib/performerApi";
+import { qk } from "@/lib/queryKeys";
 
 type TasteTwin = {
   id: number;
@@ -19,7 +20,7 @@ type TasteTwin = {
 export function TasteTwinRow() {
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({
-    queryKey: ["taste-twins"],
+    queryKey: qk.tasteTwins,
     queryFn: async () => {
       const res = await fetch("/api/taste-twins");
       if (!res.ok) throw new Error("Failed");

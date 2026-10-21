@@ -3,6 +3,7 @@ import { ClampedText } from "./ClampedText";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { savePerformerBio } from "@/lib/performerApi";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Click-to-edit free text on a performer's profile.
@@ -31,7 +32,7 @@ export function PerformerBio({ performerId, bio }: { performerId: number; bio: s
 
   const save = useMutation({
     mutationFn: (next: string) => savePerformerBio(performerId, next),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["performer", performerId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.performer.detail(performerId) }),
   });
 
   function commit() {

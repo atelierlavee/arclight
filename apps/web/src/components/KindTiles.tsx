@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Clapperboard, Film, Layers, Tv } from "lucide-react";
 import { fetchCategories } from "@/lib/categoryApi";
 import { IMAGE_EPOCH, thumbnailUrl } from "@/lib/mediaItemApi";
+import { qk } from "@/lib/queryKeys";
 
 // Icons for the categories that ship by default. Anything you add gets a
 // neutral one — the label is what identifies it.
@@ -14,7 +15,7 @@ const ICONS: Record<string, typeof Film> = {
 
 export function KindTiles() {
   const { data, isLoading } = useQuery({
-    queryKey: ["categories"],
+    queryKey: qk.categories,
     queryFn: fetchCategories,
   });
   const categories = data?.categories ?? [];

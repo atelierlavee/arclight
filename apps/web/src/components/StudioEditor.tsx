@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { updateItem } from "@/lib/mediaItemApi";
 import { fetchStudios } from "@/lib/studioApi";
+import { qk } from "@/lib/queryKeys";
+import { invalidateItem } from "@/lib/invalidate";
 
 /**
  * Studio for one item. Read-only until the modal is in edit mode, matching
@@ -24,7 +26,7 @@ export function StudioEditor({
   // renamed on disk doesn't break links. Shares the ["studios"] key with the
   // sidebar and the studios page, so this is usually served from cache.
   const { data: studios } = useQuery({
-    queryKey: ["studios"],
+    queryKey: qk.studios.all,
     queryFn: fetchStudios,
     enabled: readOnly && studio !== null,
   });
@@ -34,9 +36,8 @@ export function StudioEditor({
   const mutation = useMutation({
     mutationFn: (next: string) => updateItem(itemId, { studio: next || null }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", itemId] });
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
-      queryClient.invalidateQueries({ queryKey: ["studios"] });
+      invalidateItem(queryClient, itemId);
+      queryClient.invalidateQueries({ queryKey: qk.studios.all });
     },
   });
 

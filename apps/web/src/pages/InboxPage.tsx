@@ -11,6 +11,7 @@ import { TagEditor } from "@/components/TagEditor";
 import { StarRating } from "@/components/StarRating";
 import { thumbnailUrl, framingStyle } from "@/lib/mediaItemApi";
 import { formatDuration } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 type InboxPerformer = { id: number; name: string };
 type InboxTag = { id: number; name: string };
@@ -94,7 +95,7 @@ export function InboxPage() {
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["inbox", page],
+    queryKey: qk.inbox.page(page),
     queryFn: async () => {
       const res = await fetch(`/api/inbox?page=${page}`);
       if (!res.ok) throw new Error("Failed to load inbox");
@@ -103,7 +104,7 @@ export function InboxPage() {
   });
 
   const { data: countData } = useQuery({
-    queryKey: ["inbox-count"],
+    queryKey: qk.inboxCount,
     queryFn: async () => {
       const res = await fetch("/api/inbox/count");
       if (!res.ok) throw new Error("Failed to load inbox count");
@@ -118,19 +119,19 @@ export function InboxPage() {
   const triageMutation = useMutation({
     mutationFn: (ids: number[]) => triageItems(ids),
     onSuccess: (_result, ids) => {
-      queryClient.setQueryData<InboxResponse>(["inbox", page], (current) => current
+      queryClient.setQueryData<InboxResponse>(qk.inbox.page(page), (current) => current
         ? { ...current, items: current.items.filter((entry) => !ids.includes(entry.id)) }
         : current);
-      queryClient.invalidateQueries({ queryKey: ["inbox"] });
-      queryClient.invalidateQueries({ queryKey: ["inbox-count"] });
+      queryClient.invalidateQueries({ queryKey: qk.inbox.all });
+      queryClient.invalidateQueries({ queryKey: qk.inboxCount });
     },
   });
 
   const triageAllMutation = useMutation({
     mutationFn: triageAll,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["inbox"] });
-      queryClient.invalidateQueries({ queryKey: ["inbox-count"] });
+      queryClient.invalidateQueries({ queryKey: qk.inbox.all });
+      queryClient.invalidateQueries({ queryKey: qk.inboxCount });
       setIndex(0);
       setPage(1);
     },

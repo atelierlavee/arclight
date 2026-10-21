@@ -6,6 +6,7 @@ import { StudioCard } from "@/components/StudioCard";
 import { fetchStudios } from "@/lib/studioApi";
 import { AlphabetIndex } from "@/components/AlphabetIndex";
 import { pinsChangedEvent, readPins } from "@/lib/pinned";
+import { qk } from "@/lib/queryKeys";
 
 export function StudiosPage() {
   const [letter, setLetter] = useState<string | null>(null);
@@ -16,7 +17,7 @@ export function StudiosPage() {
     return () => window.removeEventListener(pinsChangedEvent(), refresh);
   }, []);
   const { data, isLoading } = useQuery({
-    queryKey: ["studios"],
+    queryKey: qk.studios.all,
     queryFn: fetchStudios,
   });
   const studios = data?.studios ?? [];

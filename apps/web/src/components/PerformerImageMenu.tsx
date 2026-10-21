@@ -7,6 +7,7 @@ import {
   uploadPerformerImage,
   type PerformerImageKind,
 } from "@/lib/performerApi";
+import { invalidatePerformer } from "@/lib/invalidate";
 
 /**
  * Every edit for one performer image, behind a single pencil on the image
@@ -80,8 +81,7 @@ export function PerformerImageMenu({
   }, [open]);
 
   function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ["performer", performerId] });
-    queryClient.invalidateQueries({ queryKey: ["performers"] });
+    invalidatePerformer(queryClient, performerId);
   }
 
   const upload = useMutation({

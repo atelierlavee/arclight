@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { saveCategoryFraming, type Category } from "@/lib/categoryApi";
 import { FramingEditor, type FramingValue } from "./FramingEditor";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Drag-to-reframe for a category tile's cover.
@@ -32,7 +33,7 @@ export function CategoryCoverEditor({
         coverScale: next.scale,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: qk.categories });
       onDone();
     },
   });

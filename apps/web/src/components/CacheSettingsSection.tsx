@@ -3,6 +3,7 @@ import { HardDrive, Trash2 } from "lucide-react";
 import { formatBytes } from "@/lib/statsApi";
 import { useToast } from "@/lib/toast";
 import { SettingsSection } from "./SettingsSection";
+import { qk } from "@/lib/queryKeys";
 
 type CacheEntry = {
   name: string;
@@ -59,14 +60,14 @@ export function CacheSettingsSection() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data, isLoading } = useQuery({
-    queryKey: ["cache-usage"],
+    queryKey: qk.cacheUsage,
     queryFn: fetchCache,
   });
 
   const clear = useMutation({
     mutationFn: (names?: string[]) => clearCache(names),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["cache-usage"] });
+      queryClient.invalidateQueries({ queryKey: qk.cacheUsage });
       toast({
         title:
           result.removed === 0

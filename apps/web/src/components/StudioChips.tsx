@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * The studios in the library, as a row of chips above the grid.
@@ -38,7 +39,7 @@ export function StudioChips({
   /** Called with the studio's name, or null to clear. */
   onSelect: (studio: string | null) => void;
 }) {
-  const { data } = useQuery({ queryKey: ["studios"], queryFn: fetchStudios });
+  const { data } = useQuery({ queryKey: qk.studios.all, queryFn: fetchStudios });
 
   // Busiest first, so the row opens on the studios worth a shortcut. An
   // alphabetical row of forty would bury them behind whatever starts with A.

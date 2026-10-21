@@ -34,6 +34,7 @@ import { NetworkFilterChips } from "./performerNetwork/NetworkFilterChips";
 import { GraphControls } from "./performerNetwork/GraphControls";
 import { GraphStatus } from "./performerNetwork/GraphStatus";
 import { SelectionPanels } from "./performerNetwork/SelectionPanels";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Who appears with whom, across the whole library.
@@ -59,7 +60,7 @@ export function PerformerNetwork({
   const { discreet, discreetText, motion } = useAppearance();
   const mode: NetworkMode = view.by ?? "studios";
   const { data: fetched, isLoading } = useQuery({
-    queryKey: ["performers", "network", mode],
+    queryKey: qk.performers.network(mode),
     queryFn: () => fetchPerformerNetwork(mode),
     // The old graph stays up while the new mode loads, so switching modes
     // morphs the picture rather than blanking it.

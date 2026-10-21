@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { Portal } from "./Portal";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { qk } from "@/lib/queryKeys";
 
 type Option = { value: string; label: string };
 
@@ -144,7 +145,7 @@ export function CreateCollectionModal({ onClose }: { onClose: () => void }) {
   const mutation = useMutation({
     mutationFn: createCollection,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: qk.collections });
       onClose();
     },
   });

@@ -4,9 +4,9 @@ import { Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { SettingsSection } from "./SettingsSection";
 import { useToast } from "@/lib/toast";
 import { withPrivacyUnlock } from "@/lib/privacyLock";
-import { libraryStatsKey } from "@/lib/statsApi";
+import { qk } from "@/lib/queryKeys";
+import { invalidateKeys } from "@/lib/invalidate";
 import {
-  cleanupQueryKey,
   fetchRemovableData,
   purgeRemovableData,
   type RemovableData,
@@ -37,7 +37,7 @@ function summarise(data: RemovableData): string[] {
  */
 export function LibraryCleanupSection() {
   const { data, isLoading } = useQuery({
-    queryKey: cleanupQueryKey,
+    queryKey: qk.libraryCleanup,
     queryFn: fetchRemovableData,
   });
   const queryClient = useQueryClient();
@@ -49,19 +49,17 @@ export function LibraryCleanupSection() {
     mutationFn: () => withPrivacyUnlock(purgeRemovableData),
     onSuccess: (removed) => {
       setConfirming(false);
-      for (const key of [
-        cleanupQueryKey,
-        libraryStatsKey,
-        ["media-items"],
-        ["performers"],
-        ["studios"],
-        ["albums"],
-        ["series"],
-        ["tags"],
-        ["activity"],
-      ]) {
-        void queryClient.invalidateQueries({ queryKey: key });
-      }
+      invalidateKeys(queryClient, [
+        qk.libraryCleanup,
+        qk.libraryStats,
+        qk.mediaItems.all,
+        qk.performers.all,
+        qk.studios.all,
+        qk.albums.all,
+        qk.series.all,
+        qk.tags,
+        qk.activity.all,
+      ]);
       toast({
         title:
           removed.items > 0

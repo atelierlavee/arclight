@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { libraryStatsKey } from "@/lib/statsApi";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { FolderPlus, X } from "lucide-react";
@@ -18,6 +17,7 @@ import {
   hasActiveFilters,
   type Filters,
 } from "@/lib/filters";
+import { qk } from "@/lib/queryKeys";
 
 const routeApi = getRouteApi("/browse");
 
@@ -51,9 +51,9 @@ function NewFolderButton({ parentId }: { parentId: number | null }) {
   const mutation = useMutation({
     mutationFn: (name: string) => createFolder(name, parentId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
-      queryClient.invalidateQueries({ queryKey: ["folders"] });
-      queryClient.invalidateQueries({ queryKey: libraryStatsKey });
+      queryClient.invalidateQueries({ queryKey: qk.mediaItems.all });
+      queryClient.invalidateQueries({ queryKey: qk.folders });
+      queryClient.invalidateQueries({ queryKey: qk.libraryStats });
       setTitle("");
       setEditing(false);
     },
@@ -136,7 +136,7 @@ export function BrowsePage() {
   const filters = filtersFromSearch(search as Record<string, unknown>);
   const navigate = useNavigate();
   const { data: folderData } = useQuery({
-    queryKey: ["folders"],
+    queryKey: qk.folders,
     queryFn: async () => {
       const response = await fetch("/api/folders");
       if (!response.ok)

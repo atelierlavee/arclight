@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ImagePlus, Loader2, RotateCcw } from "lucide-react";
 import { resetThumbnail, uploadThumbnail } from "@/lib/mediaItemApi";
+import { invalidateItemEverywhere } from "@/lib/invalidate";
 
 /**
  * Replace or revert an item's thumbnail.
@@ -24,9 +25,8 @@ export function ThumbnailPicker({
   const queryClient = useQueryClient();
 
   function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ["media-item", itemId] });
-    queryClient.invalidateQueries({ queryKey: ["media-items"] });
-    queryClient.invalidateQueries({ queryKey: ["hero-items"] });
+    // Every surface that draws this thumbnail, not just the modal.
+    invalidateItemEverywhere(queryClient, itemId);
   }
 
   const upload = useMutation({

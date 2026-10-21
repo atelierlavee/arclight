@@ -6,6 +6,7 @@ import { fetchSettings, saveHeroSettings, type HeroSource } from "@/lib/settings
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { cn } from "@/lib/utils";
 import { SettingsSection } from "./SettingsSection";
+import { qk } from "@/lib/queryKeys";
 
 const SOURCES: { value: HeroSource; label: string; hint: string }[] = [
   { value: "manual", label: "Videos I pick", hint: "Only the ones you choose below, in this order." },
@@ -21,7 +22,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 export function HeroSettingsSection() {
   const queryClient = useQueryClient();
-  const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
+  const { data: settings } = useQuery({ queryKey: qk.settings, queryFn: fetchSettings });
 
   const [source, setSource] = useState<HeroSource>("recent");
   const [itemIds, setItemIds] = useState<number[]>([]);
@@ -56,7 +57,7 @@ export function HeroSettingsSection() {
   // One list request covers both the chosen titles and the pool to pick from
   // — a personal library sits well inside a single page.
   const { data: allItems } = useQuery({
-    queryKey: ["media-items", "hero-picker"],
+    queryKey: qk.mediaItems.heroPicker,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/media-items?type=video"),
   });
 
@@ -73,8 +74,8 @@ export function HeroSettingsSection() {
     mutationFn: () => saveHeroSettings({ source, itemIds }),
     onSuccess: () => {
       setSaved(true);
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
-      queryClient.invalidateQueries({ queryKey: ["hero-items"] });
+      queryClient.invalidateQueries({ queryKey: qk.settings });
+      queryClient.invalidateQueries({ queryKey: qk.heroItems });
     },
   });
 

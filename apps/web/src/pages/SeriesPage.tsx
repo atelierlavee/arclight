@@ -8,6 +8,7 @@ import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { PlaySurface } from "@/components/PlaySurface";
 import { fetchSeriesDetail } from "@/lib/seriesApi";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
+import { qk } from "@/lib/queryKeys";
 
 const routeApi = getRouteApi("/series/$seriesId");
 
@@ -17,7 +18,7 @@ export function SeriesPage() {
   const [season, setSeason] = useState<number | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
   const { data, isError, isLoading } = useQuery({
-    queryKey: ["series", id],
+    queryKey: qk.series.detail(id),
     queryFn: () => fetchSeriesDetail(id),
   });
 

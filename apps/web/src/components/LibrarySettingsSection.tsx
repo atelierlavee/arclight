@@ -13,7 +13,6 @@ import {
 import {
   addRoot,
   browseFolders,
-  cleanupQueryKey,
   fetchRoots,
   removeRoot,
 } from "@/lib/libraryApi";
@@ -22,6 +21,7 @@ import { withPrivacyUnlock } from "@/lib/privacyLock";
 import { useToast } from "@/lib/toast";
 import { RescanButton } from "./RescanButton";
 import { SettingsSection } from "./SettingsSection";
+import { qk } from "@/lib/queryKeys";
 
 export function LibrarySettingsSection() {
   const queryClient = useQueryClient();
@@ -30,22 +30,22 @@ export function LibrarySettingsSection() {
   const [dir, setDir] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: rootsData } = useQuery({ queryKey: ["library-roots"], queryFn: fetchRoots });
-  const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
+  const { data: rootsData } = useQuery({ queryKey: qk.libraryRoots, queryFn: fetchRoots });
+  const { data: settings } = useQuery({ queryKey: qk.settings, queryFn: fetchSettings });
 
   // Named with a trailing underscore to avoid shadowing window.setInterval.
   const setInterval_ = useMutation({
     mutationFn: saveScanInterval,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["settings"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.settings }),
   });
   const { data: listing } = useQuery({
-    queryKey: ["library-browse", dir ?? "root"],
+    queryKey: qk.libraryBrowse.dir(dir ?? "root"),
     queryFn: () => browseFolders(dir),
     enabled: browsing,
   });
 
   function refresh() {
-    queryClient.invalidateQueries({ queryKey: ["library-roots"] });
+    queryClient.invalidateQueries({ queryKey: qk.libraryRoots });
   }
 
   const add = useMutation({
@@ -74,7 +74,7 @@ export function LibrarySettingsSection() {
       refresh();
       // The cleanup panel counts what removal leaves behind, so it is wrong
       // the moment this finishes either way.
-      void queryClient.invalidateQueries({ queryKey: cleanupQueryKey });
+      void queryClient.invalidateQueries({ queryKey: qk.libraryCleanup });
     },
     onError: (error) =>
       toast({

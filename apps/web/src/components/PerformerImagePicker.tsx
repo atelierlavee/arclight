@@ -7,6 +7,7 @@ import {
   uploadPerformerImage,
   type PerformerImageKind,
 } from "@/lib/performerApi";
+import { invalidatePerformer } from "@/lib/invalidate";
 
 /**
  * Upload / replace / remove control for one performer image.
@@ -38,8 +39,7 @@ export function PerformerImagePicker({
   const queryClient = useQueryClient();
 
   function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ["performer", performerId] });
-    queryClient.invalidateQueries({ queryKey: ["performers"] });
+    invalidatePerformer(queryClient, performerId);
   }
 
   const upload = useMutation({

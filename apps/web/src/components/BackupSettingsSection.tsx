@@ -33,6 +33,7 @@ import { PrivacyUnlockForm } from "./PrivacyUnlockForm";
 import { RestoreBackupDialog } from "./RestoreBackupDialog";
 import { SettingsSection } from "./SettingsSection";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 function relativeDate(iso: string): string {
   const then = new Date(iso).getTime();
@@ -58,7 +59,7 @@ export function BackupSettingsSection() {
   const [restored, setRestored] = useState<RestoreResult | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  const { data } = useQuery({ queryKey: ["backups"], queryFn: fetchBackups });
+  const { data } = useQuery({ queryKey: qk.backups, queryFn: fetchBackups });
   const [verified, setVerified] = useState<VerifyResult | null>(null);
 
   const verify = useMutation({
@@ -69,7 +70,7 @@ export function BackupSettingsSection() {
   });
 
   function refresh() {
-    queryClient.invalidateQueries({ queryKey: ["backups"] });
+    queryClient.invalidateQueries({ queryKey: qk.backups });
   }
 
   const restore = useMutation({

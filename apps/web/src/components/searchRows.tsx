@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { framingStyle, thumbnailUrl } from "@/lib/mediaItemApi";
 import { circleStyle, performerPortraitUrl } from "@/lib/performerApi";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * The shared half of search: what a suggestion is, how it's fetched, and how
@@ -149,7 +150,7 @@ export function useSuggestionRows(value: string): { rows: Row[]; ready: boolean 
   }, [value]);
 
   const { data } = useQuery({
-    queryKey: ["search-suggestions", debounced],
+    queryKey: qk.searchSuggestions.forQuery(debounced),
     queryFn: () => fetchSuggestions(debounced),
     enabled: debounced.length >= MIN_QUERY_LENGTH,
     // Suggestions for a given prefix don't change as you type past it, and

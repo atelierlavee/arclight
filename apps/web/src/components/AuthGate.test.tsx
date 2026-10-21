@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loginWithPasskey } from "@/lib/webauthnApi";
 import { AuthGate } from "./AuthGate";
+import { qk } from "@/lib/queryKeys";
 
 vi.mock("@/lib/webauthnApi", () => ({
   fetchPasskeys: vi.fn(),
@@ -20,9 +21,9 @@ function renderGate(needsSetup = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  client.setQueryData(["auth-status"], { needsSetup, user: null });
-  client.setQueryData(["privacy"], { hasPassword: false });
-  client.setQueryData(["passkeys"], []);
+  client.setQueryData(qk.authStatus, { needsSetup, user: null });
+  client.setQueryData(qk.privacy, { hasPassword: false });
+  client.setQueryData(qk.passkeys, []);
   render(
     <QueryClientProvider client={client}>
       <AuthGate><p>Private library</p></AuthGate>

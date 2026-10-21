@@ -27,6 +27,8 @@ import {
   setPerformerFavorite,
 } from "@/lib/performerApi";
 import { useToast } from "@/lib/toast";
+import { qk } from "@/lib/queryKeys";
+import { invalidatePerformer } from "@/lib/invalidate";
 
 const routeApi = getRouteApi("/performer/$performerId");
 
@@ -52,10 +54,9 @@ export function PerformerPage() {
         imageScale: next.scale,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["performer", id] });
       // The cards on the performers page and the home row show the same
       // portrait, so they have to repaint too.
-      queryClient.invalidateQueries({ queryKey: ["performers"] });
+      invalidatePerformer(queryClient, id);
       setReframing(null);
     },
   });
@@ -67,9 +68,8 @@ export function PerformerPage() {
         next && { avatarPositionX: next.x, avatarPositionY: next.y, avatarScale: next.scale },
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["performer", id] });
       // Everywhere else a round picture of them appears.
-      queryClient.invalidateQueries({ queryKey: ["performers"] });
+      invalidatePerformer(queryClient, id);
       setReframing(null);
     },
   });
@@ -77,10 +77,9 @@ export function PerformerPage() {
   const favorite = useMutation({
     mutationFn: (next: boolean) => setPerformerFavorite(id, next),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["performer", id] });
       // The performers page pins favourites to the top, so its list has to
       // re-sort too.
-      queryClient.invalidateQueries({ queryKey: ["performers"] });
+      invalidatePerformer(queryClient, id);
     },
   });
 
@@ -88,10 +87,9 @@ export function PerformerPage() {
   const archive = useMutation({
     mutationFn: (next: boolean) => setPerformerArchived(id, next),
     onSuccess: (_, next) => {
-      queryClient.invalidateQueries({ queryKey: ["performer", id] });
       // The grid, the home row and the network all leave archived
       // performers out, and all sit under this prefix.
-      queryClient.invalidateQueries({ queryKey: ["performers"] });
+      invalidatePerformer(queryClient, id);
       toast({
         title: next ? "Archived" : "Restored",
         description: next
@@ -108,7 +106,7 @@ export function PerformerPage() {
   });
 
   const { data: performer, isError } = useQuery({
-    queryKey: ["performer", id],
+    queryKey: qk.performer.detail(id),
     queryFn: () => fetchPerformer(id),
   });
 

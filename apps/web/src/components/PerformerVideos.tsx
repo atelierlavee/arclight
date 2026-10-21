@@ -7,6 +7,7 @@ import type { PerformerDetail } from "@/lib/performerApi";
 import { SORT_OPTIONS, type SortValue } from "@/lib/filters";
 import { readSortPreference, writeSortPreference } from "@/lib/sortPreference";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 type Grouping = "studio" | "year" | "none";
 
@@ -44,7 +45,7 @@ function VideoSection({
   // `sort` is part of the key, or switching it would show the previous
   // order from cache until the request came back.
   const { data, isLoading } = useQuery({
-    queryKey: ["performer-videos", performer, params, sort],
+    queryKey: qk.performerVideos.list(performer, params, sort),
     queryFn: () => fetchItems(query),
   });
 

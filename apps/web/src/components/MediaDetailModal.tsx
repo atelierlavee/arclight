@@ -31,6 +31,7 @@ import { usePlayerKeyboard } from "./mediaDetail/usePlayerKeyboard";
 import { useQueueAdvance } from "./mediaDetail/useQueueAdvance";
 import { useScreenModes } from "./mediaDetail/useScreenModes";
 import { useVideoPlayback, type PlayerMode } from "./mediaDetail/useVideoPlayback";
+import { qk } from "@/lib/queryKeys";
 
 export function MediaDetailModal({
   itemId,
@@ -64,7 +65,7 @@ export function MediaDetailModal({
   useFocusTrap(panelRef, !mini);
 
   const { data: item } = useQuery({
-    queryKey: ["media-item", viewingId],
+    queryKey: qk.mediaItem.detail(viewingId),
     queryFn: () => fetchItem(viewingId),
   });
 

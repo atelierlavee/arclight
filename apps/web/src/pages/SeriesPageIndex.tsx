@@ -6,10 +6,11 @@ import { AlphabetIndex } from "@/components/AlphabetIndex";
 import { fetchSeries } from "@/lib/seriesApi";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { useState } from "react";
+import { qk } from "@/lib/queryKeys";
 
 export function SeriesPageIndex() {
   const [letter, setLetter] = useState<string | null>(null);
-  const { data, isLoading } = useQuery({ queryKey: ["series"], queryFn: fetchSeries });
+  const { data, isLoading } = useQuery({ queryKey: qk.series.all, queryFn: fetchSeries });
   const all = data?.series ?? [];
   const visible = letter
     ? all.filter((entry) => {

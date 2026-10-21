@@ -11,6 +11,7 @@ import {
   type WatchLogEntry,
 } from "@/lib/insights";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 const LEVELS = [
   "bg-white/[0.06]",
@@ -22,7 +23,7 @@ const LEVELS = [
 
 export function StreakWidget() {
   const { data, isLoading } = useQuery({
-    queryKey: ["streak"],
+    queryKey: qk.streak,
     queryFn: async () => {
       const res = await fetch("/api/streak");
       if (!res.ok) throw new Error("Failed to fetch streak");

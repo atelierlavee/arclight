@@ -5,6 +5,7 @@ import { CHART_COLORS, REST_COLOR } from "@/lib/donut";
 import { formatBytes } from "@/lib/statsApi";
 import { squarify } from "@/lib/treemap";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 type TreemapNode = { name: string; path: string | null; bytes: number; files: number };
 type TreemapResponse = {
@@ -34,7 +35,7 @@ export function StorageTreemap() {
   const [path, setPath] = useState<string | undefined>(undefined);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["storage-treemap", path ?? "root"],
+    queryKey: qk.storageTreemap(path ?? "root"),
     queryFn: () => fetchTreemap(path),
   });
 

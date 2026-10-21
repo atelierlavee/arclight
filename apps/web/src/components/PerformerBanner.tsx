@@ -5,6 +5,7 @@ import { saveBannerPosition } from "@/lib/performerApi";
 import { useAppearance } from "@/lib/appearance";
 import { framingAfterDrag } from "@/lib/reposition";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Banner image with drag-to-reposition.
@@ -55,7 +56,7 @@ export function PerformerBanner({
   const save = useMutation({
     mutationFn: (value: number) => saveBannerPosition(performerId, value),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["performer", performerId] });
+      queryClient.invalidateQueries({ queryKey: qk.performer.detail(performerId) });
       setEditing(false);
     },
   });

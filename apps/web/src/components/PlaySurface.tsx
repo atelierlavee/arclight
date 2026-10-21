@@ -3,6 +3,7 @@ import { Dices, Play, RotateCcw } from "lucide-react";
 import { useQueue, type QueueItem } from "@/lib/queue";
 import type { MediaCardItem } from "./MediaCard";
 import type { GridSource } from "./MediaGrid";
+import { qk } from "@/lib/queryKeys";
 
 const MIN_RESUMABLE_SECONDS = 15;
 const PLAY_EVENT = "media-server:play-item";
@@ -54,7 +55,7 @@ export function PlaySurface({
 }) {
   const { add, clear } = useQueue();
   const { data, isLoading } = useQuery({
-    queryKey: ["play-surface", source, directItems?.map((item) => item.id)],
+    queryKey: qk.playSurface.list(source, directItems?.map((item) => item.id)),
     queryFn: async () => {
       if (directItems) return directItems;
       if (!source) return [];

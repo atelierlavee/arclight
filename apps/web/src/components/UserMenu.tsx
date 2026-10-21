@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { fetchAuthStatus, logout, type AuthStatus } from "@/lib/authApi";
 import { useToast } from "@/lib/toast";
 import { clearUserLocalData } from "@/lib/userData";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Account avatar in the header, with a sign-out menu.
@@ -19,7 +20,7 @@ export function UserMenu() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: auth } = useQuery({ queryKey: ["auth-status"], queryFn: fetchAuthStatus });
+  const { data: auth } = useQuery({ queryKey: qk.authStatus, queryFn: fetchAuthStatus });
 
   const signOut = useMutation({
     mutationFn: logout,
@@ -28,12 +29,12 @@ export function UserMenu() {
       // Cancel requests first so a stale response cannot restore the session.
       await queryClient.cancelQueries();
       queryClient.removeQueries({
-        predicate: (query) => query.queryKey[0] !== "auth-status",
+        predicate: (query) => query.queryKey[0] !== qk.authStatus[0],
       });
       // Before the auth change unmounts the app, so nothing still mounted
       // writes the queue back after it has been cleared.
       clearUserLocalData();
-      queryClient.setQueryData<AuthStatus>(["auth-status"], {
+      queryClient.setQueryData<AuthStatus>(qk.authStatus, {
         needsSetup: false,
         user: null,
       });

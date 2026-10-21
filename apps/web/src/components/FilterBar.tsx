@@ -9,6 +9,7 @@ import {
   type Filters,
 } from "@/lib/filters";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 type NamedRow = { id: number; name: string };
 
@@ -92,12 +93,12 @@ export function FilterMenu({
   // Only fetched once the panel is opened. A browse page that never opens it
   // shouldn't pay for two lists it isn't going to show (§31).
   const { data: tagData } = useQuery({
-    queryKey: ["tags"],
+    queryKey: qk.tags,
     queryFn: () => fetchJson<{ tags: NamedRow[] }>("/api/tags"),
     enabled: open,
   });
   const { data: performerData } = useQuery({
-    queryKey: ["performers"],
+    queryKey: qk.performers.all,
     queryFn: () => fetchJson<{ performers: NamedRow[] }>("/api/performers"),
     enabled: open,
   });

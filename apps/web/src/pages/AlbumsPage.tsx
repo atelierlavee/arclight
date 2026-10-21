@@ -6,6 +6,7 @@ import { PageScope } from "@/lib/appearance";
 import { coverFramingStyle, fetchAlbums, type AlbumSummary } from "@/lib/albumApi";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 function AlbumCard({ album }: { album: AlbumSummary }) {
   const framing = coverFramingStyle(album);
@@ -61,7 +62,7 @@ function AlbumCard({ album }: { album: AlbumSummary }) {
 export function AlbumsPage() {
   // Wrapped, not passed by reference: react-query hands the query context
   // as the first argument, which fetchAlbums would read as a performer name.
-  const { data, isLoading } = useQuery({ queryKey: ["albums"], queryFn: () => fetchAlbums() });
+  const { data, isLoading } = useQuery({ queryKey: qk.albums.all, queryFn: () => fetchAlbums() });
   const albums = data?.albums ?? [];
 
   return (

@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
+import { qk } from "@/lib/queryKeys";
 
 type GalleryImage = { id: number; title: string; thumbnailFile: string | null };
 
@@ -24,7 +25,7 @@ async function fetchGallery(
  */
 export function GalleryStrip({ itemId }: { itemId: number }) {
   const { data } = useQuery({
-    queryKey: ["gallery", itemId],
+    queryKey: qk.gallery(itemId),
     queryFn: () => fetchGallery(itemId),
   });
   const images = data?.images ?? [];

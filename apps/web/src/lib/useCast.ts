@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { qk } from "./queryKeys";
 
 type CastLink = { url: string; lanReachable: boolean };
 
@@ -98,7 +99,7 @@ export function useCast(
   }, [active, videoRef, elementKey]);
 
   const { data: link } = useQuery({
-    queryKey: ["cast-link", itemId],
+    queryKey: qk.castLink(itemId),
     queryFn: async (): Promise<CastLink> => {
       const res = await fetch(`/api/media-items/${itemId}/cast`);
       if (!res.ok) throw new Error(`Could not make a cast link: ${res.status}`);

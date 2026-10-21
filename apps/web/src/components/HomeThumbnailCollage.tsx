@@ -5,6 +5,7 @@ import { framingStyle, thumbnailUrl } from "@/lib/mediaItemApi";
 import { useAppearance } from "@/lib/appearance";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Heart } from "lucide-react";
+import { qk } from "@/lib/queryKeys";
 
 const TILE_COUNT = 48;
 
@@ -22,7 +23,7 @@ export function HomeThumbnailCollage() {
   const sectionRef = useRef<HTMLElement>(null);
   const [size, setSize] = useState({ width: 1200, height: 560 });
   const { data: videos = [], error, isPending, refetch } = useQuery({
-    queryKey: ["media-items", "home-collage"],
+    queryKey: qk.mediaItems.homeCollage,
     queryFn: fetchCollageVideos,
     refetchInterval: 30_000,
   });

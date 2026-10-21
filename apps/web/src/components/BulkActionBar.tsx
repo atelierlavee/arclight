@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Check, Eye, EyeOff, Heart, HeartOff, Star, Tag, User, X } from "lucide-react";
 import { useToast } from "@/lib/toast";
 import { summariseBulk, type BulkResult } from "@/lib/bulkSummary";
-import { libraryStatsKey } from "@/lib/statsApi";
+import { invalidateItemEverywhere } from "@/lib/invalidate";
 import {
   addItemsToCollection,
   removeItemsFromCollection,
@@ -14,6 +14,7 @@ import {
   setTagOnItems,
   setWatchedOnItems,
 } from "@/lib/bulkActions";
+import { qk } from "@/lib/queryKeys";
 
 type Collection = { id: number; name: string; type: "manual" | "smart" };
 
@@ -51,7 +52,7 @@ export function BulkActionBar({
   const queryClient = useQueryClient();
   const { toast, update } = useToast();
   const { data } = useQuery({
-    queryKey: ["collections"],
+    queryKey: qk.collections,
     queryFn: fetchCollections,
   });
 
@@ -100,19 +101,11 @@ export function BulkActionBar({
    * a bulk run touches favourites, watch state and collection membership in
    * whatever combination the user clicked, and working out the minimal set
    * per action is how a stale Continue Watching row survives a "mark
-   * watched" on forty items.
+   * watched" on forty items. The same list a single hidden item clears.
    */
   function refreshEverything() {
-    for (const key of [
-      ["media-items"],
-      ["media-item"],
-      ["collection-items"],
-      ["continue-watching"],
-      libraryStatsKey,
-      ["tags"],
-    ]) {
-      queryClient.invalidateQueries({ queryKey: key });
-    }
+    invalidateItemEverywhere(queryClient);
+    void queryClient.invalidateQueries({ queryKey: qk.tags });
   }
 
   // Deliberately doesn't call onDone() on success — a selection often needs
@@ -170,7 +163,7 @@ export function BulkActionBar({
       ),
     onSuccess: () => {
       refreshEverything();
-      queryClient.invalidateQueries({ queryKey: ["performers"] });
+      queryClient.invalidateQueries({ queryKey: qk.performers.all });
       setPerformerInput("");
     },
   });
@@ -184,7 +177,7 @@ export function BulkActionBar({
       ),
     onSuccess: () => {
       refreshEverything();
-      queryClient.invalidateQueries({ queryKey: ["studios"] });
+      queryClient.invalidateQueries({ queryKey: qk.studios.all });
       setStudioInput("");
     },
   });

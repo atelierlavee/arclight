@@ -17,6 +17,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { throwIfNotOk, withPrivacyUnlock } from "@/lib/privacyLock";
 import { useToast } from "@/lib/toast";
+import { qk } from "@/lib/queryKeys";
 
 type ActivityEvent = {
   id: number;
@@ -103,7 +104,7 @@ export function ActivityLogSection() {
   const [activeType, setActiveType] = useState<string | undefined>(undefined);
 
   const { data, isError, isLoading } = useQuery({
-    queryKey: ["activity", activeType],
+    queryKey: qk.activity.byType(activeType),
     queryFn: () => fetchActivity(activeType),
   });
 
@@ -115,7 +116,7 @@ export function ActivityLogSection() {
         await throwIfNotOk(response, "Failed to clear activity");
       }),
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["activity"] }),
+      queryClient.invalidateQueries({ queryKey: qk.activity.all }),
     onError: (error) =>
       toast({
         title: "Could not clear the activity log",

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { MediaCardItem } from "./MediaCard";
 import { MediaRow } from "./MediaRow";
+import { qk } from "@/lib/queryKeys";
 
 async function fetchRelated(id: number): Promise<{ items: MediaCardItem[] }> {
   const res = await fetch(`/api/media-items/${id}/related`);
@@ -18,7 +19,7 @@ export function RelatedItems({
   onSelect: (id: number) => void;
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["related-items", itemId],
+    queryKey: qk.relatedItems.forItem(itemId),
     queryFn: () => fetchRelated(itemId),
   });
 

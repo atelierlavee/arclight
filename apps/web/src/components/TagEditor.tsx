@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { saveTags, type Tag } from "@/lib/mediaItemApi";
 import { useToast } from "@/lib/toast";
+import { qk } from "@/lib/queryKeys";
+import { invalidateItem } from "@/lib/invalidate";
 
 export function TagEditor({
   itemId,
@@ -29,11 +31,10 @@ export function TagEditor({
   const mutation = useMutation({
     mutationFn: (tagNames: string[]) => saveTags(itemId, tagNames),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", itemId] });
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
-      queryClient.invalidateQueries({ queryKey: ["tags"] });
-      queryClient.invalidateQueries({ queryKey: ["collection-items"] });
-      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      invalidateItem(queryClient, itemId);
+      queryClient.invalidateQueries({ queryKey: qk.tags });
+      queryClient.invalidateQueries({ queryKey: qk.collectionItems.all });
+      queryClient.invalidateQueries({ queryKey: qk.inbox.all });
     },
     // Tags are edited optimistically in `pending`, so a failed save otherwise
     // leaves the chips showing a state the server never accepted.

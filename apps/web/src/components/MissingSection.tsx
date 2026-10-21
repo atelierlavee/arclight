@@ -3,17 +3,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileQuestion, Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { MediaCard } from "./MediaCard";
 import { useToast } from "@/lib/toast";
-import { formatBytes, libraryStatsKey } from "@/lib/statsApi";
+import { formatBytes } from "@/lib/statsApi";
 import { tileWidthPx, useAppearance } from "@/lib/appearance";
 import { cardLayout } from "@/lib/layout";
 import {
   fetchMissing,
   forgetAllMissing,
   forgetMissing,
-  missingQueryKey,
   PrivacyLockedError,
   type MissingVideo,
 } from "@/lib/missingApi";
+import { qk } from "@/lib/queryKeys";
 
 function formatDate(value: string | null): string {
   if (!value) return "Unknown";
@@ -36,7 +36,7 @@ function formatDate(value: string | null): string {
  */
 export function MissingSection({ onLocked }: { onLocked?: () => void }) {
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: missingQueryKey,
+    queryKey: qk.missingVideos,
     queryFn: fetchMissing,
     // A locked session is answered by the prompt, not by retrying into a wall.
     retry: (_count, err) => !(err instanceof PrivacyLockedError),
@@ -61,11 +61,11 @@ export function MissingSection({ onLocked }: { onLocked?: () => void }) {
   function settle(removed: number) {
     setSelected(new Set());
     setConfirmingAll(false);
-    void queryClient.invalidateQueries({ queryKey: missingQueryKey });
+    void queryClient.invalidateQueries({ queryKey: qk.missingVideos });
     // The health panel counts these, so it is wrong the moment this succeeds.
-    void queryClient.invalidateQueries({ queryKey: libraryStatsKey });
-    void queryClient.invalidateQueries({ queryKey: ["media-items"] });
-    void queryClient.invalidateQueries({ queryKey: ["activity"] });
+    void queryClient.invalidateQueries({ queryKey: qk.libraryStats });
+    void queryClient.invalidateQueries({ queryKey: qk.mediaItems.all });
+    void queryClient.invalidateQueries({ queryKey: qk.activity.all });
     toast({
       title: `Removed ${removed} ${removed === 1 ? "video" : "videos"}`,
       description: "Their files were already gone. Nothing on disk changed.",

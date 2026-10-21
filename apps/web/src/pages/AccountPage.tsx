@@ -9,12 +9,13 @@ import {
   settingsInputClass,
 } from "@/components/SettingsSection";
 import { changePassword, fetchAuthStatus, updateUsername } from "@/lib/authApi";
+import { qk } from "@/lib/queryKeys";
 
 const MIN_PASSWORD_LENGTH = 8;
 
 function UsernameSection() {
   const queryClient = useQueryClient();
-  const { data: auth } = useQuery({ queryKey: ["auth-status"], queryFn: fetchAuthStatus });
+  const { data: auth } = useQuery({ queryKey: qk.authStatus, queryFn: fetchAuthStatus });
   const [username, setUsername] = useState("");
   const [saved, setSaved] = useState(false);
 
@@ -24,7 +25,7 @@ function UsernameSection() {
     mutationFn: () => updateUsername(username.trim()),
     onSuccess: () => {
       setSaved(true);
-      queryClient.invalidateQueries({ queryKey: ["auth-status"] });
+      queryClient.invalidateQueries({ queryKey: qk.authStatus });
     },
   });
 
@@ -139,7 +140,7 @@ function PasswordSection() {
 
 /** Your profile: who you are, a way into your stats, and your sign-in details. */
 export function AccountPage() {
-  const { data: auth } = useQuery({ queryKey: ["auth-status"], queryFn: fetchAuthStatus });
+  const { data: auth } = useQuery({ queryKey: qk.authStatus, queryFn: fetchAuthStatus });
   const name = auth?.user?.username ?? "";
 
   return (

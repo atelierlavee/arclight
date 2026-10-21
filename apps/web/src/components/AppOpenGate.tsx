@@ -4,6 +4,7 @@ import { Clapperboard, Loader2 } from "lucide-react";
 import { fetchPasskeys } from "@/lib/webauthnApi";
 import { fetchPrivacyStatus } from "@/lib/privacyApi";
 import { PrivacyUnlockForm } from "./PrivacyUnlockForm";
+import { qk } from "@/lib/queryKeys";
 
 const UNLOCK_KEY = "media-server:app-open-unlocked";
 
@@ -25,8 +26,8 @@ export function clearAppOpenUnlock(): void {
 
 export function AppOpenGate({ children }: { children: React.ReactNode }) {
   const [unlocked, setUnlocked] = useState(readUnlocked);
-  const privacy = useQuery({ queryKey: ["privacy"], queryFn: fetchPrivacyStatus });
-  const passkeys = useQuery({ queryKey: ["passkeys"], queryFn: fetchPasskeys });
+  const privacy = useQuery({ queryKey: qk.privacy, queryFn: fetchPrivacyStatus });
+  const passkeys = useQuery({ queryKey: qk.passkeys, queryFn: fetchPasskeys });
 
   if (privacy.isPending || passkeys.isPending) {
     return (

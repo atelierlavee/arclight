@@ -9,6 +9,7 @@ import { fetchItem, thumbnailUrl } from "@/lib/mediaItemApi";
 import { circleStyle, performerPortraitUrl } from "@/lib/performerApi";
 import { numberOneFacts, numberOneTrivia } from "./statsData";
 import type { Headline } from "./useHeadline";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * The #1 video: its preview drifting slowly (Ken Burns) under a black wash,
@@ -35,7 +36,7 @@ export function NumberOne({
   // The item itself, for who's in it, its studio, year and resume position.
   // Shares its cache entry with the pinned-video lookup.
   const { data: detail } = useQuery({
-    queryKey: ["media-item", item.id],
+    queryKey: qk.mediaItem.detail(item.id),
     queryFn: () => fetchItem(item.id),
     retry: false,
   });

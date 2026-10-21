@@ -38,6 +38,7 @@ import {
   type Row,
 } from "./searchRows";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Search from anywhere, Spotlight-style.
@@ -153,7 +154,7 @@ export function SpotlightSearch() {
           void startScan()
             .then(({ id }) => {
               toast({ title: "Scan started", variant: "info" });
-              void queryClient.invalidateQueries({ queryKey: ["scan-latest"] });
+              void queryClient.invalidateQueries({ queryKey: qk.scanLatest });
               return followScan(queryClient, id);
             })
             .then((job) => {

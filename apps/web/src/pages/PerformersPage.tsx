@@ -13,6 +13,7 @@ import { pinsChangedEvent, readPins } from "@/lib/pinned";
 import { tileWidthPx, useAppearance, PageScope } from "@/lib/appearance";
 import { cardLayout } from "@/lib/layout";
 import { cn } from "@/lib/utils";
+import { qk } from "@/lib/queryKeys";
 
 const routeApi = getRouteApi("/performers");
 
@@ -132,7 +133,7 @@ export function PerformersPage() {
   // would leak archived performers back into them. Still under the prefix,
   // so every invalidation of ["performers"] refreshes this too.
   const { data } = useQuery({
-    queryKey: ["performers", "with-archived"],
+    queryKey: qk.performers.withArchived,
     queryFn: () =>
       fetchJson<{ performers: PerformerSummary[] }>(
         "/api/performers?archived=include",

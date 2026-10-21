@@ -6,6 +6,8 @@ import { savePerformers, type Performer } from "@/lib/mediaItemApi";
 import { circleStyle, performerPortraitUrl } from "@/lib/performerApi";
 import { PerformerAvatar } from "./PerformerAvatar";
 import type { PerformerSummary } from "./PerformerCard";
+import { qk } from "@/lib/queryKeys";
+import { invalidateItem } from "@/lib/invalidate";
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -38,7 +40,7 @@ export function PerformerEditor({
   // performers list. Same query key the homepage row uses, so this is served
   // from cache rather than costing another request.
   const { data: allPerformers } = useQuery({
-    queryKey: ["performers"],
+    queryKey: qk.performers.all,
     queryFn: () => fetchJson<{ performers: PerformerSummary[] }>("/api/performers"),
   });
 
@@ -49,15 +51,14 @@ export function PerformerEditor({
   const mutation = useMutation({
     mutationFn: (performerNames: string[]) => savePerformers(itemId, performerNames),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", itemId] });
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
-      queryClient.invalidateQueries({ queryKey: ["performers"] });
+      invalidateItem(queryClient, itemId);
+      queryClient.invalidateQueries({ queryKey: qk.performers.all });
       // Every performer page this item is on or just left: their profile
       // counts and video lists both include it. All of them rather than by
       // id, since a name added here may be a performer created by the save.
-      queryClient.invalidateQueries({ queryKey: ["performer"] });
-      queryClient.invalidateQueries({ queryKey: ["performer-videos"] });
-      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      queryClient.invalidateQueries({ queryKey: qk.performer.all });
+      queryClient.invalidateQueries({ queryKey: qk.performerVideos.all });
+      queryClient.invalidateQueries({ queryKey: qk.inbox.all });
     },
   });
 

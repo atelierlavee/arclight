@@ -10,6 +10,7 @@ import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { fetchStudio, type StudioDetail } from "@/lib/studioApi";
 import { PlaySurface } from "@/components/PlaySurface";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { qk } from "@/lib/queryKeys";
 
 const routeApi = getRouteApi("/studio/$studioId");
 
@@ -78,7 +79,7 @@ export function StudioPage() {
   );
 
   const { data: studio, isError } = useQuery({
-    queryKey: ["studio", id],
+    queryKey: qk.studio.detail(id),
     queryFn: () => fetchStudio(id),
   });
 

@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { libraryStatsKey } from "./statsApi";
+import { qk } from "./queryKeys";
+import { invalidateKeys } from "./invalidate";
 
 export type ScanJob = {
   id: number;
@@ -32,24 +33,22 @@ export async function fetchScanJob(id: number): Promise<ScanJob> {
  * series, and change every count — invalidating only media-items left the
  * rest stale.
  *
- * Keys that a module owns are imported from it rather than spelled inline:
- * an inline key that no component actually queries under is invisibly dead,
+ * Keys come from the shared factory rather than being spelled inline: an
+ * inline key that no component actually queries under is invisibly dead,
  * which is exactly how the library stats went stale here until a page reload.
  */
 export function invalidateAfterScan(queryClient: QueryClient): void {
-  for (const key of [
-    ["media-items"],
-    ["performers"],
-    ["studios"],
-    libraryStatsKey,
-    ["albums"],
-    ["series"],
-    ["hero-items"],
-    ["library-roots"],
-    ["scan-latest"],
-  ]) {
-    void queryClient.invalidateQueries({ queryKey: key });
-  }
+  invalidateKeys(queryClient, [
+    qk.mediaItems.all,
+    qk.performers.all,
+    qk.studios.all,
+    qk.libraryStats,
+    qk.albums.all,
+    qk.series.all,
+    qk.heroItems,
+    qk.libraryRoots,
+    qk.scanLatest,
+  ]);
 }
 
 /**

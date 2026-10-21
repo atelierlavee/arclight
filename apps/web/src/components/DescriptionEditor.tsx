@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { updateItem } from "@/lib/mediaItemApi";
+import { qk } from "@/lib/queryKeys";
 
 export function DescriptionEditor({
   itemId,
@@ -18,7 +19,7 @@ export function DescriptionEditor({
     mutationFn: (newDescription: string) =>
       updateItem(itemId, { description: newDescription || null }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", itemId] });
+      queryClient.invalidateQueries({ queryKey: qk.mediaItem.detail(itemId) });
     },
   });
 

@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FramingValue } from "../FramingEditor";
 import { setWatched, updateItem } from "@/lib/mediaItemApi";
 import { useUndoable } from "@/lib/undo";
+import { qk } from "@/lib/queryKeys";
+import { invalidateItem, invalidateItemEverywhere, invalidateItemWatchState } from "@/lib/invalidate";
 
 /**
  * The writes the modal makes to the item it is showing: its category,
@@ -22,12 +24,11 @@ export function useItemActions({
   const updateKind = useMutation({
     mutationFn: (kind: string) => updateItem(viewingId, { kind }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", viewingId] });
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
+      invalidateItem(queryClient, viewingId);
       // The home page tiles show per-category counts, and they read
       // ["categories"] — invalidating ["kinds"] refreshed nothing, since no
       // component has used that key since categories became editable data.
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: qk.categories });
     },
   });
 
@@ -51,8 +52,7 @@ export function useItemActions({
       },
       revert: (previous) => updateItem(viewingId, { isFavorite: previous }),
       onSettled: () => {
-        queryClient.invalidateQueries({ queryKey: ["media-item", viewingId] });
-        queryClient.invalidateQueries({ queryKey: ["media-items"] });
+        invalidateItem(queryClient, viewingId);
       },
     });
   }
@@ -64,11 +64,8 @@ export function useItemActions({
         thumbnailScale: next.scale,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", viewingId] });
       // Every surface showing this thumbnail has to repaint, not just the modal.
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
-      queryClient.invalidateQueries({ queryKey: ["hero-items"] });
-      queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
+      invalidateItemEverywhere(queryClient, viewingId);
       onFramingSaved();
     },
   });
@@ -76,11 +73,10 @@ export function useItemActions({
   const toggleWatched = useMutation({
     mutationFn: (next: boolean) => setWatched(viewingId, next),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", viewingId] });
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
       // Marking something watched is exactly what should drop it out of
-      // Continue Watching, so that row has to refetch.
-      queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
+      // Continue Watching (and the performer page's in-progress row), so
+      // those rows have to refetch.
+      invalidateItemWatchState(queryClient, viewingId);
     },
   });
 

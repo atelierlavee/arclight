@@ -9,6 +9,7 @@ import { useAppearance } from "@/lib/appearance";
 import { useIsMobile } from "@/lib/useMediaQuery";
 import { cn } from "@/lib/utils";
 import type { MediaCardItem } from "./MediaCard";
+import { qk } from "@/lib/queryKeys";
 
 // How long each featured item stays before the hero rotates.
 const ROTATE_MS = 14000;
@@ -85,7 +86,7 @@ function HeroSlide({
   // a studio doesn't break links. Shares the ["studios"] key with the studios
   // page and the detail modal, so this is usually served from cache.
   const { data: studios } = useQuery({
-    queryKey: ["studios"],
+    queryKey: qk.studios.all,
     queryFn: fetchStudios,
     enabled: Boolean(item.studio),
   });

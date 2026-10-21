@@ -26,6 +26,7 @@ import { libraryReach, totalSeconds } from "./stats/statsData";
 import { Trophies } from "./stats/Trophies";
 import { useHeadline } from "./stats/useHeadline";
 import { YourYear } from "./stats/YourYear";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Your viewing as an editorial "year in review" rather than a dashboard:
@@ -48,8 +49,8 @@ export function StatsPage() {
 
 /** Your viewing, looked back on. */
 function StatsView() {
-  const { data, isLoading } = useQuery({ queryKey: ["insights"], queryFn: fetchInsights });
-  const { data: auth } = useQuery({ queryKey: ["auth-status"], queryFn: fetchAuthStatus });
+  const { data, isLoading } = useQuery({ queryKey: qk.insights, queryFn: fetchInsights });
+  const { data: auth } = useQuery({ queryKey: qk.authStatus, queryFn: fetchAuthStatus });
   const [open, setOpen] = useState<{ id: number; autoPlay: boolean; resume?: boolean } | null>(null);
   const openItem = (id: number) => setOpen({ id, autoPlay: false });
   const playItem = (id: number, resume = false) => setOpen({ id, autoPlay: true, resume });
@@ -87,7 +88,7 @@ function StatsStory({
   const headline = useHeadline(data, hall.mainEvent);
   const hasHistory = total >= 60;
   // Shared with the app-wide unlock watcher, which keeps it current.
-  const { data: record } = useQuery({ queryKey: ["achievements"], queryFn: fetchAchievements, staleTime: Infinity });
+  const { data: record } = useQuery({ queryKey: qk.achievements, queryFn: fetchAchievements, staleTime: Infinity });
 
   // An unlock toast's "View" lands here with #trophies; the chapter only
   // exists once the data has, so the browser's own jump would miss it.

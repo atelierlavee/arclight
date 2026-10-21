@@ -4,6 +4,7 @@ import { Clapperboard, Fingerprint, Loader2, WifiOff } from "lucide-react";
 import { LanBlockedError, fetchAuthStatus, login, setupAccount } from "@/lib/authApi";
 import { loginWithPasskey } from "@/lib/webauthnApi";
 import { AppOpenGate, clearAppOpenUnlock } from "./AppOpenGate";
+import { qk } from "@/lib/queryKeys";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -16,7 +17,7 @@ const MIN_PASSWORD_LENGTH = 8;
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const { data: status, isLoading, error } = useQuery({
-    queryKey: ["auth-status"],
+    queryKey: qk.authStatus,
     queryFn: fetchAuthStatus,
     // A 401 from anywhere else means the session died; re-checking on focus
     // moves you to the login screen rather than leaving a broken page.
@@ -49,7 +50,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       mode={status?.needsSetup ? "setup" : "login"}
       onSuccess={() => {
         clearAppOpenUnlock();
-        return queryClient.invalidateQueries({ queryKey: ["auth-status"] });
+        return queryClient.invalidateQueries({ queryKey: qk.authStatus });
       }}
     />
   );

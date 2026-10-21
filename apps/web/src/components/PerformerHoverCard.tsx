@@ -6,6 +6,7 @@ import { fetchPerformer, performerBannerUrl } from "@/lib/performerApi";
 import { flyoutBox } from "@/lib/hoverCard";
 import { Portal } from "./Portal";
 import type { PerformerSummary } from "./PerformerCard";
+import { qk } from "@/lib/queryKeys";
 
 function formatDuration(seconds: number): string | null {
   if (!seconds) return null;
@@ -51,7 +52,7 @@ export function PerformerHoverCard({
 }) {
   const navigate = useNavigate();
   const { data } = useQuery({
-    queryKey: ["performer", performer.id],
+    queryKey: qk.performer.detail(performer.id),
     queryFn: () => fetchPerformer(performer.id),
   });
   // The banner, not the portrait: this panel is a wide strip, and a 2:3

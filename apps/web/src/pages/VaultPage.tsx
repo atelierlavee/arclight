@@ -21,6 +21,7 @@ import {
 } from "@/lib/vaultApi";
 import { formatDuration } from "@/lib/utils";
 import { fetchPasskeys, unlockVaultWithPasskey } from "@/lib/webauthnApi";
+import { itemScopedKeys, qk } from "@/lib/queryKeys";
 
 /**
  * Drops everything cached about the vault's contents.
@@ -31,22 +32,15 @@ import { fetchPasskeys, unlockVaultWithPasskey } from "@/lib/webauthnApi";
  * into through the detail modal.
  */
 function forgetVaultContents(queryClient: QueryClient): void {
-  const page = queryClient.getQueryData<VaultItemsPage>(["vault-items"]);
+  const page = queryClient.getQueryData<VaultItemsPage>(qk.vaultItems);
   for (const item of page?.items ?? []) {
-    for (const root of [
-      "media-item",
-      "gallery",
-      "bookmarks",
-      "heatmap",
-      "scrub-sprite",
-      "cast-link",
-    ]) {
-      queryClient.removeQueries({ queryKey: [root, item.id] });
+    for (const queryKey of itemScopedKeys(item.id)) {
+      queryClient.removeQueries({ queryKey });
     }
   }
   // Related lists computed while unlocked may include hidden items.
-  queryClient.removeQueries({ queryKey: ["related-items"] });
-  queryClient.removeQueries({ queryKey: ["vault-items"] });
+  queryClient.removeQueries({ queryKey: qk.relatedItems.all });
+  queryClient.removeQueries({ queryKey: qk.vaultItems });
 }
 
 /**
@@ -58,7 +52,7 @@ async function closeVault(queryClient: QueryClient): Promise<void> {
   try {
     await lockVault();
   } finally {
-    void queryClient.invalidateQueries({ queryKey: ["vault"] });
+    void queryClient.invalidateQueries({ queryKey: qk.vault });
   }
 }
 
@@ -148,7 +142,7 @@ function Unlocked({ count }: { count: number | null }) {
   const [changing, setChanging] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["vault-items"],
+    queryKey: qk.vaultItems,
     queryFn: fetchVaultItems,
   });
 
@@ -166,7 +160,7 @@ function Unlocked({ count }: { count: number | null }) {
       setVaultPin(pin, accountPassword),
     onSuccess: () => {
       setChanging(false);
-      void queryClient.invalidateQueries({ queryKey: ["vault"] });
+      void queryClient.invalidateQueries({ queryKey: qk.vault });
     },
   });
 
@@ -266,22 +260,22 @@ function Unlocked({ count }: { count: number | null }) {
 
 export function VaultPage() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["vault"], queryFn: fetchVault });
-  const passkeys = useQuery({ queryKey: ["passkeys"], queryFn: fetchPasskeys });
+  const { data, isLoading } = useQuery({ queryKey: qk.vault, queryFn: fetchVault });
+  const passkeys = useQuery({ queryKey: qk.passkeys, queryFn: fetchPasskeys });
   const passkeyUnlock = useMutation({
     mutationFn: unlockVaultWithPasskey,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vault"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.vault }),
   });
 
   const unlock = useMutation({
     mutationFn: ({ pin }: { pin: string }) => unlockVault(pin),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vault"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.vault }),
   });
 
   const create = useMutation({
     mutationFn: ({ pin, accountPassword }: { pin: string; accountPassword: string }) =>
       setVaultPin(pin, accountPassword),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vault"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.vault }),
   });
 
   // Leaving the page closes the vault, so a tab left behind is not an open door.

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Copy, FolderOpen } from "lucide-react";
 import { SettingsSection } from "./SettingsSection";
 import { formatBytes } from "@/lib/statsApi";
+import { qk } from "@/lib/queryKeys";
 
 type DuplicateFile = {
   mediaItemId: number;
@@ -40,7 +41,7 @@ async function fetchDuplicates(): Promise<{
 export function DuplicatesSection() {
   const [expanded, setExpanded] = useState(false);
   const { data, isLoading, error } = useQuery({
-    queryKey: ["duplicates"],
+    queryKey: qk.duplicates,
     queryFn: fetchDuplicates,
     // Hashing every file is the scanner's job; this only reads the result,
     // but it is still a full table scan and nobody needs it on page load.

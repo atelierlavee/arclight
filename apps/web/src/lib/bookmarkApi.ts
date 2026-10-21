@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { qk } from "./queryKeys";
 
 export type Bookmark = {
   id: number;
@@ -45,7 +46,7 @@ export function spriteFrameAt(sprite: ScrubSprite, seconds: number): { x: number
 
 export function useScrubSprite(itemId: number, enabled: boolean) {
   return useQuery({
-    queryKey: ["scrub-sprite", itemId],
+    queryKey: qk.scrubSprite(itemId),
     queryFn: async () => json<ScrubSprite>(await fetch(`/api/media-items/${itemId}/scrub`)),
     enabled,
     // Built once per file and never changes, so there is nothing to refetch.
@@ -59,7 +60,7 @@ export function useScrubSprite(itemId: number, enabled: boolean) {
 
 export function useBookmarks(itemId: number, enabled = true) {
   return useQuery({
-    queryKey: ["bookmarks", itemId],
+    queryKey: qk.bookmarks(itemId),
     queryFn: async () =>
       (await json<{ bookmarks: Bookmark[] }>(await fetch(`/api/media-items/${itemId}/bookmarks`)))
         .bookmarks,
@@ -69,7 +70,7 @@ export function useBookmarks(itemId: number, enabled = true) {
 
 export function useBookmarkMutations(itemId: number) {
   const queryClient = useQueryClient();
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["bookmarks", itemId] });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: qk.bookmarks(itemId) });
 
   const add = useMutation({
     mutationFn: async ({ positionSeconds, label, note }: {

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthGate } from "./AuthGate";
 import { UserMenu } from "./UserMenu";
 import { ToastProvider } from "@/lib/toast";
+import { qk } from "@/lib/queryKeys";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
@@ -19,13 +20,13 @@ function renderAccount() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  client.setQueryData(["auth-status"], {
+  client.setQueryData(qk.authStatus, {
     needsSetup: false,
     user: { id: 1, username: "Tester" },
   });
-  client.setQueryData(["privacy"], { hasPassword: false });
-  client.setQueryData(["passkeys"], []);
-  client.setQueryData(["media-items"], { items: [{ id: 1 }] });
+  client.setQueryData(qk.privacy, { hasPassword: false });
+  client.setQueryData(qk.passkeys, []);
+  client.setQueryData(qk.mediaItems.all, { items: [{ id: 1 }] });
   render(
     <QueryClientProvider client={client}>
       <ToastProvider>
@@ -51,8 +52,8 @@ describe("UserMenu logout", () => {
 
     await screen.findByRole("heading", { name: "Sign in" });
     expect(screen.queryByText("Private library")).not.toBeInTheDocument();
-    expect(client.getQueryData(["media-items"])).toBeUndefined();
-    expect(client.getQueryData(["auth-status"])).toEqual({
+    expect(client.getQueryData(qk.mediaItems.all)).toBeUndefined();
+    expect(client.getQueryData(qk.authStatus)).toEqual({
       needsSetup: false,
       user: null,
     });
@@ -71,7 +72,7 @@ describe("UserMenu logout", () => {
     await screen.findByText("Could not sign out");
     expect(screen.getByText("Failed to sign out: 500")).toBeInTheDocument();
     expect(screen.getByText("Private library")).toBeInTheDocument();
-    expect(client.getQueryData(["media-items"])).toBeDefined();
+    expect(client.getQueryData(qk.mediaItems.all)).toBeDefined();
     await waitFor(() => expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeEnabled());
     client.clear();
   });

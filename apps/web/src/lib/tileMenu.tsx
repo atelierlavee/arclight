@@ -24,7 +24,7 @@ import { useQueue, type QueueItem } from "./queue";
 import { playItem } from "./appEvents";
 import { forgetRecent, recordRecent } from "./recent";
 import { removeFolderPins } from "./pinned";
-import { libraryStatsKey } from "./statsApi";
+import { invalidateItemEverywhere } from "./invalidate";
 import { useToast } from "./toast";
 import type { TileShape } from "./layout";
 
@@ -69,14 +69,7 @@ export function useTileShape() {
 
   return async function setTileShape(item: MediaCardItem, shape: TileShape | null) {
     await updateItem(item.id, { tileShape: shape });
-    for (const key of [
-      ["media-items"],
-      ["collection-items"],
-      ["continue-watching"],
-      ["media-item", item.id],
-    ]) {
-      queryClient.invalidateQueries({ queryKey: key });
-    }
+    invalidateItemEverywhere(queryClient, item.id);
   };
 }
 
@@ -166,26 +159,7 @@ export function useTileMenu({
     forgetRecent(item.id);
     removeFolderPins(item.id);
     removeFromQueue(item.id);
-    for (const key of [
-      ["media-items"],
-      ["media-item", item.id],
-      ["collection-items"],
-      ["continue-watching"],
-      ["on-this-day"],
-      ["forgotten-gems"],
-      ["daily-pick"],
-      ["hero-items"],
-      ["related-items"],
-      ["performer-videos"],
-      ["performer-in-progress"],
-      ["search-suggestions"],
-      ["library-browse"],
-      ["timeline"],
-      ["play-surface"],
-      libraryStatsKey,
-    ]) {
-      void queryClient.invalidateQueries({ queryKey: key });
-    }
+    invalidateItemEverywhere(queryClient, item.id);
   }
 
   function openMenu(event: React.MouseEvent, item: MediaCardItem) {

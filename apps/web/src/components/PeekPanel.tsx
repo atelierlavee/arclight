@@ -8,6 +8,7 @@ import { DescriptionEditor } from "./DescriptionEditor";
 import { EditableTitle } from "./EditableTitle";
 import { Portal } from "./Portal";
 import { TagEditor } from "./TagEditor";
+import { qk } from "@/lib/queryKeys";
 
 /** Below this, "resume" would put you back where starting over does anyway. */
 const MIN_RESUMABLE_SECONDS = 15;
@@ -53,7 +54,7 @@ export function PeekPanel({
   const [editing, setEditing] = useState(false);
 
   const { data: item, isLoading } = useQuery({
-    queryKey: ["media-item", itemId],
+    queryKey: qk.mediaItem.detail(itemId),
     queryFn: () => fetchItem(itemId),
   });
 

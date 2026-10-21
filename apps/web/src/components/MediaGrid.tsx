@@ -44,6 +44,7 @@ import {
   type Filters,
   type SortValue,
 } from "@/lib/filters";
+import { qk } from "@/lib/queryKeys";
 
 export type GridSource =
   | {
@@ -221,15 +222,14 @@ export function MediaGrid({
   } = useInfiniteQuery({
     queryKey:
       source.type === "collection"
-        ? ["collection-items", source.id]
-        : [
-            "media-items",
-            source.tag,
-            source.performer,
-            source.studio,
-            source.kind,
-            source.q,
-            source.parentId,
+        ? qk.collectionItems.list(source.id)
+        : qk.mediaItems.grid({
+            tag: source.tag,
+            performer: source.performer,
+            studio: source.studio,
+            kind: source.kind,
+            q: source.q,
+            parentId: source.parentId,
             sort,
             // Must be in the key: without it React Query serves one year's
             // results for another, which reads as the filter doing nothing.
@@ -237,10 +237,10 @@ export function MediaGrid({
             // Same reasoning, and the same failure: serialised rather than
             // spread so adding a filter later cannot silently fall out of
             // the key and start serving another filter's results.
-            filterParams(source.filters ?? EMPTY_FILTERS).toString(),
-            month ?? null,
-            sort === "random" ? randomSeed : null,
-          ],
+            filters: filterParams(source.filters ?? EMPTY_FILTERS).toString(),
+            month: month ?? null,
+            seed: sort === "random" ? randomSeed : null,
+          }),
     queryFn: ({ pageParam }) =>
       fetchMediaItems(source, sort, year, pageParam, randomSeed, month),
     initialPageParam: 1,
@@ -626,7 +626,7 @@ export function MediaGrid({
     const orderedIds = newItems.map((i) => i.id);
 
     queryClient.setQueryData(
-      ["collection-items", collectionId],
+      qk.collectionItems.list(collectionId),
       (old: { pages: { items: MediaCardItem[]; page: number; pageSize: number; hasMore: boolean }[]; pageParams: number[] } | undefined) => {
         if (!old) return old;
         return { ...old, pages: [{ ...old.pages[0], items: newItems }] };

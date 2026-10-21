@@ -22,6 +22,7 @@ import {
 } from "@/lib/categoryApi";
 import { CategoryCoverEditor } from "./CategoryCoverEditor";
 import { SettingsSection } from "./SettingsSection";
+import { qk } from "@/lib/queryKeys";
 
 function CategoryRow({
   category,
@@ -39,8 +40,8 @@ function CategoryRow({
   const queryClient = useQueryClient();
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["categories"] });
-    queryClient.invalidateQueries({ queryKey: ["media-items"] });
+    queryClient.invalidateQueries({ queryKey: qk.categories });
+    queryClient.invalidateQueries({ queryKey: qk.mediaItems.all });
   };
 
   const rename = useMutation({
@@ -235,7 +236,7 @@ export function CategorySettings() {
   const [message, setMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { data } = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
+  const { data } = useQuery({ queryKey: qk.categories, queryFn: fetchCategories });
   const categories = data?.categories ?? [];
 
   const add = useMutation({
@@ -243,7 +244,7 @@ export function CategorySettings() {
     onSuccess: () => {
       setNewLabel("");
       setMessage(null);
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: qk.categories });
     },
     onError: (err: Error) => setMessage(err.message),
   });

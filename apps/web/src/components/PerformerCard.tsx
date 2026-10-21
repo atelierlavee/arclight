@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Heart, Pin } from "lucide-react";
+import { invalidatePerformer } from "@/lib/invalidate";
 
 // Dwell before the panel appears, matching the media tiles.
 const HOVER_DELAY_MS = 450;
@@ -57,8 +58,7 @@ export function PerformerCard({
     onSuccess: () => {
       // The list re-sorts around this, so it has to come back from the server
       // rather than being patched in place.
-      queryClient.invalidateQueries({ queryKey: ["performers"] });
-      queryClient.invalidateQueries({ queryKey: ["performer", performer.id] });
+      invalidatePerformer(queryClient, performer.id);
     },
     // The heart fills from server state, so a failure just leaves it looking
     // unpressed — indistinguishable from the click not registering at all.

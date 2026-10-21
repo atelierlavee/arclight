@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { VaultPage } from "./VaultPage";
 import { fetchVault, lockVault } from "@/lib/vaultApi";
 import { unlockVaultWithPasskey } from "@/lib/webauthnApi";
+import { qk } from "@/lib/queryKeys";
 
 vi.mock("@/components/AppShell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -29,8 +30,8 @@ function renderVault() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  client.setQueryData(["vault"], { hasPin: true, unlocked: false, count: null });
-  client.setQueryData(["passkeys"], [{ id: "passkey", label: "Test" }]);
+  client.setQueryData(qk.vault, { hasPin: true, unlocked: false, count: null });
+  client.setQueryData(qk.passkeys, [{ id: "passkey", label: "Test" }]);
   render(
     <QueryClientProvider client={client}>
       <VaultPage />

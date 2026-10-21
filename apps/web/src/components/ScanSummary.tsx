@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { FileClock } from "lucide-react";
+import { qk } from "@/lib/queryKeys";
 
 type ScanJob = {
   id: number;
@@ -32,7 +33,7 @@ async function fetchLatestScan(): Promise<{ job: ScanJob | null }> {
  */
 export function ScanSummary() {
   const { data } = useQuery({
-    queryKey: ["scan-latest"],
+    queryKey: qk.scanLatest,
     queryFn: fetchLatestScan,
   });
 

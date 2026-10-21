@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchPrivacyStatus } from "./privacyApi";
 import { fetchPasskeys } from "./webauthnApi";
+import { qk } from "./queryKeys";
 
 export type PrivacyGuardStatus = "loading" | "error" | "ready";
 
@@ -24,8 +25,8 @@ export function usePrivacyGuard(): {
   status: PrivacyGuardStatus;
   retry: () => void;
 } {
-  const privacy = useQuery({ queryKey: ["privacy"], queryFn: fetchPrivacyStatus });
-  const passkeys = useQuery({ queryKey: ["passkeys"], queryFn: fetchPasskeys });
+  const privacy = useQuery({ queryKey: qk.privacy, queryFn: fetchPrivacyStatus });
+  const passkeys = useQuery({ queryKey: qk.passkeys, queryFn: fetchPasskeys });
 
   const status: PrivacyGuardStatus =
     privacy.isError || passkeys.isError

@@ -6,6 +6,7 @@ import { SettingsFeedback, SettingsSection } from "./SettingsSection";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/useMediaQuery";
 import { QrCodeDialog } from "./QrCodeDialog";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Whether other devices on the wifi can use this server.
@@ -29,7 +30,7 @@ export function NetworkSettingsSection() {
   const [copied, setCopied] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["settings"],
+    queryKey: qk.settings,
     queryFn: fetchSettings,
   });
   const network = data?.network;
@@ -42,7 +43,7 @@ export function NetworkSettingsSection() {
     },
     onSuccess: () => {
       setSaved(true);
-      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      void queryClient.invalidateQueries({ queryKey: qk.settings });
     },
     onError: (cause: Error) => setError(cause.message),
   });

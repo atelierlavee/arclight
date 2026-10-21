@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { fetchScanJob, invalidateAfterScan, startScan } from "@/lib/scanApi";
+import { qk } from "@/lib/queryKeys";
 
 export function RescanButton() {
   const [jobId, setJobId] = useState<number | null>(null);
@@ -19,7 +20,7 @@ export function RescanButton() {
   });
 
   const { data: job } = useQuery({
-    queryKey: ["scan-job", jobId],
+    queryKey: qk.scanJob(jobId),
     queryFn: () => fetchScanJob(jobId!),
     enabled: jobId !== null,
     refetchInterval: (query) => {

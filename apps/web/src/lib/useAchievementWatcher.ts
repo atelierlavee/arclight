@@ -5,6 +5,7 @@ import { achievements, localDay, newlyEarned, type Achievement } from "./insight
 import { fetchInsights } from "./insightsApi";
 import { fetchAchievements, unlockAchievements } from "./achievementsApi";
 import { useToast } from "./toast";
+import { qk } from "./queryKeys";
 
 // Module-level rather than refs: every page renders its own AppShell, so the
 // watcher remounts on each navigation, and a ref would forget a badge that is
@@ -32,14 +33,14 @@ export function useAchievementWatcher() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const insights = useQuery({
-    queryKey: ["insights"],
+    queryKey: qk.insights,
     queryFn: fetchInsights,
     staleTime: 60_000,
     refetchInterval: 120_000,
     refetchOnWindowFocus: true,
   });
   const record = useQuery({
-    queryKey: ["achievements"],
+    queryKey: qk.achievements,
     queryFn: fetchAchievements,
     staleTime: Infinity,
   });
@@ -56,7 +57,7 @@ export function useAchievementWatcher() {
     saving = true;
     unlockAchievements(fresh.map((badge) => badge.id))
       .then((next) => {
-        queryClient.setQueryData(["achievements"], next);
+        queryClient.setQueryData(qk.achievements, next);
         if (seeded) announce(fresh);
       })
       .catch(() => {

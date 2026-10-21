@@ -20,6 +20,7 @@ import { useQueue } from "./queue";
 import { recordRecent } from "./recent";
 import { useToast } from "./toast";
 import { useUndoable } from "./undo";
+import { invalidateItemWatchState } from "./invalidate";
 
 /**
  * The card the keyboard is pointing at, and what the single-key shortcuts do
@@ -122,9 +123,7 @@ export function CardShortcutProvider({
   );
 
   function refresh(id: number) {
-    queryClient.invalidateQueries({ queryKey: ["media-item", id] });
-    queryClient.invalidateQueries({ queryKey: ["media-items"] });
-    queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
+    invalidateItemWatchState(queryClient, id);
   }
 
   /**

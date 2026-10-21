@@ -9,6 +9,7 @@ import { fetchCategories } from "@/lib/categoryApi";
 import { useAccentColor } from "@/lib/dominantColor";
 import { thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { useToast } from "@/lib/toast";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * What the modal shows alongside the item itself: its bookmarks, the seek
@@ -38,7 +39,7 @@ export function usePlayerData({
     isVideo && mode === "playing" && !mini,
   );
   const { data: heatmapData } = useQuery({
-    queryKey: ["heatmap", viewingId],
+    queryKey: qk.heatmap(viewingId),
     queryFn: async () => {
       const res = await fetch(`/api/media-items/${viewingId}/heatmap`);
       if (!res.ok) return { buckets: [] as number[] };
@@ -49,7 +50,7 @@ export function usePlayerData({
   });
 
   const { data: categoryData } = useQuery({
-    queryKey: ["categories"],
+    queryKey: qk.categories,
     queryFn: fetchCategories,
   });
   const categories = categoryData?.categories ?? [];

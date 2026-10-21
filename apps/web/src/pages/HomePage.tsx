@@ -18,6 +18,7 @@ import { TasteTwinRow } from "@/components/TasteTwinRow";
 import { DailyPickCard } from "@/components/DailyPickCard";
 import { OnThisDayCard } from "@/components/OnThisDayCard";
 import { HomeThumbnailCollage } from "@/components/HomeThumbnailCollage";
+import { qk } from "@/lib/queryKeys";
 
 type Tag = { id: number; name: string };
 type Collection = { id: number; name: string; type: "manual" | "smart" };
@@ -49,7 +50,7 @@ function TagRow({
   onPlayItem: (id: number) => void;
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["media-items", "tag-row", tag.name],
+    queryKey: qk.mediaItems.tagRow(tag.name),
     queryFn: () =>
       fetchJson<{ items: MediaCardItem[] }>(`/api/media-items?tag=${encodeURIComponent(tag.name)}`),
   });
@@ -77,7 +78,7 @@ function CollectionRow({
   onPlayItem: (id: number) => void;
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["collection-items", "row", collection.id],
+    queryKey: qk.collectionItems.row(collection.id),
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>(`/api/collections/${collection.id}/items`),
   });
 
@@ -98,33 +99,33 @@ export function HomePage() {
   const [open, setOpen] = useState<{ id: number; autoPlay: boolean } | null>(null);
 
   const { data: recent, isLoading: recentLoading } = useQuery({
-    queryKey: ["media-items", "recent"],
+    queryKey: qk.mediaItems.recent,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/media-items"),
   });
   const { data: heroData } = useQuery({
-    queryKey: ["hero-items"],
+    queryKey: qk.heroItems,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/hero-items"),
   });
   const { data: favorites, isLoading: favoritesLoading } = useQuery({
-    queryKey: ["media-items", "favorites"],
+    queryKey: qk.mediaItems.favorites,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/media-items?favorite=true"),
   });
   const { data: recentlyWatched, isLoading: recentlyWatchedLoading } = useQuery({
-    queryKey: ["media-items", "recently-watched"],
+    queryKey: qk.mediaItems.recentlyWatched,
     queryFn: () =>
       fetchJson<{ items: MediaCardItem[] }>(
         "/api/media-items?sort=watched&watched=true",
       ),
   });
   const { data: mostPlayed, isLoading: mostPlayedLoading } = useQuery({
-    queryKey: ["media-items", "most-played"],
+    queryKey: qk.mediaItems.mostPlayed,
     queryFn: () =>
       fetchJson<{ items: MediaCardItem[] }>(
         "/api/media-items?sort=played&watched=true",
       ),
   });
   const { data: unwatched, isLoading: unwatchedLoading } = useQuery({
-    queryKey: ["media-items", "unwatched"],
+    queryKey: qk.mediaItems.unwatched,
     queryFn: () =>
       fetchJson<{ items: MediaCardItem[] }>("/api/media-items?watched=false"),
   });
@@ -138,22 +139,22 @@ export function HomePage() {
    */
   const [randomSeed] = useState(() => Math.floor(Math.random() * 1_000_000));
   const { data: randomPicks, isLoading: randomLoading } = useQuery({
-    queryKey: ["media-items", "random-picks", randomSeed],
+    queryKey: qk.mediaItems.randomPicks(randomSeed),
     queryFn: () =>
       fetchJson<{ items: MediaCardItem[] }>(
         `/api/media-items?sort=random&seed=${randomSeed}`,
       ),
   });
   const { data: continueWatching, isLoading: continueLoading } = useQuery({
-    queryKey: ["continue-watching"],
+    queryKey: qk.continueWatching,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/continue-watching"),
   });
   const { data: funStat } = useQuery({
-    queryKey: ["fun-stat"],
+    queryKey: qk.funStat,
     queryFn: () => fetchJson<{ stat: string | null }>("/api/fun-stat"),
   });
   const { data: forgottenGems, isLoading: forgottenGemsLoading } = useQuery({
-    queryKey: ["forgotten-gems"],
+    queryKey: qk.forgottenGems,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/forgotten-gems"),
   });
   const [dailyPickSeed, setDailyPickSeed] = useState<number | null>(() => {
@@ -163,22 +164,22 @@ export function HomePage() {
     } catch { return null; }
   });
   const { data: dailyPick } = useQuery({
-    queryKey: ["daily-pick", dailyPickSeed],
+    queryKey: qk.dailyPick.forSeed(dailyPickSeed),
     queryFn: () =>
       fetchJson<{ item: MediaCardItem | null }>(
         dailyPickSeed != null ? `/api/daily-pick?seed=${dailyPickSeed}` : "/api/daily-pick",
       ),
   });
   const { data: onThisDay } = useQuery({
-    queryKey: ["on-this-day"],
+    queryKey: qk.onThisDay,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/on-this-day"),
   });
   const { data: tagsData } = useQuery({
-    queryKey: ["tags"],
+    queryKey: qk.tags,
     queryFn: () => fetchJson<{ tags: Tag[] }>("/api/tags"),
   });
   const { data: collectionsData } = useQuery({
-    queryKey: ["collections"],
+    queryKey: qk.collections,
     queryFn: () => fetchJson<{ collections: Collection[] }>("/api/collections"),
   });
 

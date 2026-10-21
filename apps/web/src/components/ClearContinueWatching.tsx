@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import { useToast } from "@/lib/toast";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Empties the Continue Watching row.
@@ -24,11 +25,11 @@ export function ClearContinueWatching() {
     },
     onSuccess: ({ cleared }) => {
       setConfirming(false);
-      queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
+      queryClient.invalidateQueries({ queryKey: qk.continueWatching });
       // Resume positions show on the tiles as a progress bar, and on a
       // performer's profile as its own strip.
-      queryClient.invalidateQueries({ queryKey: ["media-items"] });
-      queryClient.invalidateQueries({ queryKey: ["performer-in-progress"] });
+      queryClient.invalidateQueries({ queryKey: qk.mediaItems.all });
+      queryClient.invalidateQueries({ queryKey: qk.performerInProgress.all });
       // The row empties itself, which shows that *something* happened but not
       // how much. The server counts the rows it removed, so say so.
       toast({

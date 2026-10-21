@@ -7,6 +7,7 @@ import { pinsChangedEvent, readPins } from "@/lib/pinned";
 import { PERFORMER_ROW_TILE_LIMIT } from "@/lib/rowLimits";
 import { seededRank } from "@/lib/shuffle";
 import { SeeMoreTile } from "./SeeMoreTile";
+import { qk } from "@/lib/queryKeys";
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -24,7 +25,7 @@ export function PerformerRow() {
   }, []);
 
   const { data, isLoading, dataUpdatedAt } = useQuery({
-    queryKey: ["performers"],
+    queryKey: qk.performers.all,
     queryFn: () =>
       fetchJson<{ performers: PerformerSummary[] }>("/api/performers"),
   });

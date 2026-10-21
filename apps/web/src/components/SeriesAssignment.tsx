@@ -3,20 +3,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createSeries, fetchSeries, type SeriesSummary } from "@/lib/seriesApi";
 import { updateItem, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { useToast } from "@/lib/toast";
+import { qk } from "@/lib/queryKeys";
 
 export function SeriesAssignment({ item }: { item: MediaItemDetail }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const { data } = useQuery({ queryKey: ["series"], queryFn: fetchSeries });
+  const { data } = useQuery({ queryKey: qk.series.all, queryFn: fetchSeries });
 
   const save = useMutation({
     mutationFn: (patch: Parameters<typeof updateItem>[1]) => updateItem(item.id, patch),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["media-item", item.id] });
-      queryClient.invalidateQueries({ queryKey: ["series"] });
-      queryClient.invalidateQueries({ queryKey: ["series", item.seriesId] });
+      queryClient.invalidateQueries({ queryKey: qk.mediaItem.detail(item.id) });
+      queryClient.invalidateQueries({ queryKey: qk.series.all });
+      queryClient.invalidateQueries({ queryKey: qk.series.detail(item.seriesId) });
     },
     onError: (error) => {
       toast({

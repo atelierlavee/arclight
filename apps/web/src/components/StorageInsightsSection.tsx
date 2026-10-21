@@ -11,6 +11,7 @@ import { cn, formatDuration } from "@/lib/utils";
 import { DonutChart } from "./DonutChart";
 import { SettingsSection } from "./SettingsSection";
 import { StorageTreemap } from "./StorageTreemap";
+import { qk } from "@/lib/queryKeys";
 
 type Representative = { id: number; thumbnailFile: string | null } | null;
 
@@ -114,12 +115,12 @@ function hoursLabel(seconds: number): string {
  */
 export function StorageInsightsSection() {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["storage-insights"],
+    queryKey: qk.storageInsights,
     queryFn: () => fetchJson<Insights>("/api/storage/insights"),
   });
   const { data: cache } = useQuery({
     // Same key as the cache settings, so clearing the cache there updates this.
-    queryKey: ["cache-usage"],
+    queryKey: qk.cacheUsage,
     queryFn: () => fetchJson<CacheUsage>("/api/library/cache"),
   });
 

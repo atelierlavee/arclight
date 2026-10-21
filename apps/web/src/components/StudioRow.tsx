@@ -7,6 +7,7 @@ import { pinsChangedEvent, readPins } from "@/lib/pinned";
 import { pickIndex, seededRank } from "@/lib/shuffle";
 import { ROW_TILE_LIMIT } from "@/lib/rowLimits";
 import { SeeMoreTile } from "./SeeMoreTile";
+import { qk } from "@/lib/queryKeys";
 
 /**
  * Studios, as a homepage row.
@@ -29,7 +30,7 @@ export function StudioRow() {
     return () => window.removeEventListener(pinsChangedEvent(), refresh);
   }, []);
   const { data, isLoading, dataUpdatedAt } = useQuery({
-    queryKey: ["studios"],
+    queryKey: qk.studios.all,
     queryFn: fetchStudios,
   });
 

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { qk } from "./queryKeys";
 
 /**
  * The full `/api/stats` response.
@@ -36,17 +37,6 @@ export type LibraryStats = {
   lastBackup: string | null;
 };
 
-/**
- * The one cache key for `/api/stats`. Import this to invalidate it — never
- * spell the key inline.
- *
- * This endpoint was previously cached under two keys ("stats" for the footer,
- * "library-health" for everything else), so invalidating after a scan
- * refreshed the footer and left the other three surfaces stale until a page
- * reload. Exporting the key is what keeps that from drifting apart again.
- */
-export const libraryStatsKey = ["library-stats"] as const;
-
 export async function fetchLibraryStats(): Promise<LibraryStats> {
   const response = await fetch("/api/stats");
   if (!response.ok) throw new Error(`Failed to load stats: ${response.status}`);
@@ -55,7 +45,9 @@ export async function fetchLibraryStats(): Promise<LibraryStats> {
 
 export function useLibraryStats() {
   return useQuery({
-    queryKey: libraryStatsKey,
+    // One key for `/api/stats` everywhere: it was once cached under two
+    // ("stats" and "library-health"), and a scan refreshed only one of them.
+    queryKey: qk.libraryStats,
     queryFn: fetchLibraryStats,
     staleTime: 30_000,
   });
