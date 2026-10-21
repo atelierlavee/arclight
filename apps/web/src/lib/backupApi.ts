@@ -1,3 +1,9 @@
+import { PrivacyLockedError, throwIfNotOk } from "./privacyLock";
+
+// Shared with every other guarded call, so one `instanceof` check covers
+// them all; re-exported so existing imports from here keep working.
+export { PrivacyLockedError };
+
 export type BackupFile = { name: string; sizeBytes: number; createdAt: string };
 
 export type RestoreResult = {
@@ -9,19 +15,6 @@ export type RestoreResult = {
   migrated: boolean;
   uploads: string[];
 };
-
-/**
- * Thrown when the server says this session has not proved the privacy
- * credential. Its own class so the panel can drop back to the prompt rather
- * than showing a raw failure for a state with an obvious remedy — including
- * when the fifteen-minute unlock simply expired while the page sat open.
- */
-export class PrivacyLockedError extends Error {
-  constructor() {
-    super("Locked");
-    this.name = "PrivacyLockedError";
-  }
-}
 
 /**
  * Replaces the entire library with the contents of an archive.
@@ -61,11 +54,33 @@ export async function createBackup(): Promise<{ backup: BackupFile }> {
 
 export async function deleteBackup(name: string): Promise<void> {
   const res = await fetch(`/api/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`Failed to delete backup: ${res.status}`);
+  await throwIfNotOk(res, "Failed to delete backup");
 }
 
 export function backupDownloadUrl(name: string): string {
   return `/api/backups/${encodeURIComponent(name)}`;
+}
+
+/**
+ * Starts a backup download, or throws PrivacyLockedError if it would be
+ * refused.
+ *
+ * A plain link can't tell: a refused download just saves the error JSON as
+ * the archive. So this asks for the first byte first — the route serves
+ * ranges, so that costs nothing — and only hands the URL to the browser once
+ * the server has said yes.
+ */
+export async function downloadBackup(name: string): Promise<void> {
+  const url = backupDownloadUrl(name);
+  const res = await fetch(url, { headers: { Range: "bytes=0-0" } });
+  await throwIfNotOk(res, "Failed to download backup");
+  void res.body?.cancel().catch(() => {});
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 export function formatBytes(bytes: number): string {

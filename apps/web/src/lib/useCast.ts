@@ -55,18 +55,28 @@ export function useCast(
     const remote = video.remote;
     if (remote && typeof remote.watchAvailability === "function") {
       let watchId: number | undefined;
+      // The id arrives asynchronously, so cleanup can run before it does.
+      // Without this the late id would be stored on a dead closure and the
+      // watch — and its callback into this unmounted hook — never cancelled.
+      let cancelled = false;
       remote
-        .watchAvailability((isAvailable) => setAvailable(isAvailable))
+        .watchAvailability((isAvailable) => {
+          if (!cancelled) setAvailable(isAvailable);
+        })
         .then((id) => {
-          watchId = id;
+          if (cancelled) void remote.cancelWatchAvailability(id).catch(() => {});
+          else watchId = id;
         })
         // Refused where the platform cannot cast at all; the button stays away.
-        .catch(() => setAvailable(false));
+        .catch(() => {
+          if (!cancelled) setAvailable(false);
+        });
       const onState = () => setCasting(remote.state !== "disconnected");
       remote.addEventListener("connect", onState);
       remote.addEventListener("connecting", onState);
       remote.addEventListener("disconnect", onState);
       return () => {
+        cancelled = true;
         if (watchId !== undefined) void remote.cancelWatchAvailability(watchId).catch(() => {});
         remote.removeEventListener("connect", onState);
         remote.removeEventListener("connecting", onState);

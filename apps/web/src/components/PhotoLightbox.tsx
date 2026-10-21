@@ -21,6 +21,7 @@ import {
   type ZoomState,
 } from "@/lib/zoom";
 import { Portal } from "./Portal";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 export type LightboxPhoto = { id: number; title: string };
 
@@ -63,6 +64,7 @@ export function PhotoLightbox({
   const [fullscreen, setFullscreen] = useState(false);
   const [showStrip, setShowStrip] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef);
   const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(
     null,
   );

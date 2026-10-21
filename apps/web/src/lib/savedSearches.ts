@@ -78,6 +78,16 @@ export function removeSavedSearch(id: string): void {
   write(readSavedSearches().filter((entry) => entry.id !== id));
 }
 
+/** Every saved search, for signing out. */
+export function clearSavedSearches(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new Event(CHANGE_EVENT));
+  } catch {
+    // As above.
+  }
+}
+
 export function savedSearchesChangedEvent(): string {
   return CHANGE_EVENT;
 }

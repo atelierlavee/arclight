@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useIsMobile } from "@/lib/useMediaQuery";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -80,6 +80,7 @@ import {
 } from "@/lib/bookmarkApi";
 import { useToast } from "@/lib/toast";
 import { useCast } from "@/lib/useCast";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { SeriesAssignment } from "./SeriesAssignment";
 
 // Only offer "Continue Watching" for meaningful progress: not basically the
@@ -172,7 +173,9 @@ export function MediaDetailModal({
     panelRef.current?.focus();
     return () => previouslyFocused?.focus?.();
   }, []);
-  useEffect(() => setViewingId(itemId), [itemId]);
+  // The mini player floats over a page you are still using, so it is not
+  // modal and must not hold focus; the full sheet is, and must.
+  useFocusTrap(panelRef, !mini);
 
   const { data: item } = useQuery({
     queryKey: ["media-item", viewingId],
@@ -584,8 +587,12 @@ export function MediaDetailModal({
     void videoRef.current?.play().catch(() => {});
   }
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
+  // The handler is rebuilt every render and read through a ref, so it always
+  // sees the current mode, item and callbacks — a dependency list here kept
+  // missing one and replaying a stale closure. Only the listener is stable.
+  const keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
+  useLayoutEffect(() => {
+    keyHandler.current = (e: KeyboardEvent) => {
       // Escape closes even from inside an input — it's the way out of a
       // field you opened by accident.
       if (e.key === "Escape") {
@@ -689,9 +696,12 @@ export function MediaDetailModal({
           break;
       }
     };
+  });
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => keyHandler.current(e);
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cinema, onClose, mode, mini, item?.itemType, queueOpen]);
+  }, []);
 
   function startPlaying(positionSeconds: number) {
     startPosition.current = positionSeconds;
@@ -708,7 +718,14 @@ export function MediaDetailModal({
 
   // Hero "Play" arrives with autoPlay set — skip the muted preview entirely.
   useEffect(() => {
-    if (autoPlay && item?.itemType === "video" && !autoPlayTriggered.current) {
+    if (
+      autoPlay &&
+      item?.itemType === "video" &&
+      // The requested item, not whatever was showing when the request
+      // arrived: a new one is still loading for a render or two.
+      item.id === itemId &&
+      !autoPlayTriggered.current
+    ) {
       autoPlayTriggered.current = true;
       startPlaying(
         resume && item.lastPositionSeconds > MIN_RESUMABLE_SECONDS
@@ -716,7 +733,7 @@ export function MediaDetailModal({
           : 0,
       );
     }
-  }, [autoPlay, item]);
+  }, [autoPlay, item, itemId, resume]);
 
   function handleLoadedMetadata() {
     const video = videoRef.current;
@@ -903,18 +920,47 @@ export function MediaDetailModal({
     );
   }
 
-  function openRelated(id: number) {
+  /**
+   * Shows another item in this same modal, from a clean slate.
+   *
+   * Everything per-item goes back to how a fresh open would have it — the
+   * muted preview, no seek, no cast stream — rather than inheriting the
+   * previous item's playing state. Shared by "More Like This", the queue,
+   * and a new play request arriving while the modal is already open.
+   */
+  function showItem(id: number) {
     setViewingId(id);
-    // Reset back to the muted preview for the newly-shown item rather than
-    // inheriting the previous one's playing state.
     setMode("preview");
     setEditing(false);
     setMuted(true);
     setReframing(false);
     setSeeked(false);
+    setCurrentTime(0);
+    setCastSrc(null);
+    setShowRates(false);
+    setShowSkipOptions(false);
+    startPosition.current = 0;
     lastSavedAt.current = 0;
+    autoPlayTriggered.current = false;
     scrollRef.current?.scrollTo({ top: 0 });
   }
+
+  function openRelated(id: number) {
+    showItem(id);
+  }
+
+  // A new play request while open (the mini player is up and something else
+  // is picked) arrives as a new itemId. Reset exactly as openRelated does, so
+  // the autoplay effect above fires again — with this request's resume flag —
+  // instead of seeing it already triggered for the previous item.
+  const shownRequest = useRef(itemId);
+  useEffect(() => {
+    if (shownRequest.current === itemId) return;
+    shownRequest.current = itemId;
+    showItem(itemId);
+    // showItem is rebuilt every render; only a new request should run it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId]);
 
   useEffect(() => {
     if (!item || item.id !== viewingId || !autoPlayNext.current) return;
@@ -954,7 +1000,12 @@ export function MediaDetailModal({
           ref={panelRef}
           tabIndex={-1}
           role="dialog"
-          aria-modal="true"
+          aria-modal={mini ? "false" : "true"}
+          // A label rather than aria-labelledby: which heading is on screen
+          // depends on the layout (overlay, info column, the title editor,
+          // none at all in the mini player), but the item's title is the
+          // dialog's name in every one of them.
+          aria-label={item?.title ?? "Media details"}
           className={cn(
             "relative overflow-hidden bg-card shadow-2xl focus:outline-none",
             mini

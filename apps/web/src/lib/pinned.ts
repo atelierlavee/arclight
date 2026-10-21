@@ -44,6 +44,25 @@ export function removePin(id: string): void {
   writePins(readPins().filter((pin) => pin.id !== id));
 }
 
+/** Drops the pin for a folder that has gone away (hidden, or vaulted). */
+export function removeFolderPins(folderId: number): void {
+  const pins = readPins();
+  const kept = pins.filter(
+    (pin) => !(pin.type === "folder" && pin.folderId === folderId),
+  );
+  if (kept.length !== pins.length) writePins(kept);
+}
+
+/** All pins, for signing out. */
+export function clearPins(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new Event(CHANGE_EVENT));
+  } catch {
+    // As above.
+  }
+}
+
 export function pinsChangedEvent(): string {
   return CHANGE_EVENT;
 }

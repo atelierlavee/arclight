@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { Portal } from "./Portal";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 type Option = { value: string; label: string };
 
@@ -137,6 +138,8 @@ export function CreateCollectionModal({ onClose }: { onClose: () => void }) {
   const [ruleOp, setRuleOp] = useState<"AND" | "OR">("AND");
   const [conditions, setConditions] = useState<ConditionRow[]>([{ field: "tags", value: "" }]);
   const queryClient = useQueryClient();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
 
   const mutation = useMutation({
     mutationFn: createCollection,
@@ -170,11 +173,15 @@ export function CreateCollectionModal({ onClose }: { onClose: () => void }) {
         onClick={onClose}
       >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-collection-title"
         className="w-full max-w-md space-y-4 rounded-lg bg-background p-5 text-foreground"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">New Collection</h2>
+          <h2 id="create-collection-title" className="text-sm font-semibold">New Collection</h2>
           <button type="button" onClick={onClose} aria-label="Close">
             <X className="size-4" />
           </button>

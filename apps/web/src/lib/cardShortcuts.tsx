@@ -138,7 +138,6 @@ export function CardShortcutProvider({
    */
   const toggleFavourite = useCallback(
     (card: EngagedCard) => {
-      recordRecent("favourited", card);
       void runUndoable({
         message: (wasFavourite) =>
           wasFavourite ? "Removed from Favourites" : "Added to Favourites",
@@ -148,6 +147,10 @@ export function CardShortcutProvider({
           if (!res.ok) throw new Error("Could not read that item");
           const { isFavorite } = (await res.json()) as MediaItemDetail;
           await updateItem(card.id, { isFavorite: !isFavorite });
+          // Only once the direction is known: un-favouriting something is
+          // not "recently favourited", and recording it up front put every
+          // removal into that row.
+          if (!isFavorite) recordRecent("favourited", card);
           return isFavorite;
         },
         revert: (was) => updateItem(card.id, { isFavorite: was }),

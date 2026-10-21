@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { Eye, Fingerprint, Lock, LockOpen } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { settingsInputClass } from "@/components/SettingsSection";
@@ -12,9 +17,50 @@ import {
   lockVault,
   setVaultPin,
   unlockVault,
+  type VaultItemsPage,
 } from "@/lib/vaultApi";
 import { formatDuration } from "@/lib/utils";
 import { fetchPasskeys, unlockVaultWithPasskey } from "@/lib/webauthnApi";
+
+/**
+ * Drops everything cached about the vault's contents.
+ *
+ * Not just the list: opening a hidden item caches its details, gallery and
+ * bookmarks under its own id, and those would otherwise go on rendering from
+ * the cache after the vault was locked — a locked vault you could still see
+ * into through the detail modal.
+ */
+function forgetVaultContents(queryClient: QueryClient): void {
+  const page = queryClient.getQueryData<VaultItemsPage>(["vault-items"]);
+  for (const item of page?.items ?? []) {
+    for (const root of [
+      "media-item",
+      "gallery",
+      "bookmarks",
+      "heatmap",
+      "scrub-sprite",
+      "cast-link",
+    ]) {
+      queryClient.removeQueries({ queryKey: [root, item.id] });
+    }
+  }
+  // Related lists computed while unlocked may include hidden items.
+  queryClient.removeQueries({ queryKey: ["related-items"] });
+  queryClient.removeQueries({ queryKey: ["vault-items"] });
+}
+
+/**
+ * Locks, then asks for the status — in that order. Refetching alongside the
+ * lock could land first and cache `unlocked: true` for a vault that is shut.
+ */
+async function closeVault(queryClient: QueryClient): Promise<void> {
+  forgetVaultContents(queryClient);
+  try {
+    await lockVault();
+  } finally {
+    void queryClient.invalidateQueries({ queryKey: ["vault"] });
+  }
+}
 
 function PinForm({
   title,
@@ -112,11 +158,7 @@ function Unlocked({ count }: { count: number | null }) {
   });
 
   const lock = useMutation({
-    mutationFn: lockVault,
-    onSuccess: () => {
-      queryClient.removeQueries({ queryKey: ["vault-items"] });
-      void queryClient.invalidateQueries({ queryKey: ["vault"] });
-    },
+    mutationFn: () => closeVault(queryClient),
   });
 
   const changePin = useMutation({
@@ -243,14 +285,23 @@ export function VaultPage() {
   });
 
   // Leaving the page closes the vault, so a tab left behind is not an open door.
-  useEffect(
-    () => () => {
-      void lockVault();
-      queryClient.removeQueries({ queryKey: ["vault-items"] });
-      void queryClient.invalidateQueries({ queryKey: ["vault"] });
-    },
-    [queryClient],
-  );
+  //
+  // Deferred a tick and cancelled by a remount: StrictMode mounts, unmounts
+  // and remounts every effect in development, and locking on that first
+  // unmount shut the vault the moment the page opened.
+  const pendingLock = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (pendingLock.current) {
+      clearTimeout(pendingLock.current);
+      pendingLock.current = null;
+    }
+    return () => {
+      pendingLock.current = setTimeout(() => {
+        pendingLock.current = null;
+        void closeVault(queryClient);
+      }, 0);
+    };
+  }, [queryClient]);
 
   return (
     <AppShell title="Vault">

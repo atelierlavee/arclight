@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAppearance } from "./appearance";
 
 // Sampling a tiny copy is enough to find the overall colour and keeps the
 // work to a few hundred pixels rather than two million.
@@ -94,8 +95,15 @@ export function dominantAccent(image: HTMLImageElement): string | null {
   return `hsl(${hue} ${ACCENT_SATURATION}% ${ACCENT_LIGHTNESS}%)`;
 }
 
-/** Accent for an image URL, or null while loading or if it's greyscale. */
-export function useAccentColor(src: string | null): string | null {
+/**
+ * Accent for an image URL, or null while loading or if it's greyscale.
+ *
+ * Always null in discreet mode: the image is blurred, but a page tinted the
+ * colour of what is on it still says something about what that is.
+ */
+export function useAccentColor(imageSrc: string | null): string | null {
+  const { discreet } = useAppearance();
+  const src = discreet ? null : imageSrc;
   const [accent, setAccent] = useState<string | null>(null);
 
   useEffect(() => {

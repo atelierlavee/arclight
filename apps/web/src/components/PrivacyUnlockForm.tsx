@@ -26,7 +26,7 @@ export function PrivacyUnlockForm({
 
   // Only offered where it can work: no passkey registered in this browser
   // means no button, rather than one that fails when pressed.
-  const { hasPassword, hasPasskey } = usePrivacyGuard();
+  const { hasPassword, hasPasskey, status, retry } = usePrivacyGuard();
 
   // Asked for straight away rather than waiting for a click. The dialog was
   // opened by a deliberate keypress, so the prompt is expected — making you
@@ -84,6 +84,46 @@ export function PrivacyUnlockForm({
     } finally {
       setChecking(false);
     }
+  }
+
+  // Not knowing what is set is not the same as nothing being set: the
+  // caller has already treated it as locked, so this says why there is no
+  // field yet instead of offering nothing at all.
+  if (status !== "ready") {
+    return (
+      <div className="space-y-2">
+        {status === "loading" ? (
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" />
+            Checking privacy settings…
+          </p>
+        ) : (
+          <p className="text-[11px] text-destructive">
+            Couldn’t check the privacy settings, so this stays locked.
+          </p>
+        )}
+        <div className="flex items-center gap-2">
+          {status === "error" && (
+            <button
+              type="button"
+              onClick={retry}
+              className="rounded-md bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-accent"
+            >
+              Try again
+            </button>
+          )}
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (

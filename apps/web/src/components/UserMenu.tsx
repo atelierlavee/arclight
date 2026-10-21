@@ -4,6 +4,7 @@ import { LogOut, UserRound } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { fetchAuthStatus, logout, type AuthStatus } from "@/lib/authApi";
 import { useToast } from "@/lib/toast";
+import { clearUserLocalData } from "@/lib/userData";
 
 /**
  * Account avatar in the header, with a sign-out menu.
@@ -29,6 +30,9 @@ export function UserMenu() {
       queryClient.removeQueries({
         predicate: (query) => query.queryKey[0] !== "auth-status",
       });
+      // Before the auth change unmounts the app, so nothing still mounted
+      // writes the queue back after it has been cleared.
+      clearUserLocalData();
       queryClient.setQueryData<AuthStatus>(["auth-status"], {
         needsSetup: false,
         user: null,

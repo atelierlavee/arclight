@@ -3,6 +3,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
+import { AppLayout } from "@/components/AppShell";
 import { RouteErrorFallback } from "@/components/RouteErrorFallback";
 import { AccountPage } from "@/pages/AccountPage";
 import { AlbumPage } from "@/pages/AlbumPage";
@@ -23,7 +24,9 @@ import { SeriesPage } from "@/pages/SeriesPage";
 import { SeriesPageIndex } from "@/pages/SeriesPageIndex";
 import type { NetworkView } from "@/lib/performerApi";
 
-const rootRoute = createRootRoute();
+// The shell lives here, once, rather than in each page: a page-owned shell
+// was torn down by every navigation, and the mini player with it.
+const rootRoute = createRootRoute({ component: AppLayout });
 
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -250,7 +253,7 @@ export const router = createRouter({
    *
    * The window is the scroller — no page owns a scroll container — so the
    * router's own restoration is enough and there is nothing to plumb through
-   * AppShell.
+   * the layout.
    *
    * Keyed on the full href, including the search string, on purpose: the
    * browse page keeps its filters and sort there, so each filtered view

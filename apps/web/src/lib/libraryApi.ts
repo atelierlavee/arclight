@@ -1,3 +1,5 @@
+import { throwIfNotOk } from "./privacyLock";
+
 export type LibraryRoot = {
   id: number;
   libraryId: number;
@@ -72,7 +74,7 @@ export async function fetchRemovableData(): Promise<RemovableData> {
 
 export async function purgeRemovableData(): Promise<RemovableData> {
   const res = await fetch("/api/library/cleanup", { method: "POST" });
-  if (!res.ok) throw new Error(`Failed to clean up: ${res.status}`);
+  await throwIfNotOk(res, "Failed to clean up");
   return ((await res.json()) as { removed: RemovableData }).removed;
 }
 
@@ -86,5 +88,5 @@ export async function removeRoot(id: number, deleteData = false): Promise<void> 
     `/api/library/roots/${id}${deleteData ? "?deleteData=true" : ""}`,
     { method: "DELETE" },
   );
-  if (!res.ok) throw new Error(`Failed to remove folder: ${res.status}`);
+  await throwIfNotOk(res, "Failed to remove folder");
 }

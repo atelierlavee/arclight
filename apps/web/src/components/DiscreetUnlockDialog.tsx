@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EyeOff } from "lucide-react";
 import { DISCREET_SHORTCUT, useAppearance } from "@/lib/appearance";
+import { DISCREET_OFF_EVENT } from "@/lib/appEvents";
 import { usePrivacyGuard } from "@/lib/privacyGuard";
 import { Portal } from "./Portal";
 import { PrivacyUnlockForm } from "./PrivacyUnlockForm";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /**
  * Turning discreet mode off with the same keys that turned it on.
@@ -20,24 +22,38 @@ import { PrivacyUnlockForm } from "./PrivacyUnlockForm";
 export function DiscreetUnlockDialog() {
   const { discreet, set } = useAppearance();
   const [asking, setAsking] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, asking);
 
   const { guarded } = usePrivacyGuard();
 
   useEffect(() => {
+    function release() {
+      // Nothing to ask for means nothing to stop you — prompting with no
+      // answer would just trap you in the mode. `guarded` is true while the
+      // answer is still unknown, so this only skips the prompt once the
+      // server has said there is nothing set.
+      if (!guarded) set({ discreet: false });
+      else setAsking(true);
+    }
     function onKeyDown(event: KeyboardEvent) {
       if (!(event.ctrlKey || event.metaKey) || !event.shiftKey) return;
       if (event.code !== "KeyH") return;
       if (!discreet) return;
 
       event.preventDefault();
-      // Nothing to ask for means nothing to stop you — prompting with no
-      // answer would just trap you in the mode.
-      if (!guarded) set({ discreet: false });
-      else setAsking(true);
+      release();
+    }
+    function onRequest() {
+      if (discreet) release();
     }
 
     window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
+    window.addEventListener(DISCREET_OFF_EVENT, onRequest);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener(DISCREET_OFF_EVENT, onRequest);
+    };
   }, [discreet, guarded, set]);
 
   // Closes itself if the mode is turned off some other way — through the
@@ -74,6 +90,7 @@ export function DiscreetUnlockDialog() {
         className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]"
       >
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label="Turn off discreet mode"

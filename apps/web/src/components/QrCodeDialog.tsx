@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { QrCode as QrIcon, X } from "lucide-react";
 import { Portal } from "./Portal";
 import { QrCode } from "./QrCode";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /**
  * The server's address as a large QR code, for a phone to scan.
@@ -16,6 +17,8 @@ import { QrCode } from "./QrCode";
  */
 export function QrCodeDialog({ url, onClose }: { url: string; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
   // Held in a ref so the setup below runs once per opening. Callers pass an
   // inline arrow, and depending on it directly would re-run the effect — and
   // pull focus back to the × — on every render of the page behind.
@@ -49,6 +52,7 @@ export function QrCodeDialog({ url, onClose }: { url: string; onClose: () => voi
         className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]"
       >
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="qr-dialog-title"

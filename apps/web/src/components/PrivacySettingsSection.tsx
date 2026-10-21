@@ -21,6 +21,12 @@ export function PrivacySettingsSection() {
   // Separate from the password error above: a Touch ID failure showing there
   // looked exactly like a rejected account password.
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
+  // Asked for at the moment of enrolling rather than shared with the field
+  // above, which belongs to the privacy password: a passkey unlocks discreet
+  // mode and the vault by itself, so the server wants the account password
+  // before it will issue the challenge.
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrollPassword, setEnrollPassword] = useState("");
   const queryClient = useQueryClient();
 
   const { data } = useQuery({ queryKey: ["privacy"], queryFn: fetchPrivacyStatus });
@@ -29,9 +35,11 @@ export function PrivacySettingsSection() {
   const addPasskey = useMutation({
     // Named after the browser it's registered in, since that's what the
     // credential is actually tied to and a Mac may hold several.
-    mutationFn: () => registerPasskey(browserName()),
+    mutationFn: () => registerPasskey(browserName(), enrollPassword),
     onSuccess: () => {
       setPasskeyError(null);
+      setEnrolling(false);
+      setEnrollPassword("");
       queryClient.invalidateQueries({ queryKey: ["passkeys"] });
     },
     onError: (err: Error) => setPasskeyError(err.message),
@@ -151,19 +159,68 @@ export function PrivacySettingsSection() {
             </div>
           ))}
 
-          <button
-            type="button"
-            onClick={() => addPasskey.mutate()}
-            disabled={addPasskey.isPending}
-            className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-50"
-          >
-            {addPasskey.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
+          {enrolling ? (
+            <form
+              className="space-y-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (enrollPassword) addPasskey.mutate();
+              }}
+            >
+              <label className="block space-y-1">
+                <span className="text-xs font-medium">Your account password</span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  autoFocus
+                  value={enrollPassword}
+                  onChange={(event) => {
+                    setEnrollPassword(event.target.value);
+                    setPasskeyError(null);
+                  }}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/40"
+                />
+                <span className="block text-[11px] text-muted-foreground/70">
+                  Touch ID unlocks discreet mode and the vault on its own, so adding it
+                  needs your password.
+                </span>
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={addPasskey.isPending || enrollPassword.length === 0}
+                  className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-50"
+                >
+                  {addPasskey.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Fingerprint className="size-3.5" />
+                  )}
+                  Continue
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnrolling(false);
+                    setEnrollPassword("");
+                    setPasskeyError(null);
+                  }}
+                  className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEnrolling(true)}
+              className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-50"
+            >
               <Fingerprint className="size-3.5" />
-            )}
-            {passkeys && passkeys.length > 0 ? "Add another browser" : "Set up Touch ID"}
-          </button>
+              {passkeys && passkeys.length > 0 ? "Add another browser" : "Set up Touch ID"}
+            </button>
+          )}
 
           {passkeyError && <p className="text-xs text-destructive">{passkeyError}</p>}
         </div>

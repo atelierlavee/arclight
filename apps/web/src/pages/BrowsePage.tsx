@@ -97,6 +97,28 @@ function NewFolderButton({ parentId }: { parentId: number | null }) {
   );
 }
 
+/**
+ * A short, stable fingerprint of a browse view's search params.
+ *
+ * Sorted so the same view hashes the same however its URL was written, and
+ * hashed (FNV-1a) rather than stored as-is so typed search text stays out of
+ * sessionStorage.
+ */
+function hashView(search: Record<string, unknown>): string {
+  const text = JSON.stringify(
+    Object.keys(search)
+      .filter((key) => search[key] !== undefined)
+      .sort()
+      .map((key) => [key, search[key]]),
+  );
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export function BrowsePage() {
   const search = routeApi.useSearch();
   const {
@@ -122,7 +144,7 @@ export function BrowsePage() {
       return response.json() as Promise<{ folders: Folder[] }>;
     },
   });
-  const folders = folderData?.folders ?? [];
+  const folders = useMemo(() => folderData?.folders ?? [], [folderData]);
   const breadcrumb = useMemo(() => {
     const entries: BreadcrumbEntry[] = [];
     const seen = new Set<number>();
@@ -141,18 +163,33 @@ export function BrowsePage() {
     return entries;
   }, [folders, parentId]);
 
+  // Keyed on every search param, not a hand-kept list of them: a list missed
+  // the filter-bar filters, so two different filtered views shared one saved
+  // position. Hashed so a search's text is never written to storage.
+  const scrollKey = `browse-scroll:${hashView(search)}`;
   useEffect(() => {
-    const key = `browse-scroll:${window.location.search}`;
-    const restore = () =>
-      window.scrollTo({ top: Number(sessionStorage.getItem(key) ?? 0) });
-    const save = () => sessionStorage.setItem(key, String(window.scrollY));
+    const restore = () => {
+      try {
+        window.scrollTo({ top: Number(sessionStorage.getItem(scrollKey) ?? 0) });
+      } catch {
+        // Storage blocked: start at the top, as a fresh view would.
+      }
+    };
+    const save = () => {
+      try {
+        sessionStorage.setItem(scrollKey, String(window.scrollY));
+      } catch {
+        // Not remembering a scroll position is not worth surfacing.
+      }
+    };
     window.addEventListener("scroll", save, { passive: true });
-    requestAnimationFrame(restore);
+    const frame = requestAnimationFrame(restore);
     return () => {
+      cancelAnimationFrame(frame);
       save();
       window.removeEventListener("scroll", save);
     };
-  }, [parentId, tag, performer, studio, kind, collectionId, q, sort, year]);
+  }, [scrollKey]);
 
   const currentParentId = parentId ?? null;
 
@@ -231,9 +268,9 @@ export function BrowsePage() {
             : null;
 
   return (
-    // Outside AppShell, not inside it: the appearance menu lives in the
-    // shell's header, and it has to read the same scope the grid below it
-    // writes to or the panel would be editing a page it isn't on.
+    // Outside AppShell, not inside it: AppShell reports the scope up to the
+    // layout's appearance menu, and the menu has to read the same scope the
+    // grid below it writes to or the panel would be editing a page it isn't on.
     <PageScope name={scope}>
       <AppShell>
         <div className="space-y-5 px-4 py-5 md:px-6 md:py-6">

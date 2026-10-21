@@ -15,6 +15,7 @@
 export const OPEN_SEARCH_EVENT = "media-server:open-search";
 export const PLAY_ITEM_EVENT = "media-server:play-item";
 export const TOGGLE_FOCUS_EVENT = "media-server:toggle-focus";
+export const DISCREET_OFF_EVENT = "media-server:discreet-off";
 
 export type PlayItemDetail = {
   id: number;
@@ -48,6 +49,17 @@ export function openDetails(id: number): void {
       detail: { id, details: true },
     }),
   );
+}
+
+/**
+ * Asks to turn discreet mode off, through the same check the shortcut uses.
+ *
+ * For anything else that offers the switch — the command palette — so there
+ * is one guarded way out of the mode rather than a second, unguarded one.
+ * DiscreetUnlockDialog answers it; a no-op when the mode is already off.
+ */
+export function requestDiscreetOff(): void {
+  window.dispatchEvent(new Event(DISCREET_OFF_EVENT));
 }
 
 export function toggleFocusMode(): void {

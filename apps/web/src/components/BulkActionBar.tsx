@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Check, Eye, EyeOff, Heart, HeartOff, Star, Tag, User, X } from "lucide-react";
 import { useToast } from "@/lib/toast";
 import { summariseBulk, type BulkResult } from "@/lib/bulkSummary";
+import { libraryStatsKey } from "@/lib/statsApi";
 import {
   addItemsToCollection,
   removeItemsFromCollection,
@@ -107,7 +108,7 @@ export function BulkActionBar({
       ["media-item"],
       ["collection-items"],
       ["continue-watching"],
-      ["stats"],
+      libraryStatsKey,
       ["tags"],
     ]) {
       queryClient.invalidateQueries({ queryKey: key });

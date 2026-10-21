@@ -6,7 +6,12 @@ import {
   useMemo,
   useState,
 } from "react";
-import { appendUnique, moveQueueItem, prependUnique } from "./queueUtils";
+import {
+  QUEUE_STORAGE_KEY,
+  appendUnique,
+  moveQueueItem,
+  prependUnique,
+} from "./queueUtils";
 
 export type QueueItem = {
   id: number;
@@ -25,7 +30,7 @@ type QueueStore = {
   takeNext: () => void;
 };
 
-const STORAGE_KEY = "playback-queue";
+const STORAGE_KEY = QUEUE_STORAGE_KEY;
 
 function readQueue(): QueueItem[] {
   try {

@@ -7,6 +7,7 @@ import { useAppearance } from "@/lib/appearance";
 import { cn } from "@/lib/utils";
 import { Portal } from "./Portal";
 import type { MediaCardItem } from "./MediaCard";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 type Source = "any" | "unwatched" | "favourites";
 
@@ -43,6 +44,7 @@ export function SurpriseMe({ onClose }: { onClose: () => void }) {
   const { discreet, discreetBlurPercent } = useAppearance();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  useFocusTrap(dialogRef);
 
   useEffect(() => {
     closeRef.current?.focus();

@@ -14,6 +14,7 @@ import {
   backupDownloadUrl,
   createBackup,
   deleteBackup,
+  downloadBackup,
   fetchBackups,
   formatBytes,
   PrivacyLockedError,
@@ -26,6 +27,8 @@ import {
   type VerifyResult,
 } from "@/lib/backupApi";
 import { usePrivacyGuard } from "@/lib/privacyGuard";
+import { withPrivacyUnlock } from "@/lib/privacyLock";
+import { useToast } from "@/lib/toast";
 import { PrivacyUnlockForm } from "./PrivacyUnlockForm";
 import { RestoreBackupDialog } from "./RestoreBackupDialog";
 import { SettingsSection } from "./SettingsSection";
@@ -43,6 +46,7 @@ function relativeDate(iso: string): string {
 
 export function BackupSettingsSection() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const { guarded, hasPassword, hasPasskey } = usePrivacyGuard();
 
@@ -98,7 +102,20 @@ export function BackupSettingsSection() {
     onError: (err: Error) => setError(err.message),
   });
 
-  const remove = useMutation({ mutationFn: deleteBackup, onSuccess: refresh });
+  // Delete and download are guarded server-side like restore. They ask
+  // through the app-wide prompt and retry, rather than the inline form,
+  // which belongs to the restore flow and its confirmation.
+  const remove = useMutation({
+    mutationFn: (name: string) => withPrivacyUnlock(() => deleteBackup(name)),
+    onSuccess: refresh,
+    onError: (err: Error) =>
+      toast({ title: "Could not delete the backup", description: err.message, variant: "error" }),
+  });
+  const download = useMutation({
+    mutationFn: (name: string) => withPrivacyUnlock(() => downloadBackup(name)),
+    onError: (err: Error) =>
+      toast({ title: "Could not download the backup", description: err.message, variant: "error" }),
+  });
   const backups = data?.backups ?? [];
 
   // Terminal on purpose. The session is gone, so there is nothing useful left
@@ -218,6 +235,13 @@ export function BackupSettingsSection() {
               <a
                 href={backupDownloadUrl(backup.name)}
                 download
+                onClick={(event) => {
+                  // Checked first so a locked session gets the prompt, not
+                  // the error JSON saved as an archive. The href stays for
+                  // "copy link" and the like.
+                  event.preventDefault();
+                  download.mutate(backup.name);
+                }}
                 aria-label={`Download ${backup.name}`}
                 className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
               >

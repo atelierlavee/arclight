@@ -1,5 +1,8 @@
 import type { QueueItem } from "./queue";
 
+/** Here rather than in queue.tsx so signing out can clear it from outside the provider. */
+export const QUEUE_STORAGE_KEY = "playback-queue";
+
 export function appendUnique(items: QueueItem[], item: QueueItem): QueueItem[] {
   return items.some((entry) => entry.id === item.id) ? items : [...items, item];
 }

@@ -32,6 +32,7 @@ import { Slider, Toggle } from "./AppearanceControls";
 import { PrivacyUnlockForm } from "./PrivacyUnlockForm";
 import { Portal } from "./Portal";
 import { usePrivacyGuard } from "@/lib/privacyGuard";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /**
  * How the app looks, on a keyboard shortcut.
@@ -62,6 +63,7 @@ export function AppearanceMenu() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, []);
   const containerRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(containerRef, open);
   const appearance = useAppearance();
   const {
     tileSizePercent,

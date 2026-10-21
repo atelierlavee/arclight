@@ -99,11 +99,17 @@ describe("registerPasskey", () => {
     }));
     vi.mocked(startRegistration).mockRejectedValue(error);
 
-    await expect(registerPasskey("Arc Light")).rejects.toMatchObject({
+    await expect(registerPasskey("Arc Light", "account-password")).rejects.toMatchObject({
       message: "Touch ID setup failed (SecurityError): The relying party is not allowed.",
       cause: error,
     });
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/webauthn/register/options",
+      expect.objectContaining({
+        body: JSON.stringify({ accountPassword: "account-password" }),
+      }),
+    );
   });
 
   it("keeps the helpful message for an already registered authenticator", async () => {
@@ -115,7 +121,7 @@ describe("registerPasskey", () => {
       new DOMException("Already registered", "InvalidStateError"),
     );
 
-    await expect(registerPasskey("Arc Light")).rejects.toThrow(
+    await expect(registerPasskey("Arc Light", "account-password")).rejects.toThrow(
       "This browser is already set up — it's in the list above.",
     );
   });

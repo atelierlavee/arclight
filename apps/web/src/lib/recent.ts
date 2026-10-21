@@ -121,6 +121,33 @@ export function clearRecent(kind: RecentKind): void {
   }
 }
 
+/**
+ * Drops an item from every kind at once — for an item that has gone away
+ * (hidden, moved to the vault), which should stop being "recent" anywhere.
+ */
+export function forgetRecent(id: number): void {
+  const kinds: RecentKind[] = ["browsed", "played", "edited", "favourited"];
+  try {
+    for (const kind of kinds) {
+      const entries = readRecent(kind);
+      const kept = entries.filter((entry) => entry.id !== id);
+      if (kept.length !== entries.length) {
+        localStorage.setItem(storageKey(kind), JSON.stringify(kept));
+      }
+    }
+    window.dispatchEvent(new Event(CHANGE_EVENT));
+  } catch {
+    // As above.
+  }
+}
+
+/** Every kind's history, for signing out. */
+export function clearAllRecent(): void {
+  for (const kind of ["browsed", "played", "edited", "favourited"] as const) {
+    clearRecent(kind);
+  }
+}
+
 export function recentChangedEvent(): string {
   return CHANGE_EVENT;
 }

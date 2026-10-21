@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
@@ -1189,6 +1189,17 @@ function badgeIcon(badge: Achievement): LucideIcon {
   return BADGE_ICONS[badge.id] ?? Trophy;
 }
 
+/**
+ * A badge's icon, as its own component.
+ *
+ * Picking the icon into a local and rendering `<Icon />` reads to React (and
+ * the lint) as a component type created during render; going through
+ * createElement on the module-level icon keeps the type stable.
+ */
+function BadgeIcon({ badge, className }: { badge: Achievement; className?: string }) {
+  return createElement(badgeIcon(badge), { className });
+}
+
 const TIER_NAMES = { 1: "Bronze", 2: "Silver", 3: "Gold" } as const;
 
 // Single badges keep the gold they always had; tiers step up to it.
@@ -1281,7 +1292,6 @@ function EarnedBadge({
 }) {
   const [flipped, setFlipped] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
-  const Icon = badgeIcon(badge);
   const when = unlockedOn(unlocked[badge.id]);
   const tierName = badge.tier ? TIER_NAMES[badge.tier] : null;
 
@@ -1317,7 +1327,7 @@ function EarnedBadge({
           )}
           style={{ backfaceVisibility: "hidden" }}
         >
-          <Icon className="size-8" />
+          <BadgeIcon badge={badge} className="size-8" />
           <span
             className="pointer-events-none absolute inset-y-0 w-[40%] bg-gradient-to-r from-transparent via-white/30 to-transparent"
             style={{
@@ -1340,7 +1350,7 @@ function EarnedBadge({
           <span className="flex flex-col items-center gap-0.5 px-2">
             {tierName && <span className="text-[10px] font-bold uppercase tracking-wider">{tierName}</span>}
             {when && <span className="text-[10px] opacity-80">{when}</span>}
-            {!tierName && !when && <Icon className="size-6 opacity-60" />}
+            {!tierName && !when && <BadgeIcon badge={badge} className="size-6 opacity-60" />}
           </span>
         </span>
       </div>
@@ -1359,7 +1369,6 @@ function LockedBadge({
   index: number;
   visible: boolean;
 }) {
-  const Icon = badgeIcon(badge);
   return (
     <li
       className="flex items-center gap-4 border-b border-border py-3"
@@ -1369,7 +1378,7 @@ function LockedBadge({
       }}
     >
       <span className="relative grid size-11 shrink-0 place-items-center rounded-full bg-secondary text-muted-foreground">
-        {badge.progress > 0 ? <Icon className="size-4" /> : <Lock className="size-3.5" />}
+        {badge.progress > 0 ? <BadgeIcon badge={badge} className="size-4" /> : <Lock className="size-3.5" />}
         {badge.progress > 0 && <ProgressRing progress={badge.progress} />}
       </span>
       <div className="min-w-0 flex-1">

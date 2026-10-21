@@ -497,7 +497,15 @@ function clampPercent(value: unknown, fallback: number): number {
 
 function read(): Appearance {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    return parseStored(window.localStorage.getItem(STORAGE_KEY));
+  } catch {
+    return DEFAULTS;
+  }
+}
+
+/** The stored JSON, validated — shared by the first read and other tabs' writes. */
+function parseStored(raw: string | null): Appearance {
+  try {
     if (!raw) return DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<Appearance>;
     return {
@@ -657,7 +665,8 @@ export function PageScope({
   name,
   children,
 }: {
-  name: string;
+  /** Null declares "no page" — the globals — explicitly. */
+  name: string | null;
   children: React.ReactNode;
 }) {
   return (
@@ -665,6 +674,12 @@ export function PageScope({
       {children}
     </PageScopeContext.Provider>
   );
+}
+
+function pick(value: Appearance, keys: (keyof Appearance)[]): Partial<Appearance> {
+  const out: Partial<Appearance> = {};
+  for (const key of keys) (out as Record<string, unknown>)[key] = value[key];
+  return out;
 }
 
 /**
@@ -689,6 +704,31 @@ export function AppearanceProvider({
   // change would push this browser's local state over what's stored.
   const loaded = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef(value);
+  /**
+   * Keys this tab has changed and not yet written, one set per store.
+   *
+   * Writes carry only these, merged over whatever the store holds now,
+   * rather than this tab's whole value. A tab left open since before
+   * discreet mode was armed elsewhere still holds `discreet: false`; writing
+   * its whole value when you moved a slider in it switched discreet off for
+   * every other tab and, through the server, every other browser.
+   */
+  const localDirty = useRef(new Set<keyof Appearance>());
+  const serverDirty = useRef(new Set<keyof Appearance>());
+  const [serverPending, setServerPending] = useState(0);
+
+  const markDirty = useCallback((keys: (keyof Appearance)[]) => {
+    for (const key of keys) {
+      localDirty.current.add(key);
+      serverDirty.current.add(key);
+    }
+    setServerPending((n) => n + 1);
+  }, []);
+
+  useEffect(() => {
+    latest.current = value;
+  }, [value]);
 
   useEffect(() => {
     let cancelled = false;
@@ -713,31 +753,74 @@ export function AppearanceProvider({
           ) {
             merged.heroHeight = stored.bannerHeight;
           }
+          // The server's copy never switches discreet mode off. Armed here
+          // means armed — most likely a save that never made it, from a tab
+          // closed inside the debounce — and only the unlock may undo it.
+          if (current.discreet) merged.discreet = true;
           return merged;
         });
+        // Remembered locally for the next first paint, and the server told
+        // about a discreet mode it missed.
+        for (const key of Object.keys(stored) as (keyof Appearance)[]) {
+          localDirty.current.add(key);
+        }
+        if (latest.current.discreet && stored.discreet !== true) {
+          markDirty(["discreet"]);
+        }
       })
       .catch(() => {
         // Offline, or not signed in yet. The local copy is still correct.
       })
       .finally(() => {
-        if (!cancelled) loaded.current = true;
+        if (!cancelled) {
+          loaded.current = true;
+          setServerPending((n) => n + 1);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [markDirty]);
 
   useEffect(() => {
-    if (!loaded.current) return;
+    if (!loaded.current || serverDirty.current.size === 0) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(
-      () => void saveAppearance(value).catch(() => {}),
-      500,
-    );
+    saveTimer.current = setTimeout(() => {
+      const keys = [...serverDirty.current];
+      serverDirty.current.clear();
+      const ours = pick(latest.current, keys);
+      // Read-modify-write: the server replaces what it holds on PUT, so the
+      // keys this tab didn't touch come from its current copy, not ours.
+      void fetchAppearance()
+        .then((stored) => saveAppearance({ ...stored, ...ours }))
+        .catch(() => {
+          // Tried again with the next change rather than lost.
+          for (const key of keys) serverDirty.current.add(key);
+        });
+    }, 500);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [value]);
+  }, [serverPending]);
+
+  // Other tabs' writes. The storage event only fires in the tabs that did
+  // not write, so adopting the stored value here can't echo back. Taken
+  // whole: the writer merged its changes over what was stored, so this is
+  // the current state rather than one tab's view of it.
+  useEffect(() => {
+    function onStorage(event: StorageEvent) {
+      if (event.key !== STORAGE_KEY || event.storageArea !== window.localStorage)
+        return;
+      const next = parseStored(event.newValue);
+      setValue((current) => {
+        // Anything changed here and not yet written survives the merge.
+        const ours = pick(current, [...localDirty.current]);
+        return { ...next, ...ours };
+      });
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -749,6 +832,8 @@ export function AppearanceProvider({
       // The arming half. Pressing the same keys while it's on is handled by
       // DiscreetUnlockDialog, which asks for the password — this handler
       // no-ops in that case rather than the two fighting over one press.
+      if (latest.current.discreet) return;
+      markDirty(["discreet"]);
       setValue((current) =>
         current.discreet ? current : { ...current, discreet: true },
       );
@@ -759,11 +844,20 @@ export function AppearanceProvider({
     // focus was somewhere unhelpful.
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, []);
+  }, [markDirty]);
 
   useEffect(() => {
+    if (localDirty.current.size === 0) return;
+    const keys = [...localDirty.current];
+    localDirty.current.clear();
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+      // Merged over what's stored, for the same reason as the server write:
+      // another tab may have changed keys this one never touched.
+      const stored = parseStored(window.localStorage.getItem(STORAGE_KEY));
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ ...stored, ...pick(value, keys) }),
+      );
     } catch {
       // Not being able to remember the choice is survivable; crashing isn't.
     }
@@ -829,10 +923,17 @@ export function AppearanceProvider({
     }
   }, [value.discreet, value.discreetBlurPercent, value.discreetText]);
 
-  const set = useCallback((patch: Partial<Appearance>) => {
-    setValue((current) => ({ ...current, ...patch }));
-  }, []);
-  const reset = useCallback(() => setValue(DEFAULTS), []);
+  const set = useCallback(
+    (patch: Partial<Appearance>) => {
+      markDirty(Object.keys(patch) as (keyof Appearance)[]);
+      setValue((current) => ({ ...current, ...patch }));
+    },
+    [markDirty],
+  );
+  const reset = useCallback(() => {
+    markDirty(Object.keys(DEFAULTS) as (keyof Appearance)[]);
+    setValue(DEFAULTS);
+  }, [markDirty]);
 
   const store = useMemo<Store>(
     () => ({ ...value, set, reset }),

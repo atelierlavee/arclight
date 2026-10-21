@@ -1,3 +1,9 @@
+import { PrivacyLockedError } from "./privacyLock";
+
+// Shared with every other guarded call, so one `instanceof` check covers
+// them all; re-exported so existing imports from here keep working.
+export { PrivacyLockedError };
+
 /** A video whose file the scanner could not find. */
 export type MissingVideo = {
   id: number;
@@ -16,21 +22,6 @@ export type MissingVideo = {
 };
 
 export const missingQueryKey = ["missing-videos"] as const;
-
-/**
- * Thrown when the server says this session has not proved the privacy
- * credential. Its own class so the page can drop back to the prompt instead
- * of showing "something went wrong" for a state with an obvious remedy.
- *
- * The server enforces the lock whatever the UI believes, so this also covers
- * the unlock quietly expiring while the page sits open.
- */
-export class PrivacyLockedError extends Error {
-  constructor() {
-    super("Locked");
-    this.name = "PrivacyLockedError";
-  }
-}
 
 async function failed(res: Response): Promise<Error> {
   if (res.status === 403) {

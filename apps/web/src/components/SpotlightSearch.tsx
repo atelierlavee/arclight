@@ -23,6 +23,10 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Portal } from "./Portal";
 import { useAppearance } from "@/lib/appearance";
+import { requestDiscreetOff } from "@/lib/appEvents";
+import { followScan, startScan } from "@/lib/scanApi";
+import { useToast } from "@/lib/toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { SurpriseMe } from "./SurpriseMe";
 import { readRecentSearches, recordRecentSearch } from "@/lib/recentSearches";
 import {
@@ -33,6 +37,7 @@ import {
   useSuggestionRows,
   type Row,
 } from "./searchRows";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /**
  * Search from anywhere, Spotlight-style.
@@ -73,7 +78,11 @@ export function SpotlightSearch() {
   const [recents, setRecents] = useState<string[]>(readRecentSearches);
   const navigate = useNavigate();
   const listRef = useRef<HTMLUListElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
   const appearance = useAppearance();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const commands = useMemo<CommandItem[]>(
     () => [
@@ -138,14 +147,44 @@ export function SpotlightSearch() {
         shortcut: "⇧S",
         icon: RefreshCw,
         group: "Actions",
-        run: () => void fetch("/api/scan", { method: "POST" }),
+        // Reported either way: the palette closes as soon as this runs, so a
+        // scan that failed to start would otherwise just never happen.
+        run: () => {
+          void startScan()
+            .then(({ id }) => {
+              toast({ title: "Scan started", variant: "info" });
+              void queryClient.invalidateQueries({ queryKey: ["scan-latest"] });
+              return followScan(queryClient, id);
+            })
+            .then((job) => {
+              if (job?.status === "failed") {
+                toast({
+                  title: "Scan failed",
+                  description: job.error ?? undefined,
+                  variant: "error",
+                });
+              }
+            })
+            .catch((error: unknown) =>
+              toast({
+                title: "Couldn’t start a scan",
+                description: error instanceof Error ? error.message : undefined,
+                variant: "error",
+              }),
+            );
+        },
       },
       {
         id: "discreet",
         label: "Toggle discreet mode",
         icon: Shield,
         group: "Actions",
-        run: () => appearance.set({ discreet: !appearance.discreet }),
+        // On is instant; off goes through the same password or passkey
+        // check as the shortcut, rather than being a way around it.
+        run: () => {
+          if (appearance.discreet) requestDiscreetOff();
+          else appearance.set({ discreet: true });
+        },
       },
       {
         id: "focus",
@@ -213,7 +252,7 @@ export function SpotlightSearch() {
         run: () => void navigate({ to: "/settings" }),
       },
     ],
-    [appearance, navigate],
+    [appearance, navigate, queryClient, toast],
   );
 
   const { rows, ready } = useSuggestionRows(value);
@@ -334,6 +373,7 @@ export function SpotlightSearch() {
         className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-[12vh] backdrop-blur-[2px]"
       >
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label="Command palette"

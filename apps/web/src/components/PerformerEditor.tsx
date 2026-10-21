@@ -52,6 +52,11 @@ export function PerformerEditor({
       queryClient.invalidateQueries({ queryKey: ["media-item", itemId] });
       queryClient.invalidateQueries({ queryKey: ["media-items"] });
       queryClient.invalidateQueries({ queryKey: ["performers"] });
+      // Every performer page this item is on or just left: their profile
+      // counts and video lists both include it. All of them rather than by
+      // id, since a name added here may be a performer created by the save.
+      queryClient.invalidateQueries({ queryKey: ["performer"] });
+      queryClient.invalidateQueries({ queryKey: ["performer-videos"] });
       queryClient.invalidateQueries({ queryKey: ["inbox"] });
     },
   });

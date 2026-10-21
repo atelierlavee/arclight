@@ -18,11 +18,14 @@ import {
   removeRoot,
 } from "@/lib/libraryApi";
 import { fetchSettings, saveScanInterval } from "@/lib/settingsApi";
+import { withPrivacyUnlock } from "@/lib/privacyLock";
+import { useToast } from "@/lib/toast";
 import { RescanButton } from "./RescanButton";
 import { SettingsSection } from "./SettingsSection";
 
 export function LibrarySettingsSection() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [browsing, setBrowsing] = useState(false);
   const [dir, setDir] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -62,8 +65,10 @@ export function LibrarySettingsSection() {
   );
 
   const remove = useMutation({
+    // Deleting the data is guarded server-side; a lock refusal asks for the
+    // credential and retries rather than failing silently.
     mutationFn: ({ id, deleteData }: { id: number; deleteData: boolean }) =>
-      removeRoot(id, deleteData),
+      withPrivacyUnlock(() => removeRoot(id, deleteData)),
     onSuccess: () => {
       setRemoving(null);
       refresh();
@@ -71,6 +76,12 @@ export function LibrarySettingsSection() {
       // the moment this finishes either way.
       void queryClient.invalidateQueries({ queryKey: cleanupQueryKey });
     },
+    onError: (error) =>
+      toast({
+        title: "Could not remove the folder",
+        description: error.message,
+        variant: "error",
+      }),
   });
 
   return (

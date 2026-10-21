@@ -22,7 +22,10 @@ import { useAppearance } from "./appearance";
 import { useCardShortcuts } from "./cardShortcuts";
 import { useQueue, type QueueItem } from "./queue";
 import { playItem } from "./appEvents";
-import { recordRecent } from "./recent";
+import { forgetRecent, recordRecent } from "./recent";
+import { removeFolderPins } from "./pinned";
+import { libraryStatsKey } from "./statsApi";
+import { useToast } from "./toast";
 import type { TileShape } from "./layout";
 
 /**
@@ -137,18 +140,52 @@ export function useTileMenu({
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const { tileShape } = useAppearance();
   const { peek, toggleFavourite, toggleWatched } = useCardShortcuts();
-  const { add, addNext } = useQueue();
+  const { add, addNext, remove: removeFromQueue } = useQueue();
   const setTileShape = useTileShape();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
+  /**
+   * Hides an item and takes it off every surface that could still show it.
+   *
+   * Not just the server-backed lists: the recent rows, pins and the queue are
+   * this browser's own copies, and a hidden item lingering in "Recently
+   * played" or playing next from the queue would undo the point of hiding it.
+   */
   async function hide(item: MediaCardItem) {
-    await hideItem(item.id, true);
-    queryClient.invalidateQueries({ queryKey: ["media-items"] });
-    queryClient.invalidateQueries({ queryKey: ["collection-items"] });
-    queryClient.invalidateQueries({ queryKey: ["continue-watching"] });
-    queryClient.invalidateQueries({ queryKey: ["on-this-day"] });
-    queryClient.invalidateQueries({ queryKey: ["forgotten-gems"] });
-    queryClient.invalidateQueries({ queryKey: ["daily-pick"] });
+    try {
+      await hideItem(item.id, true);
+    } catch (error) {
+      toast({
+        title: "Couldn’t hide that",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "error",
+      });
+      return;
+    }
+    forgetRecent(item.id);
+    removeFolderPins(item.id);
+    removeFromQueue(item.id);
+    for (const key of [
+      ["media-items"],
+      ["media-item", item.id],
+      ["collection-items"],
+      ["continue-watching"],
+      ["on-this-day"],
+      ["forgotten-gems"],
+      ["daily-pick"],
+      ["hero-items"],
+      ["related-items"],
+      ["performer-videos"],
+      ["performer-in-progress"],
+      ["search-suggestions"],
+      ["library-browse"],
+      ["timeline"],
+      ["play-surface"],
+      libraryStatsKey,
+    ]) {
+      void queryClient.invalidateQueries({ queryKey: key });
+    }
   }
 
   function openMenu(event: React.MouseEvent, item: MediaCardItem) {

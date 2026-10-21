@@ -31,8 +31,17 @@ async function post(url: string, body?: unknown): Promise<unknown> {
  * fingerprint itself never leaves the laptop; it only unlocks the private key
  * the browser holds.
  */
-export async function registerPasskey(label: string): Promise<void> {
-  const options = (await post("/api/webauthn/register/options")) as Parameters<
+export async function registerPasskey(
+  label: string,
+  /**
+   * Required by the server: a passkey unlocks discreet mode and the vault on
+   * its own, so enrolling one has to prove more than an open session.
+   */
+  accountPassword: string,
+): Promise<void> {
+  const options = (await post("/api/webauthn/register/options", {
+    accountPassword,
+  })) as Parameters<
     typeof startRegistration
   >[0]["optionsJSON"];
 

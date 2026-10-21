@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { throwIfNotOk, withPrivacyUnlock } from "@/lib/privacyLock";
+import { useToast } from "@/lib/toast";
 
 type ActivityEvent = {
   id: number;
@@ -97,6 +99,7 @@ function timeOnly(dateStr: string): string {
 
 export function ActivityLogSection() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [activeType, setActiveType] = useState<string | undefined>(undefined);
 
   const { data, isError, isLoading } = useQuery({
@@ -105,13 +108,20 @@ export function ActivityLogSection() {
   });
 
   const clear = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/activity", { method: "DELETE" });
-      if (!response.ok)
-        throw new Error(`Failed to clear activity: ${response.status}`);
-    },
+    // Guarded server-side: wiping the log needs the privacy credential.
+    mutationFn: () =>
+      withPrivacyUnlock(async () => {
+        const response = await fetch("/api/activity", { method: "DELETE" });
+        await throwIfNotOk(response, "Failed to clear activity");
+      }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["activity"] }),
+    onError: (error) =>
+      toast({
+        title: "Could not clear the activity log",
+        description: error.message,
+        variant: "error",
+      }),
   });
 
   if (isLoading) return <div className="skeleton h-64 rounded-lg" />;

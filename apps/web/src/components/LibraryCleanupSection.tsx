@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { SettingsSection } from "./SettingsSection";
 import { useToast } from "@/lib/toast";
+import { withPrivacyUnlock } from "@/lib/privacyLock";
 import { libraryStatsKey } from "@/lib/statsApi";
 import {
   cleanupQueryKey,
@@ -44,7 +45,8 @@ export function LibraryCleanupSection() {
   const [confirming, setConfirming] = useState(false);
 
   const purge = useMutation({
-    mutationFn: purgeRemovableData,
+    // Guarded server-side; an expired unlock asks again and retries.
+    mutationFn: () => withPrivacyUnlock(purgeRemovableData),
     onSuccess: (removed) => {
       setConfirming(false);
       for (const key of [

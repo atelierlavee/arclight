@@ -1,31 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
-import { libraryStatsKey } from "@/lib/statsApi";
-
-type ScanJob = {
-  id: number;
-  status: "running" | "completed" | "failed";
-  filesScanned: number;
-  filesTotal: number | null;
-  error: string | null;
-};
-
-async function startScan(): Promise<{ id: number }> {
-  const res = await fetch("/api/scan", { method: "POST" });
-  if (!res.ok) {
-    throw new Error(`Failed to start scan: ${res.status}`);
-  }
-  return res.json();
-}
-
-async function fetchScanJob(id: number): Promise<ScanJob> {
-  const res = await fetch(`/api/scan/${id}`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch scan status: ${res.status}`);
-  }
-  return res.json();
-}
+import { fetchScanJob, invalidateAfterScan, startScan } from "@/lib/scanApi";
 
 export function RescanButton() {
   const [jobId, setJobId] = useState<number | null>(null);
@@ -61,26 +37,7 @@ export function RescanButton() {
   useEffect(() => {
     if (jobId === null || !job) return;
     if (job.status === "completed" || job.status === "failed") {
-      // A scan can add items, reassign performers and studios, assign albums
-      // and series, and change every count — invalidating only media-items
-      // left the rest stale.
-      //
-      // Keys that a module owns are imported from it rather than spelled
-      // inline: an inline key that no component actually queries under is
-      // invisibly dead, which is exactly how the library stats went stale
-      // here until a page reload.
-      for (const key of [
-        ["media-items"],
-        ["performers"],
-        ["studios"],
-        libraryStatsKey,
-        ["albums"],
-        ["series"],
-        ["hero-items"],
-        ["library-roots"],
-      ]) {
-        queryClient.invalidateQueries({ queryKey: key });
-      }
+      invalidateAfterScan(queryClient);
       if (job.status === "failed") setLastError(job.error);
     }
   }, [job, jobId, queryClient]);
