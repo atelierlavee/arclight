@@ -113,8 +113,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         };
       }
     }
+    // Never the session id: the cookie is httpOnly so page scripts can't read
+    // it, and echoing it here would hand it to any script that can call this.
     const user = request.user
-      ? { id: request.user.id, username: request.user.username, sessionId: request.user.sessionId }
+      ? { id: request.user.id, username: request.user.username }
       : null;
     // `profile` null with a user means "show the picker".
     return { needsSetup: !(await hasAnyUser()), user, profile };

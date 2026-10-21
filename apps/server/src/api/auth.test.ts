@@ -35,6 +35,14 @@ describe("first-run setup", () => {
     expect(res.headers["set-cookie"]).toBeDefined();
   });
 
+  it("never echoes the session id, which the httpOnly cookie keeps from scripts", async () => {
+    const res = await post("/api/auth/setup", { username: "me", password: "long-enough-pw" });
+    const cookie = String(res.headers["set-cookie"]).split(";")[0];
+    const status = await app.inject({ method: "GET", url: "/api/auth/status", headers: { cookie } });
+    expect(status.json().user.username).toBe("me");
+    expect(status.body).not.toContain(cookie.split("=")[1]);
+  });
+
   it("refuses a second account", async () => {
     await post("/api/auth/setup", { username: "me", password: "long-enough-pw" });
     const res = await post("/api/auth/setup", { username: "other", password: "long-enough-pw" });
