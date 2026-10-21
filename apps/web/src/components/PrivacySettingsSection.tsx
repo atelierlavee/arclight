@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Fingerprint, Loader2, Trash2 } from "lucide-react";
 import { DISCREET_SHORTCUT } from "@/lib/appearance";
 import { fetchPrivacyStatus, savePrivacyPassword } from "@/lib/privacyApi";
+import { withPrivacyUnlock } from "@/lib/privacyLock";
 import { deletePasskey, fetchPasskeys, registerPasskey } from "@/lib/webauthnApi";
 import { SettingsSection } from "./SettingsSection";
 
@@ -46,7 +47,7 @@ export function PrivacySettingsSection() {
   });
 
   const removePasskey = useMutation({
-    mutationFn: (id: string) => deletePasskey(id),
+    mutationFn: (id: string) => withPrivacyUnlock(() => deletePasskey(id)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["passkeys"] }),
   });
 

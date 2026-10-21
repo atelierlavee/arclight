@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { createSession } from "../auth/sessions.js";
 import { setSessionCookie } from "./auth.js";
 import { getVaultPinHash, unlockVault } from "../auth/vaultUnlock.js";
-import { markUnlocked } from "../auth/privacyUnlock.js";
+import { markUnlocked, privacyLocked } from "../auth/privacyUnlock.js";
 import { verifyPassword } from "../auth/passwords.js";
 import { sweeper } from "../auth/sweep.js";
 import type { FastifyInstance } from "fastify";
@@ -381,6 +381,10 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
       reply.code(401);
       return { error: "Not signed in" };
     }
+    // A passkey is a privacy credential (see privacyIsConfigured). Without
+    // this, a locked session could remove the last one and in doing so switch
+    // the privacy gate off for every destructive route at once.
+    if (await privacyLocked(request, reply)) return reply;
     await db
       .delete(webauthnCredentials)
       .where(

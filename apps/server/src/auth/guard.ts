@@ -11,8 +11,9 @@ declare module "fastify" {
 }
 
 // Everything an unauthenticated visitor legitimately needs: the auth
-// endpoints themselves, and a health check that reveals nothing.
-const PUBLIC_API_PATHS = new Set([
+// endpoints themselves, and a health check that reveals nothing. Exported so
+// api/routeCoverage.test.ts can pin it: adding an entry has to be deliberate.
+export const PUBLIC_API_PATHS: ReadonlySet<string> = new Set([
   "/api/auth/status",
   "/api/auth/setup",
   "/api/auth/login",

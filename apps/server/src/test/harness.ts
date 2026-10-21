@@ -10,13 +10,32 @@ import { randomBytes } from "node:crypto";
 
 let app: FastifyInstance | null = null;
 
+/** One registered method + path, e.g. { method: "GET", url: "/api/tags/:id" }. */
+export type RegisteredRoute = { method: string; url: string };
+const routes: RegisteredRoute[] = [];
+
 /** Builds the app once per test file and runs migrations against the test DB. */
 export async function testApp(): Promise<FastifyInstance> {
   if (app) return app;
   await runMigrations();
-  app = await buildApp();
+  app = await buildApp({
+    onRoute: (route) => {
+      const methods = Array.isArray(route.method) ? route.method : [route.method];
+      for (const method of methods) routes.push({ method, url: route.url });
+    },
+  });
   await app.ready();
   return app;
+}
+
+/**
+ * Every route the app registered, for tests that sweep the whole API rather
+ * than the routes someone remembered to list — a new route is then checked
+ * against the rules every route must follow the moment it exists.
+ */
+export async function registeredRoutes(): Promise<RegisteredRoute[]> {
+  await testApp();
+  return [...routes];
 }
 
 /**

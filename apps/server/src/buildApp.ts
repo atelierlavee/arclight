@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type RouteOptions } from "fastify";
 import fastifyStatic from "@fastify/static";
 import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
@@ -86,8 +86,19 @@ export function trustProxySetting(
  */
 export async function buildApp({
   logger = false,
-}: { logger?: boolean } = {}): Promise<FastifyInstance> {
+  onRoute,
+}: {
+  logger?: boolean;
+  /**
+   * Sees every route as it is registered. For tests that sweep the whole
+   * API (api/routeCoverage.test.ts), so a route nobody wrote a test for is
+   * still checked against the rules every route has to follow.
+   */
+  onRoute?: (route: RouteOptions) => void;
+} = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger, trustProxy: trustProxySetting(process.env.TRUST_PROXY) });
+  // First, so no route registered below can be missed.
+  if (onRoute) app.addHook("onRoute", onRoute);
 
   await app.register(cookie);
 

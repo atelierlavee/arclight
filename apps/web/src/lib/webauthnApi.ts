@@ -1,4 +1,5 @@
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
+import { throwIfNotOk } from "./privacyLock";
 
 export type Passkey = { id: string; label: string };
 
@@ -118,5 +119,7 @@ export async function deletePasskey(id: string): Promise<void> {
   const res = await fetch(`/api/webauthn/credentials/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error(`Failed to remove: ${res.status}`);
+  // Privacy-gated: removing the last passkey would otherwise switch the gate
+  // off for every other destructive action.
+  await throwIfNotOk(res, "Failed to remove");
 }
