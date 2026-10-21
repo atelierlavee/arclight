@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { db } from "../db/client.js";
 import { sessions, users } from "../db/schema.js";
@@ -18,28 +18,66 @@ const INVALID_CREDENTIALS = "Incorrect username or password";
 // Enough to make online guessing useless without ever locking you out for
 // long. Keyed in memory: a single-instance app, and losing the counter on
 // restart is not worth a table.
+//
+// A sliding window rather than a fixed one: each failure ages out on its own
+// fifteen minutes after it happened, so a lockout always ends a fixed time
+// after the guessing stops, and an attacker cannot line a burst up against a
+// window boundary to get twice the budget.
 const MAX_ATTEMPTS = 10;
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
-const attempts = new Map<string, { count: number; firstAt: number }>();
+const attempts = new Map<string, number[]>();
 
-function tooManyAttempts(ip: string): boolean {
-  const entry = attempts.get(ip);
-  if (!entry) return false;
-  if (Date.now() - entry.firstAt > ATTEMPT_WINDOW_MS) {
-    attempts.delete(ip);
-    return false;
+// Keyed by IP, but without a trusted proxy (see trustProxySetting in
+// buildApp) request.ip is often the Docker bridge gateway for every client,
+// so the per-IP limit is in practice already global. This backstop is what
+// still holds when it is not — with TRUST_PROXY on, or several addresses —
+// so spreading guesses across addresses buys a bounded number of them.
+const GLOBAL_KEY = "*";
+const MAX_GLOBAL_ATTEMPTS = 50;
+
+function recent(key: string, now: number): number[] {
+  const kept = (attempts.get(key) ?? []).filter((at) => now - at < ATTEMPT_WINDOW_MS);
+  if (kept.length === 0) attempts.delete(key);
+  else attempts.set(key, kept);
+  return kept;
+}
+
+/** Seconds until another attempt is allowed, or 0 when one is allowed now. */
+function retryAfterSeconds(ip: string): number {
+  const now = Date.now();
+  // Swept on every check: the map is keyed by caller-controlled addresses,
+  // so it must not keep keys whose failures have all aged out.
+  for (const key of attempts.keys()) recent(key, now);
+  let wait = 0;
+  for (const [key, limit] of [[ip, MAX_ATTEMPTS], [GLOBAL_KEY, MAX_GLOBAL_ATTEMPTS]] as const) {
+    const failures = recent(key, now);
+    if (failures.length >= limit) {
+      // The window reopens when enough of the oldest failures have aged out
+      // to bring the count back under the limit.
+      const reopensAt = failures[failures.length - limit] + ATTEMPT_WINDOW_MS;
+      wait = Math.max(wait, reopensAt - now);
+    }
   }
-  return entry.count >= MAX_ATTEMPTS;
+  return Math.ceil(wait / 1000);
 }
 
 function recordFailure(ip: string): void {
-  const entry = attempts.get(ip);
-  if (!entry || Date.now() - entry.firstAt > ATTEMPT_WINDOW_MS) {
-    attempts.set(ip, { count: 1, firstAt: Date.now() });
-    return;
+  const now = Date.now();
+  for (const [key, limit] of [[ip, MAX_ATTEMPTS], [GLOBAL_KEY, MAX_GLOBAL_ATTEMPTS]] as const) {
+    // Capped at the limit: past it only the newest timestamps matter, and an
+    // uncapped list is memory an attacker gets to allocate.
+    attempts.set(key, [...recent(key, now), now].slice(-limit));
   }
-  entry.count += 1;
 }
+
+/** Test hook: the counters are process-wide, so suites reset them between cases. */
+export function resetLoginAttempts(): void {
+  attempts.clear();
+}
+
+// Any fixed 64-bit key, shared by every first-run setup request. Only setup
+// takes it, so it cannot contend with anything else.
+const SETUP_LOCK_KEY = 0x41524331; // "ARC1"
 
 export function setSessionCookie(reply: FastifyReply, sessionId: string, secure: boolean): void {
   reply.setCookie(SESSION_COOKIE, sessionId, {
@@ -71,7 +109,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     "/api/auth/setup",
     async (request, reply) => {
       // Closes permanently the moment an account exists, so this can't be
-      // used to add a second admin later.
+      // used to add a second admin later. Checked here as a fast path; the
+      // check that actually decides is the locked one below.
       if (await hasAnyUser()) {
         reply.code(409);
         return { error: "An account already exists" };
@@ -88,10 +127,26 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
       }
 
-      const [user] = await db
-        .insert(users)
-        .values({ username, passwordHash: await hashPassword(password) })
-        .returning();
+      // Hashed outside the transaction: scrypt is the slow part, and holding
+      // the lock through it would only make concurrent setups queue longer.
+      const passwordHash = await hashPassword(password);
+
+      // Check-then-insert is a race on its own — two setup requests landing
+      // together both see no user and both insert, and the second admin is
+      // exactly what the check exists to prevent. The usernames differ, so
+      // no unique constraint catches it. A transaction-scoped advisory lock
+      // serialises setups: the second waits, then sees the first's row.
+      const user = await db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(${SETUP_LOCK_KEY}::bigint)`);
+        const [existing] = await tx.select({ id: users.id }).from(users).limit(1);
+        if (existing) return null;
+        const [created] = await tx.insert(users).values({ username, passwordHash }).returning();
+        return created;
+      });
+      if (!user) {
+        reply.code(409);
+        return { error: "An account already exists" };
+      }
 
       const sessionId = await createSession(user.id);
       setSessionCookie(reply, sessionId, request.protocol === "https");
@@ -103,10 +158,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     "/api/auth/login",
     async (request, reply) => {
       const ip = request.ip;
-      // if (tooManyAttempts(ip)) {
-      //   reply.code(429);
-      //   return { error: "Too many attempts. Try again in a few minutes." };
-      // }
+      // Checked before the password is even looked at, so a locked-out
+      // guess costs nothing and reveals nothing.
+      const wait = retryAfterSeconds(ip);
+      if (wait > 0) {
+        reply.code(429).header("Retry-After", String(wait));
+        return { error: "Too many attempts. Try again in a few minutes.", retryAfterSeconds: wait };
+      }
 
       const username = request.body.username?.trim() ?? "";
       const password = request.body.password ?? "";

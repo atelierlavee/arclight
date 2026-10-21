@@ -1,10 +1,12 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { resetDatabase, signIn, testApp } from "../test/harness.js";
 import { makeItem, makeLibrary } from "../test/fixtures.js";
 import { db } from "../db/client.js";
 import { activityEvents } from "../db/schema.js";
-import { resetVaultAttempts } from "./vault.js";
+import { lockoutMs, resetVaultAttempts } from "./vault.js";
+import { createSession } from "../auth/sessions.js";
+import { users } from "../db/schema.js";
 import { logActivity } from "../activity/log.js";
 
 let app: FastifyInstance;
@@ -84,6 +86,65 @@ describe("unlock and lock", () => {
     expect(blocked.statusCode).toBe(429);
     expect(blocked.json().retryAfterSeconds).toBeGreaterThan(0);
   });
+});
+
+describe("PIN guessing", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("doubles the lockout with each failure past the first five, up to a day", () => {
+    expect(lockoutMs(4, 5)).toBe(0);
+    expect(lockoutMs(5, 5)).toBe(60_000);
+    expect(lockoutMs(6, 5)).toBe(120_000);
+    expect(lockoutMs(7, 5)).toBe(240_000);
+    expect(lockoutMs(1000, 5)).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it("makes the next wait longer when guessing resumes after a lockout", async () => {
+    await setPin();
+    await send("POST", "/api/vault/lock");
+    const start = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(start);
+    for (let i = 0; i < 5; i++) await send("POST", "/api/vault/unlock", { pin: "0000" });
+    expect((await send("POST", "/api/vault/unlock", { pin: "0000" })).json().retryAfterSeconds).toBe(60);
+
+    now.mockReturnValue(start + 61_000);
+    expect((await send("POST", "/api/vault/unlock", { pin: "0000" })).statusCode).toBe(403);
+    const blocked = await send("POST", "/api/vault/unlock", { pin: "1234" });
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json().retryAfterSeconds).toBe(120);
+  }, 60_000);
+
+  it("does not lock other sessions out when one session guesses", async () => {
+    await setPin();
+    await send("POST", "/api/vault/lock");
+    for (let i = 0; i < 6; i++) await send("POST", "/api/vault/unlock", { pin: "0000" });
+
+    const [user] = await db.select().from(users);
+    const other = `media_session=${await createSession(user.id)}`;
+    const res = await app.inject({
+      method: "POST", url: "/api/vault/unlock", headers: { cookie: other }, payload: { pin: "1234" },
+    });
+    expect(res.statusCode).toBe(200);
+  }, 60_000);
+
+  it("still has a global backstop for guesses spread over many sessions", async () => {
+    await setPin();
+    await send("POST", "/api/vault/lock");
+    const [user] = await db.select().from(users);
+    for (let s = 0; s < 5; s++) {
+      const c = `media_session=${await createSession(user.id)}`;
+      for (let i = 0; i < 5; i++) {
+        await app.inject({
+          method: "POST", url: "/api/vault/unlock", headers: { cookie: c }, payload: { pin: "0000" },
+        });
+      }
+    }
+    const fresh = `media_session=${await createSession(user.id)}`;
+    const res = await app.inject({
+      method: "POST", url: "/api/vault/unlock", headers: { cookie: fresh }, payload: { pin: "1234" },
+    });
+    expect(res.statusCode).toBe(429);
+  }, 60_000);
 });
 
 describe("GET /api/vault/items", () => {

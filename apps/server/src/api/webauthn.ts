@@ -4,6 +4,8 @@ import { createSession } from "../auth/sessions.js";
 import { setSessionCookie } from "./auth.js";
 import { getVaultPinHash, unlockVault } from "../auth/vaultUnlock.js";
 import { markUnlocked } from "../auth/privacyUnlock.js";
+import { verifyPassword } from "../auth/passwords.js";
+import { sweeper } from "../auth/sweep.js";
 import type { FastifyInstance } from "fastify";
 import {
   generateAuthenticationOptions,
@@ -57,7 +59,12 @@ const CHALLENGE_TTL_MS = 120_000;
 const LOGIN_COOKIE = "passkey_login";
 const loginChallenges = new Map<string, { value: string; expires: number }>();
 
+// Both maps are keyed per session or per anonymous visitor, and an abandoned
+// ceremony never comes back to take its entry.
+const sweepChallenges = sweeper(challenges, (entry, now) => entry.expires <= now);
+
 function putChallenge(sessionId: string, value: string): void {
+  sweepChallenges();
   challenges.set(sessionId, { value, expires: Date.now() + CHALLENGE_TTL_MS });
 }
 
@@ -170,38 +177,62 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
     return { credentials: rows };
   });
 
-  app.post("/api/webauthn/register/options", async (request, reply) => {
-    if (!request.user) {
-      reply.code(401);
-      return { error: "Not signed in" };
-    }
-    const [account] = await db.select().from(users).where(eq(users.id, request.user.id));
+  /**
+   * Starts enrolling a passkey — only for someone who knows the account
+   * password.
+   *
+   * A passkey is not just another way to sign in: it unlocks discreet mode
+   * and the vault on its own (see /api/webauthn/auth). Enrolling one with
+   * nothing but a session meant anyone at an unlocked browser could add their
+   * own fingerprint and walk straight past the vault PIN. The account
+   * password is what setting that PIN already demands, so it is the proof
+   * here too. Only the options step asks: the challenge it issues is the
+   * only one /register will accept, so the proof carries through.
+   */
+  app.post<{ Body: { accountPassword?: string } | undefined }>(
+    "/api/webauthn/register/options",
+    async (request, reply) => {
+      if (!request.user) {
+        reply.code(401);
+        return { error: "Not signed in" };
+      }
+      const [account] = await db.select().from(users).where(eq(users.id, request.user.id));
+      const accountPassword = request.body?.accountPassword;
+      if (
+        !account ||
+        typeof accountPassword !== "string" ||
+        !(await verifyPassword(accountPassword, account.passwordHash))
+      ) {
+        reply.code(403);
+        return { error: "That account password isn't right", code: "account_password_required" };
+      }
 
-    const existing = await db
-      .select({ id: webauthnCredentials.id })
-      .from(webauthnCredentials)
-      .where(eq(webauthnCredentials.userId, request.user.id));
+      const existing = await db
+        .select({ id: webauthnCredentials.id })
+        .from(webauthnCredentials)
+        .where(eq(webauthnCredentials.userId, request.user.id));
 
-    const options = await generateRegistrationOptions({
-      rpName: RP_NAME,
-      rpID: RP_ID,
-      userName: account?.username ?? "user",
-      // Excluded so registering twice in the same browser replaces nothing and
-      // silently piles up duplicates.
-      excludeCredentials: existing.map((row) => ({ id: row.id })),
-      authenticatorSelection: {
-        // The built-in authenticator — Touch ID — rather than a USB key.
-        authenticatorAttachment: "platform",
-        residentKey: "preferred",
-        // What actually makes it ask for a fingerprint instead of just
-        // confirming presence.
-        userVerification: "required",
-      },
-    });
+      const options = await generateRegistrationOptions({
+        rpName: RP_NAME,
+        rpID: RP_ID,
+        userName: account?.username ?? "user",
+        // Excluded so registering twice in the same browser replaces nothing and
+        // silently piles up duplicates.
+        excludeCredentials: existing.map((row) => ({ id: row.id })),
+        authenticatorSelection: {
+          // The built-in authenticator — Touch ID — rather than a USB key.
+          authenticatorAttachment: "platform",
+          residentKey: "preferred",
+          // What actually makes it ask for a fingerprint instead of just
+          // confirming presence.
+          userVerification: "required",
+        },
+      });
 
-    putChallenge(request.user.sessionId, options.challenge);
-    return options;
-  });
+      putChallenge(request.user.sessionId, options.challenge);
+      return options;
+    },
+  );
 
   app.post<{ Body: { response?: unknown; label?: string } }>(
     "/api/webauthn/register",

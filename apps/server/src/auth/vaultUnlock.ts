@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { appSettings } from "../db/schema.js";
+import { sweeper } from "./sweep.js";
 
 export const VAULT_KEY = "vault";
 
@@ -14,7 +15,10 @@ export const VAULT_KEY = "vault";
 const unlocked = new Map<string, number>();
 const UNLOCK_TTL_MS = 10 * 60 * 1000;
 
+const sweep = sweeper(unlocked, (expires, now) => expires <= now);
+
 export function unlockVault(sessionId: string): void {
+  sweep();
   unlocked.set(sessionId, Date.now() + UNLOCK_TTL_MS);
 }
 

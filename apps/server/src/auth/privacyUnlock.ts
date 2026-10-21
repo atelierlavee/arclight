@@ -1,7 +1,9 @@
 import { count } from "drizzle-orm";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db/client.js";
 import { appSettings, webauthnCredentials } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { sweeper } from "./sweep.js";
 
 /**
  * Which sessions have proved the privacy credential recently.
@@ -27,7 +29,10 @@ const unlocked = new Map<string, number>();
  */
 const UNLOCK_TTL_MS = 15 * 60 * 1000;
 
+const sweep = sweeper(unlocked, (expires, now) => expires <= now);
+
 export function markUnlocked(sessionId: string): void {
+  sweep();
   unlocked.set(sessionId, Date.now() + UNLOCK_TTL_MS);
 }
 
@@ -65,4 +70,26 @@ export async function privacyIsConfigured(): Promise<boolean> {
     .select({ total: count() })
     .from(webauthnCredentials);
   return (passkeys?.total ?? 0) > 0;
+}
+
+/**
+ * Refuses a request unless its session has recently proved the privacy
+ * credential. Returns true when it refused (and has already sent the 403),
+ * so a handler reads `if (await privacyLocked(request, reply)) return reply;`.
+ *
+ * Shared so every destructive or exfiltrating endpoint — deleting records,
+ * restoring or downloading a backup, wiping the activity log — answers the
+ * same way, with the `privacy_locked` code the client already knows to turn
+ * into an unlock prompt. With no credential configured there is nothing to
+ * prove, so it lets the request through (see `privacyIsConfigured`).
+ */
+export async function privacyLocked(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<boolean> {
+  if (!(await privacyIsConfigured())) return false;
+  const sessionId = request.user?.sessionId;
+  if (sessionId && isUnlocked(sessionId)) return false;
+  reply.code(403).send({ error: "Locked", code: "privacy_locked" });
+  return true;
 }

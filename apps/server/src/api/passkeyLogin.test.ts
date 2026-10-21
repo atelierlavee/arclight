@@ -201,3 +201,38 @@ describe("passkey sign-in", () => {
     expect((await app.inject({ method: "POST", url: "/api/webauthn/register/options" })).statusCode).toBe(401);
   });
 });
+
+describe("passkey registration", () => {
+  const options = (cookie: string, payload?: object) =>
+    app.inject({ method: "POST", url: "/api/webauthn/register/options", headers: { cookie }, payload });
+
+  async function cookie() {
+    const [user] = await db.select().from(users);
+    return `media_session=${await createSession(user.id)}`;
+  }
+
+  it("needs the account password, not just a session", async () => {
+    const c = await cookie();
+    // A session alone used to be enough, and a passkey then opened the vault
+    // without its PIN.
+    expect((await options(c)).statusCode).toBe(403);
+    expect((await options(c, {})).statusCode).toBe(403);
+    const wrong = await options(c, { accountPassword: "not-it" });
+    expect(wrong.statusCode).toBe(403);
+    expect(wrong.json().code).toBe("account_password_required");
+
+    const right = await options(c, { accountPassword: "test-password" });
+    expect(right.statusCode).toBe(200);
+    expect(right.json().challenge).toBeTruthy();
+  });
+
+  it("will not verify a registration without a challenge issued behind the password", async () => {
+    const c = await cookie();
+    await options(c, { accountPassword: "wrong" });
+    const res = await app.inject({
+      method: "POST", url: "/api/webauthn/register", headers: { cookie: c },
+      payload: { response: { id: "x" } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

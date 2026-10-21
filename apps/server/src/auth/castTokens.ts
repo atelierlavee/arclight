@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { decodedPath } from "./paths.js";
 
 /**
  * Short-lived links that let a TV stream one video without a session.
@@ -40,12 +41,18 @@ export function verifyCastToken(itemId: number, token: string, now = Date.now())
 /**
  * Whether a request is a stream fetch carrying a valid cast token for the
  * video it names. Parsed from the raw URL, because the guards that ask run
- * before Fastify has routed the request.
+ * before Fastify has routed the request — but decoded the way the router
+ * will decode it, so the id checked against the token is the id the stream
+ * handler will actually serve, whichever way the path was spelled.
  */
 export function isAuthorisedCastStream(method: string, rawUrl: string): boolean {
   if (method !== "GET" && method !== "HEAD") return false;
-  const url = new URL(rawUrl, "http://placeholder");
-  const match = /^\/api\/stream\/(\d+)$/.exec(url.pathname);
-  const token = url.searchParams.get("cast");
+  // Split by hand rather than through `new URL`, which would read a path
+  // starting with "//" as a hostname and check a different path than the
+  // router sees.
+  const queryAt = rawUrl.indexOf("?");
+  const pathname = decodedPath(queryAt === -1 ? rawUrl : rawUrl.slice(0, queryAt));
+  const match = pathname === null ? null : /^\/api\/stream\/(\d+)$/.exec(pathname);
+  const token = queryAt === -1 ? null : new URLSearchParams(rawUrl.slice(queryAt + 1)).get("cast");
   return match !== null && token !== null && verifyCastToken(Number(match[1]), token);
 }

@@ -1,6 +1,9 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { resetDatabase, testApp } from "../test/harness.js";
+import { resetLoginAttempts } from "./auth.js";
+import { db } from "../db/client.js";
+import { users } from "../db/schema.js";
 
 let app: FastifyInstance;
 
@@ -9,7 +12,9 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await resetDatabase();
+  resetLoginAttempts();
 });
+afterEach(() => vi.restoreAllMocks());
 
 // `payload` is typed as an object rather than unknown: with unknown,
 // TypeScript cannot pick the right `inject` overload and every call to the
@@ -86,4 +91,81 @@ describe("session lifetime", () => {
       401
     );
   });
+});
+
+describe("first-run setup race", () => {
+  it("creates exactly one account when two setups arrive together", async () => {
+    const results = await Promise.all([
+      post("/api/auth/setup", { username: "first", password: "long-enough-pw" }),
+      post("/api/auth/setup", { username: "second", password: "long-enough-pw" }),
+      post("/api/auth/setup", { username: "third", password: "long-enough-pw" }),
+    ]);
+    const codes = results.map((res) => res.statusCode).sort();
+    expect(codes).toEqual([200, 409, 409]);
+    expect(await db.select().from(users)).toHaveLength(1);
+  }, 60_000);
+});
+
+describe("login throttle", () => {
+  beforeEach(async () => {
+    await post("/api/auth/setup", { username: "me", password: "long-enough-pw" });
+  });
+
+  const wrong = () => post("/api/auth/login", { username: "me", password: "nope-nope" });
+  const right = () => post("/api/auth/login", { username: "me", password: "long-enough-pw" });
+
+  it("refuses even the right password after ten failures", async () => {
+    for (let i = 0; i < 10; i++) expect((await wrong()).statusCode).toBe(401);
+    const blocked = await right();
+    expect(blocked.statusCode).toBe(429);
+    expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("lets you back in once the failures age out of the window", async () => {
+    const start = Date.now();
+    for (let i = 0; i < 10; i++) await wrong();
+    expect((await right()).statusCode).toBe(429);
+
+    vi.spyOn(Date, "now").mockReturnValue(start + 15 * 60 * 1000 + 1000);
+    expect((await right()).statusCode).toBe(200);
+  }, 60_000);
+
+  it("slides rather than resetting on a fixed boundary", async () => {
+    const start = Date.now();
+    const now = vi.spyOn(Date, "now");
+    // Five early, five late: at no point does a fresh window wipe the slate.
+    now.mockReturnValue(start);
+    for (let i = 0; i < 5; i++) await wrong();
+    now.mockReturnValue(start + 10 * 60 * 1000);
+    for (let i = 0; i < 5; i++) await wrong();
+    expect((await right()).statusCode).toBe(429);
+    // Once the early five have aged out, there is budget again.
+    now.mockReturnValue(start + 15 * 60 * 1000 + 1000);
+    expect((await right()).statusCode).toBe(200);
+  }, 60_000);
+
+  it("a successful login clears the caller's own count", async () => {
+    for (let i = 0; i < 9; i++) await wrong();
+    expect((await right()).statusCode).toBe(200);
+    for (let i = 0; i < 9; i++) expect((await wrong()).statusCode).toBe(401);
+    expect((await right()).statusCode).toBe(200);
+  }, 60_000);
+
+  it("has a global backstop across addresses", async () => {
+    for (let i = 0; i < 50; i++) {
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { username: "me", password: "nope-nope" },
+        remoteAddress: `10.0.0.${i}`,
+      });
+    }
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "me", password: "long-enough-pw" },
+      remoteAddress: "10.0.1.1",
+    });
+    expect(res.statusCode).toBe(429);
+  }, 60_000);
 });

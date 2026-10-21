@@ -40,10 +40,40 @@ import { vaultRoutes } from "./api/vault.js";
 import { insightsRoutes } from "./api/insights.js";
 import { achievementRoutes } from "./api/achievements.js";
 import { registerAuthGuard } from "./auth/guard.js";
+import { decodedPath, isApiUrl } from "./auth/paths.js";
 import { registerLanGuard } from "./net/lan.js";
 import { isRestoring } from "./backup/restoreState.js";
 import { checkDbConnection } from "./db/client.js";
 import { MAX_UPLOAD_BYTES } from "./media/performerImages.js";
+
+/**
+ * Whether to believe X-Forwarded-* headers, from the TRUST_PROXY env var.
+ *
+ * Off unless asked for. Trusting them when nothing in front of the server
+ * sets them lets any client claim any address — which would hand every
+ * caller a fresh login-attempt budget per request and let a plain-http
+ * request claim to be https. Behind a reverse proxy that terminates TLS it is
+ * worth turning on, so the session cookie gets its Secure flag and the login
+ * throttle sees real client addresses: "true" trusts every hop, a number
+ * trusts that many hops, anything else is passed through as Fastify's list of
+ * trusted proxy addresses/CIDRs (e.g. "127.0.0.1,172.18.0.0/16").
+ *
+ * The LAN switch (net/lan.ts) reads the raw Host header, not request.host,
+ * so this does not change what it decides.
+ */
+export function trustProxySetting(
+  value: string | undefined,
+): boolean | string | ((address: string, hop: number) => boolean) {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed === "false" || trimmed === "0") return false;
+  if (trimmed === "true") return true;
+  if (/^\d+$/.test(trimmed)) {
+    // Fastify's typings only take the hop count in function form.
+    const hops = Number(trimmed);
+    return (_address, hop) => hop < hops;
+  }
+  return trimmed;
+}
 
 /**
  * Builds the server without starting it or touching the database schema.
@@ -57,7 +87,7 @@ import { MAX_UPLOAD_BYTES } from "./media/performerImages.js";
 export async function buildApp({
   logger = false,
 }: { logger?: boolean } = {}): Promise<FastifyInstance> {
-  const app = Fastify({ logger });
+  const app = Fastify({ logger, trustProxy: trustProxySetting(process.env.TRUST_PROXY) });
 
   await app.register(cookie);
 
@@ -68,8 +98,10 @@ export async function buildApp({
   // outside can still tell the process is alive.
   app.addHook("onRequest", async (request, reply) => {
     if (!isRestoring()) return;
-    if (!request.url.startsWith("/api/")) return;
-    if (request.url.split("?")[0] === "/api/health") return;
+    // Decoded first: this runs before routing, and the router will happily
+    // send `/%61pi/...` to an /api handler that must not run mid-restore.
+    if (!isApiUrl(request.url)) return;
+    if (decodedPath(request.url) === "/api/health") return;
     reply.code(503).send({
       error: "A backup is being restored — the library is briefly unavailable",
       code: "restoring",
@@ -155,7 +187,7 @@ export async function buildApp({
     await app.register(fastifyStatic, { root: webDistPath });
 
     app.setNotFoundHandler((request, reply) => {
-      if (request.raw.url?.startsWith("/api")) {
+      if (isApiUrl(request.url)) {
         reply.code(404).send({ error: "Not Found" });
         return;
       }

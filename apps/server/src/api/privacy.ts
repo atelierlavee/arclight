@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { appSettings, users } from "../db/schema.js";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../auth/passwords.js";
 import { markUnlocked } from "../auth/privacyUnlock.js";
+import { sweeper } from "../auth/sweep.js";
 
 const PRIVACY_KEY = "privacy";
 
@@ -36,10 +37,19 @@ async function getPrivacyHash(): Promise<string | null> {
  * restart the process. scrypt already makes each guess cost ~100ms; this
  * stops that becoming ten guesses a second over a long afternoon.
  */
-const attempts = new Map<string, { count: number; blockedUntil: number }>();
+const attempts = new Map<string, { count: number; blockedUntil: number; lastAt: number }>();
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 60_000;
+
+// A counter nobody has touched for an hour is forgotten, provided it is not
+// mid-lockout. Without this, every session that ever mistyped once stayed in
+// the map until the process restarted.
+const FORGET_AFTER_MS = 60 * 60 * 1000;
+const sweepAttempts = sweeper(
+  attempts,
+  (record, now) => record.blockedUntil <= now && now - record.lastAt > FORGET_AFTER_MS,
+);
 export async function privacyRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/privacy", async () => {
     // Only whether one exists — never the hash itself.
@@ -99,6 +109,7 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
     }
     const sessionId = request.user.sessionId;
 
+    sweepAttempts();
     const record = attempts.get(sessionId);
     if (record && record.blockedUntil > Date.now()) {
       reply.code(429);
@@ -122,6 +133,7 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
         // rising, so each further wrong guess re-arms the same wait rather
         // than granting a fresh batch of free tries.
         blockedUntil: count >= MAX_ATTEMPTS ? Date.now() + LOCKOUT_MS : 0,
+        lastAt: Date.now(),
       });
       reply.code(403);
       return { ok: false, error: "Wrong password", attemptsLeft: Math.max(0, MAX_ATTEMPTS - count) };
