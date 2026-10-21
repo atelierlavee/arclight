@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import {
@@ -10,6 +10,7 @@ import {
   playbackStates,
   studios,
 } from "../db/schema.js";
+import { visibleItems } from "../library/visibility.js";
 
 /**
  * Studios: who released a scene, derived from the filename's leading
@@ -23,8 +24,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
   function studioVideos(studioId: number, videoTypeIds: ReturnType<typeof videoTypes>) {
     return and(
       eq(mediaItems.studioId, studioId),
-      eq(mediaItems.inScope, true),
-      isNull(mediaItems.missingSince),
+      visibleItems(),
       inArray(mediaItems.itemTypeId, videoTypeIds)
     );
   }
@@ -73,8 +73,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
         mediaItems,
         and(
           eq(mediaItems.studioId, studios.id),
-          eq(mediaItems.inScope, true),
-          isNull(mediaItems.missingSince),
+          visibleItems(),
           inArray(mediaItems.itemTypeId, videoTypeIds)
         )
       )
@@ -185,8 +184,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
               mediaItems,
               and(
                 eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-                eq(mediaItems.inScope, true),
-                isNull(mediaItems.missingSince),
+                visibleItems(),
                 inArray(mediaItems.itemTypeId, videoTypeIds)
               )
             )

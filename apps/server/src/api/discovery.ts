@@ -10,7 +10,7 @@ import {
   studios,
   watchLog,
 } from "../db/schema.js";
-import { visibleItems } from "../library/visibility.js";
+import { notHidden, visibleItems } from "../library/visibility.js";
 import {
   HERO_LIMIT,
   RELATED_LIMIT,
@@ -62,11 +62,10 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     } else {
       rows = await base
         .where(
-          and(
-            eq(mediaItemTypes.name, "video"),
-            eq(mediaItems.inScope, true),
-            isNull(mediaItems.missingSince)
-          )
+          // Through visibleItems() like the other two sources: spelling the
+          // rule out here is how "recent" came to put vault items on the
+          // homepage hero.
+          and(eq(mediaItemTypes.name, "video"), visibleItems())
         )
         .orderBy(desc(mediaItems.createdAt))
         .limit(HERO_LIMIT);
@@ -112,10 +111,15 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/api/taste-twins", async () => {
+    // Both halves only over visible items: what you watch in the vault must
+    // not decide who the homepage suggests, and a twin shared only through a
+    // hidden video would point straight at it.
     const topPerformers = await db
       .select({ performerId: mediaItemPerformers.performerId, watchTime: sql<number>`coalesce(sum(${watchLog.seconds}), 0)::int` })
       .from(mediaItemPerformers)
       .innerJoin(watchLog, eq(watchLog.mediaItemId, mediaItemPerformers.mediaItemId))
+      .innerJoin(mediaItems, eq(mediaItems.id, mediaItemPerformers.mediaItemId))
+      .where(visibleItems())
       .groupBy(mediaItemPerformers.performerId)
       .orderBy(sql`coalesce(sum(${watchLog.seconds}), 0) desc`)
       .limit(10);
@@ -126,7 +130,8 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     const otherCredits = db.$with("other_credits").as(
       db.selectDistinct({ mediaItemId: mediaItemPerformers.mediaItemId })
         .from(mediaItemPerformers)
-        .where(inArray(mediaItemPerformers.performerId, topIds))
+        .innerJoin(mediaItems, eq(mediaItems.id, mediaItemPerformers.mediaItemId))
+        .where(and(inArray(mediaItemPerformers.performerId, topIds), visibleItems()))
     );
 
     const twins = await db
@@ -163,15 +168,21 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
     const today = new Date();
     const seed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
 
+    // Hidden items' watch time and completions stay out of these, like the
+    // items themselves: a figure that moves when you watch something in the
+    // vault says that you did.
     const [totalRow] = await db
       .select({ total: sql<number>`coalesce(sum(${watchLog.seconds}), 0)::int` })
-      .from(watchLog);
+      .from(watchLog)
+      .innerJoin(mediaItems, eq(mediaItems.id, watchLog.mediaItemId))
+      .where(notHidden());
     const totalSeconds = totalRow?.total ?? 0;
 
     const [watchedRow] = await db
       .select({ count: sql<number>`count(distinct ${playbackStates.mediaItemId})::int` })
       .from(playbackStates)
-      .where(isNotNull(playbackStates.completedAt));
+      .innerJoin(mediaItems, eq(mediaItems.id, playbackStates.mediaItemId))
+      .where(and(isNotNull(playbackStates.completedAt), notHidden()));
     const watchedCount = watchedRow?.count ?? 0;
 
     const [unwatchedRow] = await db
@@ -259,9 +270,17 @@ export async function discoveryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/api/streak", async () => {
+    // Summed per hour in SQL: the widget only adds seconds up by local day,
+    // so one row per hour carries everything it needs, where one row per
+    // video per hour grew with every video ever watched. Hours rather than
+    // days because only the browser knows the viewer's time zone. Hidden
+    // items are left out so the vault leaves no trace on the homepage.
     const rows = await db
-      .select({ hour: watchLog.hour, seconds: watchLog.seconds })
+      .select({ hour: watchLog.hour, seconds: sql<number>`sum(${watchLog.seconds})::int` })
       .from(watchLog)
+      .innerJoin(mediaItems, eq(mediaItems.id, watchLog.mediaItemId))
+      .where(notHidden())
+      .groupBy(watchLog.hour)
       .orderBy(watchLog.hour);
 
     return { log: rows.map((r) => ({ hour: r.hour.toISOString(), seconds: r.seconds })) };

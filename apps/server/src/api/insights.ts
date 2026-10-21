@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import {
@@ -11,6 +11,7 @@ import {
   studios,
   watchLog,
 } from "../db/schema.js";
+import { notHidden, visibleItems } from "../library/visibility.js";
 
 /**
  * Everything the Stats page works from, in one read.
@@ -28,12 +29,13 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
       .select({ id: mediaItemTypes.id })
       .from(mediaItemTypes)
       .where(eq(mediaItemTypes.name, "video"));
-    const visibleVideo = and(
-      eq(mediaItems.inScope, true),
-      isNull(mediaItems.missingSince),
-      inArray(mediaItems.itemTypeId, videoTypeIds)
-    );
+    const visibleVideo = and(visibleItems(), inArray(mediaItems.itemTypeId, videoTypeIds));
 
+    // History survives a file going missing or a folder leaving the scan —
+    // you did watch it — but not a hide: a vault item's hours, badges and
+    // recap entries would name exactly what the vault is there to keep out
+    // of sight. Kept per video per hour because the page tallies time by
+    // video, performer and studio in the viewer's own time zone.
     const log = await db
       .select({
         mediaItemId: watchLog.mediaItemId,
@@ -41,11 +43,14 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         seconds: watchLog.seconds,
       })
       .from(watchLog)
+      .innerJoin(mediaItems, eq(mediaItems.id, watchLog.mediaItemId))
+      .where(notHidden())
       .orderBy(watchLog.hour);
 
     // Every video with any history worth showing: in the log, finished,
-    // played, or rated.
-    const loggedIds = [...new Set(log.map((row) => row.mediaItemId))];
+    // played, or rated. "In the log" is asked of the database rather than
+    // passed back in as a list of ids, which grew one bound parameter per
+    // video ever watched and would eventually exceed what Postgres accepts.
     const items = await db
       .select({
         id: mediaItems.id,
@@ -63,8 +68,9 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
       .where(
         and(
           inArray(mediaItems.itemTypeId, videoTypeIds),
+          notHidden(),
           or(
-            loggedIds.length > 0 ? inArray(mediaItems.id, loggedIds) : undefined,
+            sql`exists (select 1 from ${watchLog} where ${watchLog.mediaItemId} = ${mediaItems.id})`,
             isNotNull(playbackStates.completedAt),
             sql`${playbackStates.playCount} > 0`,
             isNotNull(mediaItems.rating)
@@ -128,7 +134,9 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
 
     const [{ bookmarkCount }] = await db
       .select({ bookmarkCount: sql<number>`count(*)::int` })
-      .from(bookmarks);
+      .from(bookmarks)
+      .innerJoin(mediaItems, eq(mediaItems.id, bookmarks.mediaItemId))
+      .where(notHidden());
 
     return {
       log: log.map((row) => ({ ...row, hour: row.hour.toISOString() })),

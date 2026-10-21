@@ -1,6 +1,11 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { and, isNotNull } from "drizzle-orm";
+import type { FastifyInstance } from "fastify";
 import { logActivity } from "../activity/log.js";
-import { isUnlocked, privacyIsConfigured } from "../auth/privacyUnlock.js";
+import { privacyLocked } from "../auth/privacyUnlock.js";
+import { isScanRunning } from "../scanner/pipeline.js";
+import { isVaultUnlocked } from "../auth/vaultUnlock.js";
+import { db } from "../db/client.js";
+import { mediaItems } from "../db/schema.js";
 import {
   forgetAllMissingVideos,
   forgetItems,
@@ -16,39 +21,43 @@ import {
  * gone. Scoping the endpoint to those means a stray id cannot delete an item
  * that is sitting on disk perfectly fine, whatever the caller intended.
  */
-export async function missingRoutes(app: FastifyInstance): Promise<void> {
-  /**
-   * Refuses the request unless this session has proved the privacy credential.
-   *
-   * Enforced here, not just in the UI. A page that asks for a password before
-   * showing a delete button protects nothing on its own — the endpoint behind
-   * it is still a single request away for anything that can reach the API.
-   *
-   * With no password and no passkey set there is nothing to prove, and
-   * demanding it would lock the owner out of their own library permanently.
-   * The client shows the same reasoning as a prompt to go and set one.
-   */
-  async function locked(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<boolean> {
-    if (!(await privacyIsConfigured())) return false;
-    const sessionId = request.user?.sessionId;
-    if (sessionId && isUnlocked(sessionId)) return false;
-    reply.code(403).send({ error: "Locked", code: "privacy_locked" });
-    return true;
-  }
+/** Drops vault items from a list, keeping its order. */
+async function withoutHidden<T extends { id: number }>(items: T[]): Promise<T[]> {
+  if (items.length === 0) return items;
+  const hidden = await db
+    .select({ id: mediaItems.id })
+    .from(mediaItems)
+    // Every hidden missing item rather than "these ids": the list can be
+    // long, and one bound parameter per id is a limit waiting to be hit.
+    .where(and(isNotNull(mediaItems.hiddenAt), isNotNull(mediaItems.missingSince)));
+  if (hidden.length === 0) return items;
+  const hiddenIds = new Set(hidden.map((row) => row.id));
+  return items.filter((item) => !hiddenIds.has(item.id));
+}
 
+export async function missingRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/missing", async (request, reply) => {
-    if (await locked(request, reply)) return reply;
-    const items = await listMissingVideos();
+    if (await privacyLocked(request, reply)) return reply;
+    // Gated on the privacy credential, enforced here and not just in the UI:
+    // a page that asks first protects nothing while the endpoint is one
+    // request away. A hidden video whose file has gone is still a vault item,
+    // so it stays out of this list unless this session has the vault open.
+    const all = await listMissingVideos();
+    const items = isVaultUnlocked(request.user?.sessionId)
+      ? all
+      : await withoutHidden(all);
     return { items };
   });
 
   app.post<{ Body: { ids?: unknown } }>(
     "/api/missing/forget",
     async (request, reply) => {
-      if (await locked(request, reply)) return reply;
+      if (await privacyLocked(request, reply)) return reply;
+      // A scan running alongside could be clearing these very items' missing
+      // flags while they are deleted.
+      if (isScanRunning()) {
+        return reply.code(409).send({ error: "A library scan is running — try again when it finishes" });
+      }
       const raw = request.body?.ids;
       if (!Array.isArray(raw)) {
         return reply.code(400).send({ error: "ids must be an array" });
@@ -75,7 +84,10 @@ export async function missingRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.post("/api/missing/forget-all", async (request, reply) => {
-    if (await locked(request, reply)) return reply;
+    if (await privacyLocked(request, reply)) return reply;
+    if (isScanRunning()) {
+      return reply.code(409).send({ error: "A library scan is running — try again when it finishes" });
+    }
     const removed = await forgetAllMissingVideos();
     if (removed > 0) {
       await logActivity(

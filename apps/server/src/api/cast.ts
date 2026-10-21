@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { signCastToken } from "../auth/castTokens.js";
 import { db } from "../db/client.js";
 import { mediaItems, mediaItemTypes } from "../db/schema.js";
 import { isLocalHost, lanAddresses, lanPort } from "../net/lan.js";
+import { hiddenGate } from "../library/visibility.js";
 
 /**
  * A stream URL a TV can fetch by itself.
@@ -25,7 +26,11 @@ export async function castRoutes(app: FastifyInstance): Promise<void> {
       .select({ type: mediaItemTypes.name })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItemTypes.id, mediaItems.itemTypeId))
-      .where(eq(mediaItems.id, id));
+      // A cast token lets a session-less TV stream the video, hidden or not
+      // (see streamMayShowHidden in media.ts), so this is where the vault
+      // check for casting lives: a token is only signed for an item the
+      // asking session could open itself.
+      .where(and(eq(mediaItems.id, id), hiddenGate(request)));
     if (!item || item.type !== "video") {
       reply.code(404);
       return { error: "Not found" };

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import {
@@ -10,6 +10,7 @@ import {
   tags,
 } from "../db/schema.js";
 import { listBackups } from "../backup/create.js";
+import { notHidden, visibleItems, visibleItemsSql } from "../library/visibility.js";
 
 export async function statsRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/stats", async () => {
@@ -17,7 +18,9 @@ export async function statsRoutes(app: FastifyInstance): Promise<void> {
       .select({ type: mediaItemTypes.name, total: count() })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
-      .where(eq(mediaItems.inScope, true))
+      // Vault items are left out of every figure on this page: a library
+      // total that drops by one when you hide something says you did.
+      .where(and(eq(mediaItems.inScope, true), notHidden()))
       .groupBy(mediaItemTypes.name);
 
     // How much disk the library actually occupies. Summed over files rather
@@ -35,9 +38,7 @@ export async function statsRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin(mediaItems, eq(mediaItems.id, mediaFiles.mediaItemId))
       // Matches what the counts above report: a folder you stopped scanning
       // shouldn't still be adding terabytes to the total.
-      .where(
-        and(eq(mediaItems.inScope, true), isNull(mediaItems.missingSince)),
-      );
+      .where(visibleItems());
 
     const [{ total: tagCount }] = await db
       .select({ total: count() })
@@ -61,7 +62,7 @@ export async function statsRoutes(app: FastifyInstance): Promise<void> {
       .select({ total: count() })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
-      .where(and(eq(mediaItems.inScope, true), isVideo));
+      .where(and(eq(mediaItems.inScope, true), notHidden(), isVideo));
 
     const [{ total: videoMissing }] = await db
       .select({ total: count() })
@@ -70,6 +71,7 @@ export async function statsRoutes(app: FastifyInstance): Promise<void> {
       .where(
         and(
           eq(mediaItems.inScope, true),
+          notHidden(),
           isVideo,
           sql`${mediaItems.missingSince} is not null`,
         ),
@@ -83,17 +85,16 @@ export async function statsRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin(mediaItems, eq(mediaItems.id, mediaFiles.mediaItemId))
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
       .where(
-        and(
-          eq(mediaItems.inScope, true),
-          isNull(mediaItems.missingSince),
-          isVideo,
-        ),
+        and(visibleItems(), isVideo),
       );
 
     // Also narrowed to in-scope videos, where the count above was over every
     // file in the database. Duplicate stills inside an album are how albums
     // work, not a problem to surface, and a folder you stopped scanning
-    // should not still be reporting faults.
+    // should not still be reporting faults. Same visibility rule as the
+    // duplicates list (GET /api/library/duplicates), so the count on the
+    // dashboard and the groups behind it cannot disagree — and neither
+    // counts a vault item.
     const duplicateRows = await db.execute<{ total: number }>(sql`
       select count(*)::int as total
       from (
@@ -102,7 +103,7 @@ export async function statsRoutes(app: FastifyInstance): Promise<void> {
         join media_items mi on mi.id = mf.media_item_id
         join media_item_types mit on mit.id = mi.item_type_id
         where mf.content_hash is not null
-          and mi.in_scope = true
+          and ${visibleItemsSql("mi")}
           and mit.name = 'video'
         group by mf.content_hash
         having count(*) > 1

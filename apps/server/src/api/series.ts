@@ -1,5 +1,5 @@
 import { and, asc, count, desc, eq, isNull, sql } from "drizzle-orm";
-import { visibleItems } from "../library/visibility.js";
+import { hiddenGate, visibleItems } from "../library/visibility.js";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { mediaItems, mediaItemTypes, playbackStates, series } from "../db/schema.js";
@@ -14,7 +14,8 @@ export async function seriesRoutes(app: FastifyInstance): Promise<void> {
     const [item] = await db
       .select({ libraryId: mediaItems.libraryId })
       .from(mediaItems)
-      .where(eq(mediaItems.id, request.body.mediaItemId));
+      // Same 404 as a missing id for a vault item this session can't open.
+      .where(and(eq(mediaItems.id, request.body.mediaItemId), hiddenGate(request)));
     if (!item) {
       reply.code(404);
       return { error: "Media item not found" };

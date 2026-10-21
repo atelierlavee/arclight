@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { libraryRoots } from "../db/schema.js";
+import { visibleItemsSql } from "../library/visibility.js";
 
 type GroupRow = {
   id: number | null;
@@ -91,8 +92,9 @@ function topWithRest<T extends Group>(rows: T[]): T[] {
  * Where the disk space goes (§17's cache dashboard covers the app's own
  * files; this is the library itself).
  *
- * Every figure is over visible items only — in a scanned folder and still on
- * disk — so the numbers agree with what the library shows. An item's size is
+ * Every figure is over visible items only — in a scanned folder, still on
+ * disk and not in the vault — so the numbers agree with what the library
+ * shows, and the largest-files list cannot name a hidden video. An item's size is
  * the sum of its files, since a video can carry stills beside it.
  *
  * Read-only by design, like duplicates: the app never deletes originals, so
@@ -119,7 +121,7 @@ export async function storageRoutes(app: FastifyInstance): Promise<void> {
           coalesce((select sum(mf.size_bytes) from media_files mf where mf.media_item_id = mi.id), 0)::bigint as bytes
         from media_items mi
         join media_item_types mit on mit.id = mi.item_type_id
-        where mi.in_scope = true and mi.missing_since is null and mit.name in ('video', 'photo')
+        where ${visibleItemsSql("mi")} and mit.name in ('video', 'photo')
       )`;
 
     // Counted apart because they are not comparable: one studio's "8" is
@@ -352,7 +354,7 @@ export async function storageRoutes(app: FastifyInstance): Promise<void> {
         from media_files mf
         join media_items mi on mi.id = mf.media_item_id
         where starts_with(mf.path, ${prefix}::text)
-          and mi.in_scope = true and mi.missing_since is null
+          and ${visibleItemsSql("mi")}
       `);
       const row = result.rows[0];
       return { files: row?.files ?? 0, bytes: Number(row?.bytes ?? 0) };
@@ -395,7 +397,7 @@ export async function storageRoutes(app: FastifyInstance): Promise<void> {
       from media_files mf
       join media_items mi on mi.id = mf.media_item_id
       where starts_with(mf.path, ${prefix}::text)
-        and mi.in_scope = true and mi.missing_since is null
+        and ${visibleItemsSql("mi")}
       group by segment, is_dir
       order by bytes desc
     `);

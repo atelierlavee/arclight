@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { libraries, mediaItemTypes, mediaItems } from "../db/schema.js";
+import { notHidden } from "../library/visibility.js";
 
 export async function folderRoutes(app: FastifyInstance): Promise<void> {
   // Flat list of every folder (id + title + parentId) — used by the "move to
@@ -17,7 +18,9 @@ export async function folderRoutes(app: FastifyInstance): Promise<void> {
     const rows = await db
       .select({ id: mediaItems.id, title: mediaItems.title, parentId: mediaItems.parentId })
       .from(mediaItems)
-      .where(eq(mediaItems.itemTypeId, folderType.id))
+      // A folder in the vault stays out of the picker like it stays out of
+      // the grid; offering it as a destination would name it.
+      .where(and(eq(mediaItems.itemTypeId, folderType.id), notHidden()))
       .orderBy(mediaItems.title);
 
     return { folders: rows };

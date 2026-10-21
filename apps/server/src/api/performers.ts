@@ -12,6 +12,8 @@ import {
 } from "../db/schema.js";
 import { affinityEdges } from "../library/affinity.js";
 import { logActivity } from "../activity/log.js";
+import { privacyLocked } from "../auth/privacyUnlock.js";
+import { visibleItems } from "../library/visibility.js";
 
 // The co-performer query joins media_item_performers and performers to
 // themselves — once for the performer whose page this is, once for everyone
@@ -49,7 +51,9 @@ async function ensurePerformerId(rawName: string): Promise<number> {
 
   const [created] = await db
     .insert(performers)
-    .values({ name })
+    // Only reached from edits made in the app, so the performer is the
+    // user's: the scanner's purge of empty performers must leave it alone.
+    .values({ name, origin: "user" })
     .onConflictDoNothing()
     .returning();
   if (created) return created.id;
@@ -115,8 +119,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         mediaItems,
         and(
           eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-          eq(mediaItems.inScope, true),
-          isNull(mediaItems.missingSince),
+          visibleItems(),
           inArray(mediaItems.itemTypeId, videoTypeIds)
         )
       )
@@ -151,8 +154,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(mediaItemTypes.name, "video"));
 
       const visibleVideoItem = and(
-        eq(mediaItems.inScope, true),
-        isNull(mediaItems.missingSince),
+        visibleItems(),
         inArray(mediaItems.itemTypeId, videoTypeIds)
       );
       // Archived performers are not drawn, and neither are the links to
@@ -321,8 +323,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         mediaItems,
         and(
           eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-          eq(mediaItems.inScope, true),
-          isNull(mediaItems.missingSince),
+          visibleItems(),
           inArray(mediaItems.itemTypeId, videoTypeIds)
         )
       )
@@ -333,8 +334,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
     // section counts can't disagree with what's rendered.
     const performerVideos = and(
       eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-      eq(mediaItems.inScope, true),
-      isNull(mediaItems.missingSince),
+      visibleItems(),
       inArray(mediaItems.itemTypeId, videoTypeIds)
     );
 
@@ -442,8 +442,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
               mediaItems,
               and(
                 eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-                eq(mediaItems.inScope, true),
-                isNull(mediaItems.missingSince),
+                visibleItems(),
                 inArray(mediaItems.itemTypeId, videoTypeIds)
               )
             )
@@ -461,8 +460,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         mediaItems,
         and(
           eq(mediaItems.id, mediaItemPerformers.mediaItemId),
-          eq(mediaItems.inScope, true),
-          isNull(mediaItems.missingSince),
+          visibleItems(),
           inArray(mediaItems.itemTypeId, videoTypeIds)
         )
       )
@@ -518,7 +516,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
 
       // Safe to cache hard: the filename carries a random suffix, so a
       // replacement is served from a different URL entirely.
-      reply.header("Cache-Control", "public, max-age=31536000, immutable");
+      reply.header("Cache-Control", "private, max-age=31536000, immutable");
       await streamFile(reply, performerImagePath(fileName), "image/jpeg", undefined, false);
     }
   );
@@ -766,29 +764,43 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.delete<{ Params: { id: string } }>("/api/performers/:id", async (request, reply) => {
+    // Irreversible, and it strips credits off every video they're on, so it
+    // sits behind the privacy credential like every other destructive route.
+    if (await privacyLocked(request, reply)) return reply;
     const id = Number(request.params.id);
 
-    const [existing] = await db.select().from(performers).where(eq(performers.id, id));
-    if (!existing) {
+    // One transaction: the unlink, the album clear and the delete either all
+    // happen or none do. Separately, a failure partway left a performer with
+    // no credits but still listed, or albums pointing at nobody.
+    const result = await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(performers).where(eq(performers.id, id));
+      if (!existing) return null;
+
+      // No FK in this schema cascades, so the join rows have to go first.
+      const unlinked = await tx
+        .delete(mediaItemPerformers)
+        .where(eq(mediaItemPerformers.performerId, id))
+        .returning();
+      // Albums name a performer too. Cleared rather than deleted: the album
+      // stays and simply stops claiming someone who no longer exists.
+      await tx.update(albums).set({ performerId: null }).where(eq(albums.performerId, id));
+      await tx.delete(performers).where(eq(performers.id, id));
+      return { existing, unlinkedCount: unlinked.length };
+    });
+
+    if (!result) {
       reply.code(404);
       return { error: "Not found" };
     }
 
-    // No FK in this schema cascades, so the join rows have to go first.
-    const unlinked = await db
-      .delete(mediaItemPerformers)
-      .where(eq(mediaItemPerformers.performerId, id))
-      .returning();
-    // Albums name a performer too. Cleared rather than deleted: the album
-    // stays and simply stops claiming someone who no longer exists.
-    await db.update(albums).set({ performerId: null }).where(eq(albums.performerId, id));
-    await db.delete(performers).where(eq(performers.id, id));
-    await deletePerformerImage(existing.imageFile);
-    await deletePerformerImage(existing.bannerFile);
+    // Image files only after the rows are committed: a file deleted for a
+    // transaction that then rolled back could not be put back.
+    await deletePerformerImage(result.existing.imageFile);
+    await deletePerformerImage(result.existing.bannerFile);
 
     // Worth surfacing in the UI: a performer derived from a folder comes back
     // on the next scan for any item still marked 'scanner'. That's correct —
     // the folder still says so — but it looks like the delete failed.
-    return { ok: true, unlinkedCount: unlinked.length };
+    return { ok: true, unlinkedCount: result.unlinkedCount };
   });
 }

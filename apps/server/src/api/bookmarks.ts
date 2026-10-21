@@ -1,10 +1,17 @@
-import { asc, eq } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import { and, asc, eq } from "drizzle-orm";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/client.js";
 import { bookmarks, mediaItems } from "../db/schema.js";
+import { hiddenGate, itemReachable } from "../library/visibility.js";
 
 const MAX_LABEL_LENGTH = 200;
 const MAX_NOTE_LENGTH = 4000;
+/**
+ * The most one video's list returns. Far past anything placed by hand —
+ * they are ticks on a seek bar — but a ceiling all the same, so a script
+ * that adds bookmarks in a loop cannot make every player open slower.
+ */
+const MAX_BOOKMARKS = 500;
 
 /** Trims, and turns an empty label into no label rather than "". */
 function cleanLabel(label: string | null | undefined): string | null {
@@ -34,13 +41,20 @@ const columns = {
  * of those run left to right through the video.
  */
 export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
-  app.get<{ Params: { id: string } }>("/api/media-items/:id/bookmarks", async (request) => {
+  app.get<{ Params: { id: string } }>("/api/media-items/:id/bookmarks", async (request, reply) => {
     const id = Number(request.params.id);
+    // A vault item's bookmarks are labelled moments in it — as revealing as
+    // the item — so they 404 the same way its detail does.
+    if (!(await itemReachable(request, id))) {
+      reply.code(404);
+      return { error: "Not found" };
+    }
     const rows = await db
       .select(columns)
       .from(bookmarks)
       .where(eq(bookmarks.mediaItemId, id))
-      .orderBy(asc(bookmarks.positionSeconds), asc(bookmarks.id));
+      .orderBy(asc(bookmarks.positionSeconds), asc(bookmarks.id))
+      .limit(MAX_BOOKMARKS);
     return { bookmarks: rows };
   });
 
@@ -63,7 +77,7 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
     const [item] = await db
       .select({ durationSeconds: mediaItems.durationSeconds })
       .from(mediaItems)
-      .where(eq(mediaItems.id, id));
+      .where(and(eq(mediaItems.id, id), hiddenGate(request)));
     if (!item) {
       reply.code(404);
       return { error: "Not found" };
@@ -118,6 +132,10 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Provide a label or note to update" };
       }
 
+      if (!(await bookmarkReachable(request, id))) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
       const [updated] = await db
         .update(bookmarks)
         .set(update)
@@ -133,6 +151,10 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete<{ Params: { id: string } }>("/api/bookmarks/:id", async (request, reply) => {
     const id = Number(request.params.id);
+    if (!(await bookmarkReachable(request, id))) {
+      reply.code(404);
+      return { error: "Not found" };
+    }
     const deleted = await db
       .delete(bookmarks)
       .where(eq(bookmarks.id, id))
@@ -143,4 +165,16 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
     }
     return { ok: true };
   });
+}
+
+// Bookmarks are addressed by their own id, so the item they belong to has to
+// be looked up before the vault rule can apply — otherwise a hidden item's
+// bookmarks could be edited or deleted by enumerating bookmark ids.
+async function bookmarkReachable(request: FastifyRequest, id: number): Promise<boolean> {
+  if (!Number.isInteger(id)) return false;
+  const [row] = await db
+    .select({ mediaItemId: bookmarks.mediaItemId })
+    .from(bookmarks)
+    .where(eq(bookmarks.id, id));
+  return row ? itemReachable(request, row.mediaItemId) : false;
 }

@@ -1,6 +1,8 @@
 import path from "node:path";
-import { eq } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { isAuthorisedCastStream } from "../auth/castTokens.js";
+import { canSeeHidden, hiddenGate } from "../library/visibility.js";
 import { db } from "../db/client.js";
 import { libraryRoots, mediaFiles, mediaItems, mediaItemTypes } from "../db/schema.js";
 import {
@@ -15,6 +17,7 @@ import { getOrCreatePhotoThumbnail, getPosterPath } from "../media/thumbnails.js
 
 type ResolvedFile = {
   itemType: string;
+  hidden: boolean;
   filePath: string;
   mimeType: string | null;
   contentHash: string | null;
@@ -29,10 +32,17 @@ function isPathUnderRoot(filePath: string, root: string): boolean {
 // Defense in depth: filePath comes from our own DB, not raw user input, but we
 // still confirm it's still within one of the item's library roots before ever
 // serving bytes from it.
-async function resolveItemFile(itemId: number): Promise<ResolvedFile | null> {
+//
+// A vault item resolves only when `allowHidden` says so — the session has the
+// vault open, or the request carries a cast token (which is only ever issued
+// for an item the issuing session could see). Otherwise it is "not found",
+// the same as an id that does not exist: ids are sequential, and the bytes of
+// a hidden video are the thing the vault exists to keep out of reach.
+async function resolveItemFile(itemId: number, allowHidden: boolean): Promise<ResolvedFile | null> {
   const [row] = await db
     .select({
       itemType: mediaItemTypes.name,
+      hidden: sql<boolean>`(${mediaItems.hiddenAt} is not null)`,
       libraryId: mediaItems.libraryId,
       filePath: mediaFiles.path,
       mimeType: mediaFiles.mimeType,
@@ -41,7 +51,7 @@ async function resolveItemFile(itemId: number): Promise<ResolvedFile | null> {
     .from(mediaItems)
     .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
     .innerJoin(mediaFiles, eq(mediaFiles.mediaItemId, mediaItems.id))
-    .where(eq(mediaItems.id, itemId));
+    .where(and(eq(mediaItems.id, itemId), allowHidden ? undefined : isNull(mediaItems.hiddenAt)));
 
   if (!row) return null;
 
@@ -55,10 +65,33 @@ async function resolveItemFile(itemId: number): Promise<ResolvedFile | null> {
 
   return {
     itemType: row.itemType,
+    hidden: row.hidden,
     filePath: row.filePath,
     mimeType: row.mimeType,
     contentHash: row.contentHash,
   };
+}
+
+/**
+ * A stream may serve a vault item to a session with the vault open, or to a
+ * cast token. The TV fetching a cast link has no session at all; the token
+ * stands in for one, and GET /api/media-items/:id/cast only signs one for an
+ * item the asking session could open — so a valid token already carries that
+ * permission and checking the (absent) session again would only break casting.
+ */
+function streamMayShowHidden(request: FastifyRequest): boolean {
+  return canSeeHidden(request) || isAuthorisedCastStream(request.method, request.url);
+}
+
+/**
+ * Generated images are content-addressed (the URL changes with the file), so
+ * they can be cached for good — but only by this browser: `private`, never
+ * `public`, because every one of them sits behind a login and a shared cache
+ * has no business holding a copy. A vault item's are not cached at all, so
+ * locking the vault leaves nothing of it behind on disk.
+ */
+function mediaCacheControl(hidden: boolean): string {
+  return hidden ? "private, no-store" : "private, max-age=31536000, immutable";
 }
 
 export async function mediaRoutes(app: FastifyInstance): Promise<void> {
@@ -68,11 +101,13 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     // open/stream the file just to have Fastify's default auto-HEAD discard it.
     { exposeHeadRoute: false },
     async (request, reply) => {
-      const file = await resolveItemFile(Number(request.params.itemId));
+      const file = await resolveItemFile(Number(request.params.itemId), streamMayShowHidden(request));
       if (!file) {
         reply.code(404);
         return { error: "Not found" };
       }
+      // Nothing of a vault item is kept in the browser's cache.
+      if (file.hidden) reply.header("Cache-Control", "private, no-store");
       await streamFile(
         reply,
         file.filePath,
@@ -84,7 +119,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.head<{ Params: { itemId: string } }>("/api/stream/:itemId", async (request, reply) => {
-    const file = await resolveItemFile(Number(request.params.itemId));
+    const file = await resolveItemFile(Number(request.params.itemId), streamMayShowHidden(request));
     if (!file) {
       reply.code(404).send();
       return;
@@ -105,12 +140,13 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/preview",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const file = await resolveItemFile(id);
+      const file = await resolveItemFile(id, canSeeHidden(request));
       if (!file || file.itemType !== "video") {
         reply.code(404);
         return { error: "Not found" };
       }
 
+      if (file.hidden) reply.header("Cache-Control", "private, no-store");
       await streamFile(
         reply,
         previewPathFor(id, file.contentHash),
@@ -132,7 +168,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/scrub",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const file = await resolveItemFile(id);
+      const file = await resolveItemFile(id, canSeeHidden(request));
       const [item] = await db
         .select({ durationSeconds: mediaItems.durationSeconds })
         .from(mediaItems)
@@ -157,12 +193,12 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/scrub.jpg",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const file = await resolveItemFile(id);
+      const file = await resolveItemFile(id, canSeeHidden(request));
       if (!file || file.itemType !== "video") {
         reply.code(404);
         return { error: "Not found" };
       }
-      reply.header("Cache-Control", "private, max-age=31536000, immutable");
+      reply.header("Cache-Control", mediaCacheControl(file.hidden));
       await streamFile(reply, spritePathFor(id, file.contentHash), "image/jpeg", request.headers.range, false);
     }
   );
@@ -171,7 +207,10 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/thumbnail",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const [item] = await db.select().from(mediaItems).where(eq(mediaItems.id, id));
+      const [item] = await db
+        .select()
+        .from(mediaItems)
+        .where(and(eq(mediaItems.id, id), hiddenGate(request)));
       if (!item) {
         reply.code(404);
         return { error: "Not found" };
@@ -217,7 +256,10 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/thumbnail",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const [item] = await db.select().from(mediaItems).where(eq(mediaItems.id, id));
+      const [item] = await db
+        .select()
+        .from(mediaItems)
+        .where(and(eq(mediaItems.id, id), hiddenGate(request)));
       if (!item) {
         reply.code(404);
         return { error: "Not found" };
@@ -237,7 +279,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/thumbnail",
     async (request, reply) => {
       const id = Number(request.params.id);
-      const file = await resolveItemFile(id);
+      const file = await resolveItemFile(id, canSeeHidden(request));
       if (!file) {
         reply.code(404);
         return { error: "Not found" };
@@ -260,7 +302,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
         return { error: "No thumbnail available" };
       }
 
-      reply.header("Cache-Control", "public, max-age=31536000, immutable");
+      reply.header("Cache-Control", mediaCacheControl(file.hidden));
       await streamFile(reply, thumbPath, "image/jpeg", undefined, false);
     }
   );

@@ -10,7 +10,7 @@ import {
   playbackStates,
   studios,
 } from "../db/schema.js";
-import { visibleItems } from "../library/visibility.js";
+import { hiddenGate, itemReachable, visibleItems } from "../library/visibility.js";
 import {
   GALLERY_PREVIEW_LIMIT,
   RELATED_LIMIT,
@@ -38,7 +38,9 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
       .leftJoin(playbackStates, eq(playbackStates.mediaItemId, mediaItems.id))
       .leftJoin(mediaFiles, eq(mediaFiles.mediaItemId, mediaItems.id))
-      .where(and(eq(mediaItems.id, id), eq(mediaItems.inScope, true)));
+      // A vault item answers 404, not 403, unless this session has the vault
+      // open: "forbidden" would confirm that the id is something hidden.
+      .where(and(eq(mediaItems.id, id), eq(mediaItems.inScope, true), hiddenGate(request)));
     if (!item) {
       reply.code(404);
       return { error: "Not found" };
@@ -58,8 +60,14 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
    * `%` are wildcards and both are legal in a folder name, so a prefix match
    * would quietly pull in the wrong folder's photos.
    */
-  app.get<{ Params: { id: string } }>("/api/media-items/:id/gallery", async (request) => {
+  app.get<{ Params: { id: string } }>("/api/media-items/:id/gallery", async (request, reply) => {
     const id = Number(request.params.id);
+    // The strip names the folder's photos and the album, so a hidden video's
+    // gallery is as much a leak as the video itself.
+    if (!(await itemReachable(request, id))) {
+      reply.code(404);
+      return { error: "Not found" };
+    }
 
     const [file] = await db
       .select({ path: mediaFiles.path })
@@ -184,7 +192,7 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
     const [item] = await db
       .select()
       .from(mediaItems)
-      .where(and(eq(mediaItems.id, id), eq(mediaItems.inScope, true)));
+      .where(and(eq(mediaItems.id, id), eq(mediaItems.inScope, true), hiddenGate(request)));
     if (!item) {
       reply.code(404);
       return { error: "Not found" };

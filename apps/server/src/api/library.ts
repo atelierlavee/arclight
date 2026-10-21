@@ -8,6 +8,9 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { libraries, libraryRoots, mediaFiles, mediaItems } from "../db/schema.js";
 import { clearScopeForRoot, purgeEmptyEntities, recomputeScope } from "../library/scope.js";
+import { visibleItemsSql } from "../library/visibility.js";
+import { privacyLocked } from "../auth/privacyUnlock.js";
+import { isScanRunning } from "../scanner/pipeline.js";
 
 // A container can only see what's mounted into it, so these are the mount
 // points the picker is allowed to walk. Anything outside them isn't a
@@ -74,21 +77,25 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
     // File counts are per-root, not per-library: two roots can share one
     // library, and "how many files came from this folder" is the useful
     // number when deciding whether to remove it.
-    const withCounts = await Promise.all(
-      rows.map(async (root) => {
-        const [counted] = await db
-          .select({ files: sql<number>`count(*)::int` })
-          .from(mediaFiles)
-          .where(sql`${mediaFiles.path} like ${root.path + "/%"}`);
-        return {
-          ...root,
-          files: counted?.files ?? 0,
-          // A root outside the mount can never be scanned — it's left over
-          // from a previous MEDIA_ROOT and is only useful to delete.
-          reachable: isInsideBrowseRoots(root.path),
-        };
-      })
-    );
+    //
+    // One grouped query rather than one per root, and by prefix rather than
+    // LIKE: a folder name containing `%` or `_` is a wildcard to LIKE, so
+    // "/media/100%" counted every file under "/media/100" too. starts_with
+    // compares literally, so there is nothing to escape.
+    const counts = await db.execute<{ id: number; files: number }>(sql`
+      select lr.id, count(mf.id)::int as files
+      from library_roots lr
+      left join media_files mf on starts_with(mf.path, lr.path || '/')
+      group by lr.id
+    `);
+    const filesByRoot = new Map(counts.rows.map((row) => [Number(row.id), row.files]));
+    const withCounts = rows.map((root) => ({
+      ...root,
+      files: filesByRoot.get(root.id) ?? 0,
+      // A root outside the mount can never be scanned — it's left over
+      // from a previous MEDIA_ROOT and is only useful to delete.
+      reachable: isInsideBrowseRoots(root.path),
+    }));
 
     return { mediaRoot: MEDIA_ROOT, browseRoots: await availableRoots(), roots: withCounts };
   });
@@ -205,7 +212,8 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
    * which paths are duplicates is the whole of what the app can safely offer.
    *
    * Scoped the same way the count is, so the dashboard and this list agree:
-   * in-scope videos only. Duplicate stills inside an album are how albums
+   * visible videos only (in a scanned folder, on disk, not in the vault — a
+   * vault item's path and title are exactly what this list would expose). Duplicate stills inside an album are how albums
    * work rather than a fault, and a folder you stopped scanning should not
    * still be reporting problems.
    */
@@ -229,7 +237,7 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
       join media_items mi on mi.id = mf.media_item_id
       join media_item_types mit on mit.id = mi.item_type_id
       where mf.content_hash is not null
-        and mi.in_scope = true
+        and ${visibleItemsSql("mi")}
         and mit.name = 'video'
         and mf.content_hash in (
           select mf2.content_hash
@@ -237,7 +245,7 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
           join media_items mi2 on mi2.id = mf2.media_item_id
           join media_item_types mit2 on mit2.id = mi2.item_type_id
           where mf2.content_hash is not null
-            and mi2.in_scope = true
+            and ${visibleItemsSql("mi2")}
             and mit2.name = 'video'
           group by mf2.content_hash
           having count(*) > 1
@@ -344,7 +352,15 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
     return { removable: await countRemovableData() };
   });
 
-  app.post("/api/library/cleanup", async () => {
+  app.post("/api/library/cleanup", async (request, reply) => {
+    // Deletes library records for good, so it needs the privacy credential
+    // like every other destructive route — enforced here, not just in the UI.
+    if (await privacyLocked(request, reply)) return reply;
+    // A scan running alongside could link files to rows this is deleting.
+    if (isScanRunning()) {
+      reply.code(409);
+      return { error: "A library scan is running — try again when it finishes" };
+    }
     const removed = await purgeRemovableData();
     if (removed.items > 0) {
       await logActivity(
@@ -359,6 +375,17 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string }; Querystring: { deleteData?: string } }>(
     "/api/library/roots/:id",
     async (request, reply) => {
+    // Only the purge is destructive — removing the folder alone just hides
+    // its items until it is added back — so only that asks for the
+    // credential. Checked before anything changes, so a refusal leaves the
+    // folder exactly as it was rather than half removed.
+    if (request.query.deleteData === "true" && (await privacyLocked(request, reply))) {
+      return reply;
+    }
+    if (request.query.deleteData === "true" && isScanRunning()) {
+      reply.code(409);
+      return { error: "A library scan is running — try again when it finishes" };
+    }
     const id = Number(request.params.id);
     const [root] = await db.select().from(libraryRoots).where(eq(libraryRoots.id, id));
     if (!root) {
