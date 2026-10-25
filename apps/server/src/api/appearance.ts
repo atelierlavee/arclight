@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { serialized } from "../auth/serialize.js";
 import { profileId } from "../auth/profileContext.js";
 import { getProfileSetting, setProfileSetting } from "../library/profileSettings.js";
 
@@ -155,6 +156,10 @@ function clean(input: unknown): Record<string, unknown> {
       body.pageOverrides as Record<string, unknown>
     )) {
       if (!raw || typeof raw !== "object") continue;
+      // Bounded: scope names are caller-chosen, so without a cap one profile
+      // could grow its stored settings without limit.
+      if (scope.length > 64 || scope === "__proto__") continue;
+      if (Object.keys(overrides).length >= 100) break;
       const entry = raw as Record<string, unknown>;
       const next: Record<string, unknown> = {};
 
@@ -192,8 +197,12 @@ export async function appearanceRoutes(app: FastifyInstance): Promise<void> {
     // Merged, not replaced: a client that predates a setting would otherwise
     // wipe it by saving without it.
     const id = profileId(request);
-    const value = { ...clean(await getProfileSetting(id, APPEARANCE_KEY)), ...clean(request.body) };
-    await setProfileSetting(id, APPEARANCE_KEY, value);
-    return { appearance: value };
+    // Read-merge-write, so two saves from one profile must not interleave or
+    // the second would drop the first's keys.
+    return serialized(`appearance:${id}`, async () => {
+      const value = { ...clean(await getProfileSetting(id, APPEARANCE_KEY)), ...clean(request.body) };
+      await setProfileSetting(id, APPEARANCE_KEY, value);
+      return { appearance: value };
+    });
   });
 }

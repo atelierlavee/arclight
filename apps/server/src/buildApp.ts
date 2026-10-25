@@ -46,6 +46,8 @@ import { registerLanGuard } from "./net/lan.js";
 import { isRestoring } from "./backup/restoreState.js";
 import { checkDbConnection } from "./db/client.js";
 import { MAX_UPLOAD_BYTES } from "./media/performerImages.js";
+import { isUniqueViolation } from "./db/errors.js";
+import { parseId } from "./api/mediaItemQueries.js";
 
 /**
  * Whether to believe X-Forwarded-* headers, from the TRUST_PROXY env var.
@@ -126,6 +128,53 @@ export async function buildApp({
   // at all should not get as far as being told its password is wrong.
   registerLanGuard(app);
   registerAuthGuard(app);
+
+  // Numeric ids in a path that aren't whole numbers in range ("abc", "1.5",
+  // "1e30") can't match anything. Many handlers read them with Number(),
+  // which hands Postgres a NaN or an overflow and answers 500; the rest
+  // already answer 404, so this makes it one answer everywhere. After the
+  // auth guard, so it tells an unauthenticated caller nothing.
+  // A request with no JSON body reaches handlers as undefined, and the many
+  // that read `request.body.name` directly then threw a TypeError and
+  // answered 500 with a stack trace. An empty object lets each handler's own
+  // validation answer 400.
+  app.addHook("preValidation", async (request) => {
+    // `?q=a&q=b` arrives as an array, and handlers that trim or parse a
+    // string threw on it. The last value wins, as it does for most servers.
+    const query = request.query as Record<string, unknown> | undefined;
+    if (query && typeof query === "object") {
+      for (const [key, value] of Object.entries(query)) {
+        if (Array.isArray(value)) query[key] = value[value.length - 1];
+      }
+    }
+    if (request.method === "GET" || request.method === "HEAD") return;
+    if (request.body === undefined || request.body === null) {
+      const type = request.headers["content-type"] ?? "";
+      if (!type.startsWith("multipart/")) request.body = {};
+    }
+  });
+
+  // Two requests that both pass a check-then-insert are settled by the unique
+  // index, whose failure would otherwise surface as a 500.
+  app.setErrorHandler((error, _request, reply) => {
+    if (isUniqueViolation(error)) {
+      reply.code(409).send({ error: "That already exists" });
+      return;
+    }
+    reply.send(error);
+  });
+
+  app.addHook("preValidation", async (request, reply) => {
+    const params = request.params as Record<string, unknown> | undefined;
+    if (!params || request.url.startsWith("/api/webauthn/")) return;
+    for (const key of ["id", "itemId", "mediaItemId"]) {
+      const value = params[key];
+      if (value !== undefined && parseId(value) === null) {
+        reply.code(404).send({ error: "Not found" });
+        return;
+      }
+    }
+  });
 
   // Performer artwork uploads. The size cap is enforced here rather than in
   // the route so an oversized body is rejected while streaming, before it can

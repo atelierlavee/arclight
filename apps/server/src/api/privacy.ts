@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { serialized } from "../auth/serialize.js";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../auth/passwords.js";
 import { markUnlocked } from "../auth/privacyUnlock.js";
 import { profileId, unlockKey } from "../auth/profileContext.js";
@@ -103,7 +104,7 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
   );
 
   /** Checks the password and, if it's right, releases the session's lock. */
-  app.post<{ Body: { password?: string } }>("/api/privacy/unlock", async (request, reply) => {
+  app.post<{ Body: { password?: string } }>("/api/privacy/unlock", async (request, reply) => serialized("privacy", async () => {
     if (!request.user) {
       reply.code(401);
       return { error: "Not signed in" };
@@ -146,5 +147,5 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
     // can ask whether this session has actually proved anything.
     markUnlocked(sessionId);
     return { ok: true };
-  });
+  }));
 }

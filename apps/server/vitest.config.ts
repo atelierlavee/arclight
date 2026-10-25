@@ -1,4 +1,23 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { defineConfig } from "vitest/config";
+
+const databaseUrl =
+  process.env.TEST_DATABASE_URL ?? "postgres://media:media@localhost:5432/media_test";
+
+// resetDatabase truncates every table, so a URL pointing at anything but the
+// throwaway database would wipe real data.
+if (new URL(databaseUrl).pathname !== "/media_test") {
+  throw new Error(
+    `Refusing to run tests: the test database must be named media_test, got ${databaseUrl}`,
+  );
+}
+
+// Tests delete artwork directories and run restores, which swap whole upload
+// folders. Both must land in a throwaway directory, never ./app-data or
+// ./backups — those are the real library when run from a dev container.
+const scratch = mkdtempSync(path.join(tmpdir(), "media-server-test-"));
 
 export default defineConfig({
   test: {
@@ -13,8 +32,9 @@ export default defineConfig({
     minWorkers: 1,
     fileParallelism: false,
     env: {
-      DATABASE_URL:
-        process.env.TEST_DATABASE_URL ?? "postgres://media:media@localhost:5432/media_test",
+      DATABASE_URL: databaseUrl,
+      APP_DATA_DIR: path.join(scratch, "app-data"),
+      BACKUP_DIR: path.join(scratch, "backups"),
     },
     coverage: {
       provider: "v8",

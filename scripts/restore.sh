@@ -63,14 +63,45 @@ cd "$REPO_ROOT"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
+echo "==> checking the archive"
+# Links and special files are refused before anything is extracted: a symlink
+# member would let a later member be written to anywhere this user can write.
+if tar tvzf "$ARCHIVE" | grep -qvE '^[-d]' || tar tvzf "$ARCHIVE" | grep -qE ' link to | -> '; then
+  echo "archive contains a link or special file, which a backup never does" >&2
+  exit 1
+fi
+if tar tzf "$ARCHIVE" | grep -qE '(^/|(^|/)\.\.(/|$))'; then
+  echo "archive contains an unsafe path" >&2
+  exit 1
+fi
 echo "==> unpacking"
-tar xzf "$ARCHIVE" -C "$WORK_DIR"
+tar xzf "$ARCHIVE" --no-same-owner -C "$WORK_DIR"
 [[ -f "$WORK_DIR/db.sql" ]] || { echo "archive has no db.sql — is this a backup?" >&2; exit 1; }
+# pg_dump ends with this line; its absence is a dump cut short by a full disk,
+# which would otherwise restore into a half-empty database without erroring.
+tail -c 65536 "$WORK_DIR/db.sql" | grep -q -- '-- PostgreSQL database dump complete' \
+  || { echo "the database dump in this archive is truncated — nothing was changed" >&2; exit 1; }
+# psql runs backslash commands, and \! is a shell. Outside COPY data none
+# belong at the start of a line in a pg_dump file except these.
+if awk 'BEGIN{c=0} c&&/^\\\.$/{c=0;next} c{next} /^COPY .* FROM stdin;$/{c=1;next} /^[[:space:]]*\\/ && !/^\\(connect|c|restrict|unrestrict)([[:space:]]|$)/ {print; found=1} END{exit !found}' "$WORK_DIR/db.sql" >/dev/null; then
+  echo "the dump contains psql commands a backup never has — refusing" >&2
+  exit 1
+fi
+
+VOLUME="${PROJECT}_app-data"
+# Checked now, not after the database is replaced: failing here leaves the
+# current install untouched.
+if ! docker volume inspect "$VOLUME" >/dev/null 2>&1; then
+  echo "no volume $VOLUME — has this stack been started with make?" >&2
+  exit 1
+fi
 
 # Postgres stays up (it's the thing being restored into); only the app stops,
 # so it can't run migrations or serve requests against a half-restored state.
 echo "==> stopping the app"
 $COMPOSE stop app >/dev/null
+# From here on an early exit must not leave the app stopped.
+trap '$COMPOSE start app >/dev/null 2>&1 || true; rm -rf "$WORK_DIR"' EXIT
 
 echo "==> restoring the database"
 # --clean only drops what the dump knows about, so a table added since the
@@ -87,15 +118,10 @@ PRELUDE="$(sed -n '/^const RESTORE_PRELUDE = `$/,/^`;$/p' apps/server/src/backup
 echo "==> restoring uploaded images"
 # The app container is stopped, so a throwaway container mounts the named
 # volume directly. Volume name is <project>_app-data.
-VOLUME="${PROJECT}_app-data"
-if ! docker volume inspect "$VOLUME" >/dev/null 2>&1; then
-  echo "no volume $VOLUME — has this stack been started with make?" >&2
-  exit 1
-fi
 docker run --rm \
   -v "$VOLUME":/app-data \
   -v "$WORK_DIR/uploads":/uploads:ro \
-  alpine:3 sh -c '
+  alpine:3 sh -ec '
     # Whatever the archive holds, rather than a list of names repeated here.
     # This was hardcoded to two directories while the backup grew a third, so
     # a restore silently skipped it — the kind of failure you only discover
@@ -103,8 +129,12 @@ docker run --rm \
     for src in /uploads/*/; do
       [ -d "$src" ] || continue
       name=$(basename "$src")
+      # Replaced, not merged: files left from the install being overwritten
+      # would sit among the restored ones, referenced by nothing. A failed
+      # copy stops the script rather than reporting "Restored".
+      rm -rf "/app-data/$name"
       mkdir -p "/app-data/$name"
-      cp -R "$src." "/app-data/$name/" 2>/dev/null || true
+      cp -R "$src." "/app-data/$name/"
     done
   '
 

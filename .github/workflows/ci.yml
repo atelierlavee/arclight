@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only token: nothing in these jobs writes to the repo.
+permissions:
+  contents: read
+
 # A newer push to the same branch makes an older run pointless.
 concurrency:
   group: ci-${{ github.ref }}
@@ -24,6 +28,7 @@ jobs:
       # `tsc -b && vite build`: the same command the Docker image runs, so a
       # type error that would break `make up` fails here first.
       - run: npm run build --workspace apps/web
+      - run: npm run lint --workspace apps/web
       - run: npm test --workspace apps/web
 
   server:
@@ -59,17 +64,17 @@ jobs:
           sudo apt-get install -y postgresql-client-17
       - run: npm ci
       - run: npx tsc --noEmit -p apps/server/tsconfig.json
-      # Some tests clear and rewrite folders under APP_DATA_DIR, so it points
-      # at a throwaway directory.
+      # The vitest config points APP_DATA_DIR and BACKUP_DIR at a throwaway
+      # directory itself, so nothing here needs to.
       - name: Test
-        run: |
-          APP_DATA_DIR="$(mktemp -d)"
-          export APP_DATA_DIR
-          npm test --workspace apps/server
+        run: npm test --workspace apps/server
 
   docker:
     name: Docker image builds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The dev override is what `make dev` runs; an invalid merge would only
+      # show up the next time someone starts it.
+      - run: docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml config --quiet
       - run: docker compose -f docker/docker-compose.yml build

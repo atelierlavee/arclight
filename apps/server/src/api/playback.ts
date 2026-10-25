@@ -1,5 +1,6 @@
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { serialized } from "../auth/serialize.js";
 import { db } from "../db/client.js";
 import { mediaItems, playbackHeatmap, playbackStates, watchLog } from "../db/schema.js";
 import { logActivity } from "../activity/log.js";
@@ -72,56 +73,63 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
 
       const profile = profileId(request);
       const now = new Date();
-      const [previous] = await db
-        .select({
-          positionSeconds: playbackStates.positionSeconds,
-          updatedAt: playbackStates.updatedAt,
-        })
-        .from(playbackStates)
-        .where(and(eq(playbackStates.mediaItemId, mediaItemId), eq(playbackStates.profileId, profile)));
+      // Read-then-upsert, so two reports for the same item (two tabs, a
+      // retry) must not interleave: both would read the same previous
+      // position, double-count the watch log, and let an older position
+      // overwrite a newer one.
+      await serialized(`playback:${profile}:${mediaItemId}`, async () => {
+        const [previous] = await db
+          .select({
+            positionSeconds: playbackStates.positionSeconds,
+            updatedAt: playbackStates.updatedAt,
+          })
+          .from(playbackStates)
+          .where(and(eq(playbackStates.mediaItemId, mediaItemId), eq(playbackStates.profileId, profile)));
 
-      await db
-        .insert(playbackStates)
-        .values({ profileId: profile, mediaItemId, positionSeconds })
-        .onConflictDoUpdate({
-          target: [playbackStates.profileId, playbackStates.mediaItemId],
-          set: { positionSeconds, updatedAt: now },
-        });
+        await db
+          .insert(playbackStates)
+          .values({ profileId: profile, mediaItemId, positionSeconds })
+          .onConflictDoUpdate({
+            target: [playbackStates.profileId, playbackStates.mediaItemId],
+            set: { positionSeconds, updatedAt: now },
+          });
 
-      const watched = secondsWatched(previous, positionSeconds, now);
-      if (watched > 0) {
-        const hour = new Date(now);
-        hour.setUTCMinutes(0, 0, 0);
-        try {
-          await db
-            .insert(watchLog)
-            .values({ profileId: profile, mediaItemId, hour, seconds: watched })
-            .onConflictDoUpdate({
-              target: [watchLog.profileId, watchLog.mediaItemId, watchLog.hour],
-              set: { seconds: sql`${watchLog.seconds} + ${watched}` },
-            });
-        } catch (error) {
-          request.log.warn({ error }, "watch log: could not record");
-        }
-
-        try {
-          if (item.durationSeconds && item.durationSeconds > 0) {
-            const bucket = Math.min(
-              HEATMAP_BUCKETS - 1,
-              Math.floor((positionSeconds / item.durationSeconds) * HEATMAP_BUCKETS),
-            );
+        const watched = secondsWatched(previous, positionSeconds, now);
+        if (watched > 0) {
+          const hour = new Date(now);
+          hour.setUTCMinutes(0, 0, 0);
+          try {
             await db
-              .insert(playbackHeatmap)
-              .values({ profileId: profile, mediaItemId, bucket })
+              .insert(watchLog)
+              .values({ profileId: profile, mediaItemId, hour, seconds: watched })
               .onConflictDoUpdate({
-                target: [playbackHeatmap.profileId, playbackHeatmap.mediaItemId, playbackHeatmap.bucket],
-                set: { count: sql`${playbackHeatmap.count} + 1` },
+                target: [watchLog.profileId, watchLog.mediaItemId, watchLog.hour],
+                set: { seconds: sql`${watchLog.seconds} + ${watched}` },
               });
+          } catch (error) {
+            request.log.warn({ error }, "watch log: could not record");
           }
-        } catch (error) {
-          request.log.warn({ error }, "heatmap: could not record");
+
+          try {
+            if (item.durationSeconds && item.durationSeconds > 0) {
+              const bucket = Math.min(
+                HEATMAP_BUCKETS - 1,
+                Math.floor((positionSeconds / item.durationSeconds) * HEATMAP_BUCKETS),
+              );
+              await db
+                .insert(playbackHeatmap)
+                .values({ profileId: profile, mediaItemId, bucket })
+                .onConflictDoUpdate({
+                  target: [playbackHeatmap.profileId, playbackHeatmap.mediaItemId, playbackHeatmap.bucket],
+                  set: { count: sql`${playbackHeatmap.count} + 1` },
+                });
+            }
+          } catch (error) {
+            request.log.warn({ error }, "heatmap: could not record");
+          }
         }
-      }
+
+      });
 
       return { ok: true };
     }

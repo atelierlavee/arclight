@@ -3,14 +3,39 @@ import type { FastifyRequest } from "fastify";
 import { db } from "../db/client.js";
 import { profiles, users } from "../db/schema.js";
 import { verifyPassword } from "./passwords.js";
+import { serialized } from "./serialize.js";
+
+// Failures per account, in a sliding window. The login route has its own
+// limiter, but every other place that asks for this password went straight to
+// the hash check, so a left-open session could guess it without limit.
+const MAX_FAILURES = 10;
+const FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const failures = new Map<number, number[]>();
+
+/** Test hook: the counters are process-wide. */
+export function resetAccountPasswordFailures(): void {
+  failures.clear();
+}
 
 /**
  * The account password, checked. Shared by every place that asks for it.
+ * Locks out (answers false) after ten wrong guesses in fifteen minutes.
  */
 export async function accountPasswordOk(userId: number, accountPassword: unknown): Promise<boolean> {
   if (typeof accountPassword !== "string") return false;
-  const [account] = await db.select().from(users).where(eq(users.id, userId));
-  return account !== undefined && (await verifyPassword(accountPassword, account.passwordHash));
+  return serialized(`account-password:${userId}`, async () => {
+    const now = Date.now();
+    const recent = (failures.get(userId) ?? []).filter((at) => now - at < FAILURE_WINDOW_MS);
+    if (recent.length >= MAX_FAILURES) {
+      failures.set(userId, recent);
+      return false;
+    }
+    const [account] = await db.select().from(users).where(eq(users.id, userId));
+    const ok = account !== undefined && (await verifyPassword(accountPassword, account.passwordHash));
+    if (ok) failures.delete(userId);
+    else failures.set(userId, [...recent, now]);
+    return ok;
+  });
 }
 
 export type ProofFailure = { error: string; code: string };

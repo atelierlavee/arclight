@@ -50,7 +50,7 @@ export async function seriesRoutes(app: FastifyInstance): Promise<void> {
         name: series.name,
         representativeItemId: sql<number | null>`min(${mediaItems.id})`,
         episodeCount: count(mediaItems.id),
-        unwatched: sql<number>`count(*) filter (where ${playbackStates.completedAt} is null)`,
+        unwatched: sql<number>`count(${mediaItems.id}) filter (where ${playbackStates.completedAt} is null)`,
       })
       .from(series)
       .leftJoin(mediaItems, and(eq(mediaItems.seriesId, series.id), visibleItems(profile), eq(mediaItems.itemTypeId, videoType)))

@@ -1,3 +1,4 @@
+import { serialized } from "../auth/serialize.js";
 import { rm } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
 import { privacyLocked } from "../auth/privacyUnlock.js";
@@ -57,7 +58,9 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { name: string } }>(
     "/api/backups/:name/verify",
     async (request, reply) => {
-      const result = await verifyBackup(request.params.name);
+      // One at a time: each verify extracts the whole archive and hashes it,
+      // and repeated calls would otherwise run that in parallel.
+      const result = await serialized("backup-verify", () => verifyBackup(request.params.name));
       // 200 either way. A backup that fails verification is a successful
       // check with a bad answer, and an error status would make the client
       // treat the finding as a failure to look.

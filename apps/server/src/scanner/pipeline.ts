@@ -53,6 +53,24 @@ const CONCURRENCY = 4;
 // and a real job id — see the race-condition note in startScan below.
 let runningJobId: number | null = null;
 
+/**
+ * Marks scan jobs still "running" from a previous process as failed.
+ *
+ * `runningJobId` lives in memory, so a crash or restart mid-scan leaves its
+ * row saying "running" for ever. Called once at boot, before any scan can
+ * start, when by definition nothing is running.
+ */
+export async function failInterruptedScans(): Promise<void> {
+  await db
+    .update(scanJobs)
+    .set({
+      status: "failed",
+      finishedAt: new Date(),
+      error: "The server stopped while this scan was running.",
+    })
+    .where(eq(scanJobs.status, "running"));
+}
+
 export function isScanRunning(): boolean {
   return runningJobId !== null;
 }
@@ -131,8 +149,13 @@ async function runScan(jobId: number): Promise<void> {
     const rootLevelPaths: string[] = [];
     const limit = pLimit(CONCURRENCY);
 
+    // Directories the walk couldn't read. Any root containing one is left out
+    // of the missing-file pass below, so an unplugged drive can't flag the
+    // whole library as gone.
+    const unreadable = new Set<string>();
+
     for (const root of roots) {
-      for await (const filePath of walk(root.path)) {
+      for await (const filePath of walk(root.path, unreadable)) {
         const kind = classifyByExtension(filePath);
         if (!kind) continue;
 
@@ -160,10 +183,15 @@ async function runScan(jobId: number): Promise<void> {
     // yet, so deciding per-file would give different answers depending on the
     // order things happened to be visited.
     await assignAlbums(roots);
-    const missing = await markMissingFiles(
-      seenPaths,
-      roots.map((r) => r.path),
-    );
+    const fullyReadRoots = roots
+      .map((r) => r.path)
+      .filter(
+        (rootPath) =>
+          ![...unreadable].some(
+            (dir) => dir === rootPath || dir.startsWith(rootPath + "/"),
+          ),
+      );
+    const missing = await markMissingFiles(seenPaths, fullyReadRoots);
     // Reconciles anything the per-file writes above couldn't know about — a
     // file whose folder was removed mid-scan, say.
     await recomputeScope();
@@ -730,7 +758,9 @@ async function syncStudioWithFilename(
   await db
     .update(mediaItems)
     .set({ studioId, updatedAt: new Date() })
-    .where(eq(mediaItems.id, mediaItemId));
+    .where(
+      and(eq(mediaItems.id, mediaItemId), eq(mediaItems.studioSource, "scanner")),
+    );
 }
 
 /**
@@ -797,13 +827,34 @@ async function syncPerformersWithPath(
 
   // Replace rather than add: a file moved out of a performer's folder, or
   // dropped from a declared list, must stop being credited to them.
-  await db
-    .delete(mediaItemPerformers)
-    .where(eq(mediaItemPerformers.mediaItemId, mediaItemId));
-  await db
-    .insert(mediaItemPerformers)
-    .values([...wanted].map((performerId) => ({ mediaItemId, performerId })))
-    .onConflictDoNothing();
+  //
+  // One transaction, opened by re-claiming the row under the same condition
+  // read above: if you edited the cast while this scan was working, the claim
+  // matches nothing and your list is left alone. The claim also holds the row
+  // lock, so your edit waits for the swap rather than interleaving with it,
+  // and a crash between the delete and the insert rolls back instead of
+  // leaving the item with no cast.
+  await db.transaction(async (tx) => {
+    const claimed = await tx
+      .update(mediaItems)
+      .set({ updatedAt: new Date() })
+      .where(
+        and(
+          eq(mediaItems.id, mediaItemId),
+          eq(mediaItems.performersSource, "scanner"),
+        ),
+      )
+      .returning({ id: mediaItems.id });
+    if (claimed.length === 0) return;
+
+    await tx
+      .delete(mediaItemPerformers)
+      .where(eq(mediaItemPerformers.mediaItemId, mediaItemId));
+    await tx
+      .insert(mediaItemPerformers)
+      .values([...wanted].map((performerId) => ({ mediaItemId, performerId })))
+      .onConflictDoNothing();
+  });
 }
 
 /**
@@ -863,19 +914,28 @@ async function assignAlbums(roots: { path: string }[]): Promise<void> {
       ? studioNameFromPath(root.path, `${directory}/x`)
       : null;
 
+    // Resolved once and reused for the insert and the rescan update, so a
+    // folder later filed under a different performer or studio folder is
+    // followed rather than keeping its first-seen credit. A folder that names
+    // neither leaves whatever the album already has.
+    const performerId = performerName
+      ? await ensurePerformerId(performerName)
+      : null;
+    const studioId = studioName ? await ensureStudioId(studioName) : null;
+
     const [album] = await db
       .insert(albums)
-      .values({
-        path: directory,
-        title,
-        performerId: performerName
-          ? await ensurePerformerId(performerName)
-          : null,
-        studioId: studioName ? await ensureStudioId(studioName) : null,
-      })
+      .values({ path: directory, title, performerId, studioId })
       // Unique on path, so a rescan updates the derived fields instead of
       // failing or duplicating.
-      .onConflictDoUpdate({ target: albums.path, set: { title } })
+      .onConflictDoUpdate({
+        target: albums.path,
+        set: {
+          title,
+          ...(performerId !== null ? { performerId } : {}),
+          ...(studioId !== null ? { studioId } : {}),
+        },
+      })
       .returning();
 
     // The scene's video, when the photos live in a subfolder.
@@ -1041,7 +1101,9 @@ async function syncTitleWithFilename(
   await db
     .update(mediaItems)
     .set({ title: derived, updatedAt: new Date() })
-    .where(eq(mediaItems.id, mediaItemId));
+    .where(
+      and(eq(mediaItems.id, mediaItemId), eq(mediaItems.titleSource, "filename")),
+    );
 }
 
 async function clearMissingSince(mediaItemId: number): Promise<void> {

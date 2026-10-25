@@ -18,10 +18,11 @@ import { logActivity } from "../activity/log.js";
 import { db, drainPool, runMigrations } from "../db/client.js";
 import { latestMigration } from "../db/journal.js";
 import { seed, seedCategories } from "../db/seed.js";
-import { APP_DATA_ROOT } from "../media/cache.js";
+import { APP_DATA_ROOT, UPLOAD_DIRS } from "../media/cache.js";
 import { restartScanSchedule, stopScanSchedule } from "../scanner/schedule.js";
 import { isScanRunning } from "../scanner/pipeline.js";
 import {
+  checksumDirectory,
   createBackup,
   isBackupRunning,
   resolveBackupPath,
@@ -34,6 +35,7 @@ import {
   writeRestoreMarker,
 } from "./restoreState.js";
 import { pgChildEnv } from "./pgEnv.js";
+import { compareChecksums, isDumpFileComplete } from "./verify.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -171,9 +173,19 @@ export async function findForbiddenMetaCommand(
     }
     const meta = /^\s*\\([A-Za-z!?]*)/.exec(line);
     if (meta && !ALLOWED_META_COMMANDS.has(meta[1])) return line;
+    // psql also runs a backslash command that follows SQL on the same line
+    // (`select 1 \! id`), so checking only line starts missed it. Matched
+    // after whitespace or a semicolon, which is where psql would start one.
+    if (MID_LINE_META.test(line)) return line;
   }
+  // A COPY block that never ends means the "COPY ... FROM stdin;" line was a
+  // fake inside a comment or $$ body, and everything after it went unchecked.
+  if (inCopy) return "(COPY block without terminator)";
   return null;
 }
+
+const MID_LINE_META =
+  /(?:^|[\s;])\\(?:!|i|ir|include|include_relative|o|out|copy|g|gexec|gset|w|write|cd|setenv|lo_import|lo_export)(?![A-Za-z_])/;
 
 async function assertDumpIsSafe(dumpPath: string): Promise<void> {
   const reader = createInterface({
@@ -214,6 +226,49 @@ export async function assertRestorable(meta: ArchiveMeta | null): Promise<void> 
         `(${meta?.latestMigrationTag ?? "unknown"}) than the one running ` +
         `(${local.tag}). Update first, then restore.`,
       409,
+    );
+  }
+}
+
+/**
+ * Refuses a truncated or altered archive before anything is destroyed.
+ *
+ * A dump cut off at a statement boundary extracts cleanly and replays without
+ * error, so psql would commit a half-empty database and report success. The
+ * same checks the verify endpoint runs, run here before the safety backup and
+ * the drop.
+ */
+async function assertArchiveIntact(
+  extractDir: string,
+  dumpPath: string,
+): Promise<void> {
+  if (!(await isDumpFileComplete(dumpPath))) {
+    throw new RestoreError(
+      "The database dump in this archive is truncated, so restoring it " +
+        "would leave a half-empty database. Nothing was changed.",
+      400,
+    );
+  }
+  let checksums: Record<string, string> | undefined;
+  try {
+    checksums = (
+      JSON.parse(await readFile(path.join(extractDir, "meta.json"), "utf8")) as {
+        checksums?: Record<string, string>;
+      }
+    ).checksums;
+  } catch {
+    return;
+  }
+  if (!checksums) return;
+  const { missing, mismatched } = compareChecksums(
+    checksums,
+    await checksumDirectory(extractDir),
+  );
+  if (missing.length > 0 || mismatched.length > 0) {
+    throw new RestoreError(
+      `This archive does not match its manifest (${missing.length} missing, ` +
+        `${mismatched.length} altered files). Nothing was changed.`,
+      400,
     );
   }
 }
@@ -285,6 +340,17 @@ export async function restoreBackup(name: string): Promise<RestoreResult> {
       maxBuffer: PSQL_MAX_BUFFER,
     });
     const uploadDirs = validateArchiveMembers(listed.stdout.split("\n"));
+    // Only the directories this app actually keeps uploads in. Without this a
+    // member like `uploads/.` makes the swap target APP_DATA_ROOT itself.
+    const knownUploads = new Set(UPLOAD_DIRS.map((upload) => upload.name));
+    for (const dir of uploadDirs) {
+      if (!knownUploads.has(dir)) {
+        throw new RestoreError(
+          `Archive contains an unknown upload folder: ${dir}`,
+          400,
+        );
+      }
+    }
     const verbose = await execFileAsync("tar", ["-tvzf", localArchive], {
       maxBuffer: PSQL_MAX_BUFFER,
     });
@@ -307,6 +373,7 @@ export async function restoreBackup(name: string): Promise<RestoreResult> {
     const meta = await readArchiveMeta(extractDir);
     await assertRestorable(meta);
     await assertDumpIsSafe(dumpPath);
+    await assertArchiveIntact(extractDir, dumpPath);
 
     // After the gate, never before: anything written between this snapshot and
     // psql would be captured by neither the safety backup nor the dump, and so

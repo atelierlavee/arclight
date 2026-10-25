@@ -108,7 +108,10 @@ export async function streamFile(
     end = size - 1;
   }
 
-  if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= size) {
+  // RFC 7233: a last-byte position past the end is clamped, not refused.
+  if (end >= size) end = size - 1;
+
+  if (Number.isNaN(start) || Number.isNaN(end) || start > end) {
     reply.code(416).header("Content-Range", `bytes */${size}`).send();
     return;
   }

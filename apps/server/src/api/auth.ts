@@ -1,8 +1,11 @@
+import { randomBytes } from "node:crypto";
 import { and, eq, ne, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { db } from "../db/client.js";
 import { profiles, sessions, users } from "../db/schema.js";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../auth/passwords.js";
+import { accountPasswordOk } from "../auth/profileProof.js";
+import { serialized } from "../auth/serialize.js";
 import {
   autoSelectProfile,
   createSession,
@@ -60,6 +63,12 @@ function retryAfterSeconds(ip: string): number {
     }
   }
   return Math.ceil(wait / 1000);
+}
+
+let decoy: Promise<string> | null = null;
+function decoyHash(): Promise<string> {
+  decoy ??= hashPassword(randomBytes(16).toString("hex"));
+  return decoy;
 }
 
 function recordFailure(ip: string): void {
@@ -133,8 +142,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return { error: "An account already exists" };
       }
 
-      const username = request.body.username?.trim();
-      const password = request.body.password ?? "";
+      const username = typeof request.body.username === "string" ? request.body.username.trim() : "";
+      const password = typeof request.body.password === "string" ? request.body.password : "";
       if (!username) {
         reply.code(400);
         return { error: "Username is required" };
@@ -182,7 +191,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Body: { username?: string; password?: string } }>(
     "/api/auth/login",
-    async (request, reply) => {
+    async (request, reply) => serialized("login", async () => {
       const ip = request.ip;
       // Checked before the password is even looked at, so a locked-out
       // guess costs nothing and reveals nothing.
@@ -192,14 +201,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Too many attempts. Try again in a few minutes.", retryAfterSeconds: wait };
       }
 
-      const username = request.body.username?.trim() ?? "";
-      const password = request.body.password ?? "";
+      const username = typeof request.body.username === "string" ? request.body.username.trim() : "";
+      const password = typeof request.body.password === "string" ? request.body.password : "";
 
       const [user] = await db.select().from(users).where(eq(users.username, username));
-      // Verify even when the user doesn't exist would be better still, but a
-      // single-account app has one known username anyway; the constant
-      // message is what matters here.
-      const ok = user ? await verifyPassword(password, user.passwordHash) : false;
+      // An unknown user is checked against a throwaway hash, so the response
+      // takes as long as a wrong password and doesn't reveal which usernames
+      // exist.
+      const ok = await verifyPassword(password, user?.passwordHash ?? (await decoyHash())).then(
+        (matches) => matches && user !== undefined,
+      );
 
       if (!ok) {
         recordFailure(ip);
@@ -211,7 +222,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const sessionId = await createSession(user.id, await autoSelectProfile(user.id));
       setSessionCookie(reply, sessionId, request.protocol === "https");
       return { user: { id: user.id, username: user.username } };
-    }
+    })
   );
 
   app.patch<{ Body: { username?: string } }>(
@@ -222,7 +233,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Authentication required" };
       }
 
-      const username = request.body.username?.trim();
+      const username = typeof request.body.username === "string" ? request.body.username.trim() : "";
       if (!username) {
         reply.code(400);
         return { error: "Username is required" };
@@ -256,8 +267,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Authentication required" };
       }
 
-      const { currentPassword = "", newPassword = "" } = request.body;
-      if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      const { currentPassword, newPassword } = request.body;
+      if (typeof newPassword !== "string" || newPassword.length < MIN_PASSWORD_LENGTH) {
         reply.code(400);
         return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
       }
@@ -265,7 +276,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const [user] = await db.select().from(users).where(eq(users.id, request.user.id));
       // Requiring the current password is what stops someone who walks up to
       // an unlocked browser from locking you out of your own server.
-      if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
+      // Through the shared, throttled check rather than a bare hash compare,
+      // so this route can't be used to guess the password without limit.
+      if (!user || !(await accountPasswordOk(user.id, currentPassword))) {
         reply.code(403);
         return { error: "Current password is incorrect" };
       }

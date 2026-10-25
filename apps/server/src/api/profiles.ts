@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db/client.js";
 import { profiles } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../auth/passwords.js";
+import { serialized } from "../auth/serialize.js";
 import { lockPrivacySession } from "../auth/privacyUnlock.js";
 import { accountPasswordOk } from "../auth/profileProof.js";
 import { setSessionProfile } from "../auth/sessions.js";
@@ -45,6 +46,11 @@ const MAX_ATTEMPTS = 5;
 const FORGET_AFTER_MS = 24 * 60 * 60 * 1000;
 type AttemptRecord = { count: number; blockedUntil: number; lastAt: number };
 const attempts = new Map<string, AttemptRecord>();
+// Across every session. Logging in again gives a fresh session and so a fresh
+// per-session budget; this is what stops that from being a way round the
+// limit.
+const MAX_GLOBAL_ATTEMPTS = 25;
+const globalPinAttempts: AttemptRecord = { count: 0, blockedUntil: 0, lastAt: 0 };
 const sweepAttempts = sweeper(
   attempts,
   (record, now) => record.blockedUntil <= now && now - record.lastAt > FORGET_AFTER_MS,
@@ -53,6 +59,7 @@ const sweepAttempts = sweeper(
 /** Test hook: the counters are process-wide, so suites reset them between cases. */
 export function resetProfilePinAttempts(): void {
   attempts.clear();
+  Object.assign(globalPinAttempts, { count: 0, blockedUntil: 0, lastAt: 0 });
 }
 
 type ProfileRow = typeof profiles.$inferSelect;
@@ -91,33 +98,44 @@ async function checkPin(
   pinHash: string,
   pin: unknown,
 ): Promise<boolean> {
-  sweepAttempts();
-  const sessionId = request.user!.sessionId;
-  const now = Date.now();
-  const record = attempts.get(sessionId) ?? { count: 0, blockedUntil: 0, lastAt: now };
-  if (record.blockedUntil > now) {
-    reply.code(429).send({
-      error: "Too many attempts",
-      code: "pin_locked",
-      retryAfterSeconds: Math.ceil((record.blockedUntil - now) / 1000),
+  // One attempt at a time: the throttle is read, a slow hash is verified,
+  // then the failure is recorded, and parallel requests would all read the
+  // counter before the first failure landed.
+  return serialized("profile-pin", async () => {
+    sweepAttempts();
+    const sessionId = request.user!.sessionId;
+    const now = Date.now();
+    const record = attempts.get(sessionId) ?? { count: 0, blockedUntil: 0, lastAt: now };
+    const blockedUntil = Math.max(record.blockedUntil, globalPinAttempts.blockedUntil);
+    if (blockedUntil > now) {
+      reply.code(429).send({
+        error: "Too many attempts",
+        code: "pin_locked",
+        retryAfterSeconds: Math.ceil((blockedUntil - now) / 1000),
+      });
+      return false;
+    }
+    if (typeof pin === "string" && (await verifyPassword(pin, pinHash))) {
+      attempts.delete(sessionId);
+      return true;
+    }
+    for (const [target, allowance] of [
+      [record, MAX_ATTEMPTS],
+      [globalPinAttempts, MAX_GLOBAL_ATTEMPTS],
+    ] as const) {
+      target.count += 1;
+      target.lastAt = now;
+      const wait = lockoutMs(target.count, allowance);
+      if (wait > 0) target.blockedUntil = now + wait;
+    }
+    attempts.set(sessionId, record);
+    reply.code(403).send({
+      error: "Wrong PIN",
+      code: "bad_pin",
+      attemptsLeft: Math.max(0, MAX_ATTEMPTS - record.count),
     });
     return false;
-  }
-  if (typeof pin === "string" && (await verifyPassword(pin, pinHash))) {
-    attempts.delete(sessionId);
-    return true;
-  }
-  record.count += 1;
-  record.lastAt = now;
-  const wait = lockoutMs(record.count, MAX_ATTEMPTS);
-  if (wait > 0) record.blockedUntil = now + wait;
-  attempts.set(sessionId, record);
-  reply.code(403).send({
-    error: "Wrong PIN",
-    code: "bad_pin",
-    attemptsLeft: Math.max(0, MAX_ATTEMPTS - record.count),
   });
-  return false;
 }
 
 /** Validates a name; returns the trimmed name or an error message. */
@@ -165,7 +183,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string }; Body: { pin?: unknown } | undefined }>(
     "/api/profiles/:id/select",
-    async (request, reply) => {
+    async (request, reply) => serialized(`profile-select:${request.user!.sessionId}`, async () => {
       const row = await ownProfile(request, request.params.id);
       if (!row) {
         reply.code(404);
@@ -178,7 +196,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       clearUnlocks(sessionId);
       await setSessionProfile(sessionId, row.id);
       return { profile: present(row) };
-    },
+    }),
   );
 
   app.post("/api/profiles/deselect", async (request) => {
@@ -191,7 +209,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
   // Owner only (auth/ownerRoutes.ts).
   app.post<{ Body: { name?: unknown; color?: unknown } | undefined }>(
     "/api/profiles",
-    async (request, reply) => {
+    async (request, reply) => serialized("profiles-create", async () => {
       const userId = request.user!.id;
       const named = cleanName(request.body?.name);
       if ("error" in named) {
@@ -224,7 +242,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
         .returning();
       reply.code(201);
       return { profile: present(created) };
-    },
+    }),
   );
 
   /**

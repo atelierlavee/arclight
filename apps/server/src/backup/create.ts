@@ -246,6 +246,10 @@ export async function createBackup(
         "--if-exists",
         "--no-owner",
         "--no-privileges",
+        // Session ids are stored in plaintext, so a dump holding them is a
+        // set of working logins for up to a month. Restoring leaves everyone
+        // signed out, which is the safe direction to fail in.
+        "--exclude-table-data=sessions",
         "--file",
         path.join(workDir, "db.sql"),
       ],

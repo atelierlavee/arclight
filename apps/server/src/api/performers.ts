@@ -1,3 +1,4 @@
+import { serialized } from "../auth/serialize.js";
 import { aliasedTable, and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
@@ -538,7 +539,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string }; Querystring: { kind?: string } }>(
     "/api/performers/:id/image",
-    async (request, reply) => {
+    async (request, reply) => serialized(`image:${request.params.id}`, async () => {
       const id = Number(request.params.id);
       const kind: PerformerImageKind = request.query.kind === "banner" ? "banner" : "avatar";
 
@@ -589,12 +590,12 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       await deletePerformerImage(previous);
 
       return { ok: true, kind };
-    }
+    })
   );
 
   app.delete<{ Params: { id: string }; Querystring: { kind?: string } }>(
     "/api/performers/:id/image",
-    async (request, reply) => {
+    async (request, reply) => serialized(`image:${request.params.id}`, async () => {
       const id = Number(request.params.id);
       const kind: PerformerImageKind = request.query.kind === "banner" ? "banner" : "avatar";
 
@@ -612,7 +613,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       await deletePerformerImage(previous);
 
       return { ok: true, kind };
-    }
+    })
   );
 
   // Replaces an item's whole performer set, matching how the editor works:

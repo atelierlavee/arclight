@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { buildApp } from "./buildApp.js";
 import { purgeExpiredSessions } from "./auth/sessions.js";
+import { failInterruptedScans } from "./scanner/pipeline.js";
 import { startScanSchedule } from "./scanner/schedule.js";
 import { startBackupSchedule } from "./backup/schedule.js";
 import { readRestoreMarker } from "./backup/restoreState.js";
@@ -49,6 +50,7 @@ await runMigrations();
 await seed();
 await seedCategories();
 await purgeExpiredSessions();
+await failInterruptedScans();
 await startScanSchedule();
 startBackupSchedule();
 

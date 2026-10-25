@@ -1,3 +1,5 @@
+import { parsePage } from "./mediaItemQueries.js";
+import { serialized } from "../auth/serialize.js";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
@@ -152,7 +154,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  app.post<{ Body: { pin?: string } }>("/api/vault/unlock", async (request, reply) => {
+  app.post<{ Body: { pin?: string } }>("/api/vault/unlock", async (request, reply) => serialized("vault", async () => {
     if (!request.user) {
       reply.code(401);
       return { error: "Not signed in" };
@@ -199,7 +201,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     sessionAttempts.delete(sessionId);
     unlockVault(sessionId);
     return { ok: true };
-  });
+  }));
 
   app.post("/api/vault/lock", async (request) => {
     const key = unlockKey(request);
@@ -213,7 +215,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       return { error: "The vault is locked" };
     }
     const profile = profileId(request);
-    const page = Math.max(1, Number(request.query.page ?? 1) || 1);
+    const page = parsePage(request.query.page) ?? 1;
 
     const rows = await db
       .select({

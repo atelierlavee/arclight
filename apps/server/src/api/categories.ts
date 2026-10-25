@@ -1,3 +1,5 @@
+import { serialized } from "../auth/serialize.js";
+import { isUniqueViolation } from "../db/errors.js";
 import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { visibleItems } from "../library/visibility.js";
 import type { FastifyInstance } from "fastify";
@@ -101,11 +103,18 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
       .select({ max: sql<number>`coalesce(max(${categories.position}), -1)` })
       .from(categories);
 
-    const [created] = await db
-      .insert(categories)
-      .values({ slug, label, position: max + 1 })
-      .returning();
-    return { category: created };
+    try {
+      const [created] = await db
+        .insert(categories)
+        .values({ slug, label, position: max + 1 })
+        .returning();
+      return { category: created };
+    } catch (error) {
+      // Two requests passed the check above together; the index caught it.
+      if (!isUniqueViolation(error)) throw error;
+      reply.code(409);
+      return { error: `"${label}" already exists` };
+    }
   });
 
   // Label and order only. The slug is deliberately immutable: items reference
@@ -230,32 +239,46 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
       reply.code(404);
       return { error: "Not found" };
     }
-    const [category] = await db.select().from(categories).where(eq(categories.id, id));
-    if (!category) {
+    // Move, delete and the cover file as one unit. Separately, an item edit
+    // landing between the move and the delete could be left with a slug no
+    // category has, and a crash between them did the same.
+    const outcome = await db.transaction(async (tx) => {
+      const [category] = await tx
+        .select()
+        .from(categories)
+        .where(eq(categories.id, id))
+        .for("update");
+      if (!category) return null;
+
+      // Items must land somewhere, or they'd vanish from every category view
+      // while still sitting in the library. With no other category left there
+      // is nowhere to move them: they keep their slug, which every view
+      // tolerates (the detail modal already shows a slug whose category was
+      // deleted).
+      const [fallback] = await tx
+        .select()
+        .from(categories)
+        .where(ne(categories.id, id))
+        .orderBy(asc(categories.position), asc(categories.id))
+        .limit(1);
+
+      const moved = fallback
+        ? await tx
+            .update(mediaItems)
+            .set({ kind: fallback.slug })
+            .where(eq(mediaItems.kind, category.slug))
+            .returning({ id: mediaItems.id })
+        : [];
+
+      await tx.delete(categories).where(eq(categories.id, id));
+      return { category, fallback, moved };
+    });
+    if (!outcome) {
       reply.code(404);
       return { error: "Not found" };
     }
-
-    // Items must land somewhere, or they'd vanish from every category view
-    // while still sitting in the library. With no other category left there is
-    // nowhere to move them: they keep their slug, which every view tolerates
-    // (the detail modal already shows a slug whose category was deleted).
-    const [fallback] = await db
-      .select()
-      .from(categories)
-      .where(ne(categories.id, id))
-      .orderBy(asc(categories.position), asc(categories.id))
-      .limit(1);
-
-    const moved = fallback
-      ? await db
-          .update(mediaItems)
-          .set({ kind: fallback.slug })
-          .where(eq(mediaItems.kind, category.slug))
-          .returning({ id: mediaItems.id })
-      : [];
-
-    await db.delete(categories).where(eq(categories.id, id));
+    const { category, fallback, moved } = outcome;
+    // After the commit: a file can't be un-deleted, a row can be rolled back.
     await deleteKindCover(category.coverFile);
 
     return { ok: true, movedCount: moved.length, movedTo: fallback?.label ?? null };
@@ -279,7 +302,7 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { slug: string } }>(
     "/api/categories/:slug/cover",
-    async (request, reply) => {
+    async (request, reply) => serialized(`cover:${request.params.slug}`, async () => {
       const [category] = await db
         .select()
         .from(categories)
@@ -315,12 +338,12 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
       // Only after the row points at the new file.
       await deleteKindCover(category.coverFile);
       return { ok: true };
-    }
+    })
   );
 
   app.delete<{ Params: { slug: string } }>(
     "/api/categories/:slug/cover",
-    async (request, reply) => {
+    async (request, reply) => serialized(`cover:${request.params.slug}`, async () => {
       const [category] = await db
         .select()
         .from(categories)
@@ -332,6 +355,6 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
       await db.update(categories).set({ coverFile: null }).where(eq(categories.id, category.id));
       await deleteKindCover(category.coverFile);
       return { ok: true };
-    }
+    })
   );
 }

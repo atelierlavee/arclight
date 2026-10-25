@@ -237,6 +237,9 @@ export function PinPad({
         event.preventDefault();
         setPin((current) => current.slice(0, -1));
       } else if (event.key === "Enter") {
+        // A focused button (Back, a digit) should activate itself, not
+        // submit the PIN.
+        if (event.target instanceof HTMLButtonElement) return;
         event.preventDefault();
         void submit();
       } else if (event.key === "Escape") {

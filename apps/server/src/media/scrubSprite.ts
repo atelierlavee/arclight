@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -58,6 +59,9 @@ export function spriteLayout(durationSeconds: number): { count: number; interval
   return { count, interval: durationSeconds / count };
 }
 
+/** More than this fraction of frames failing means the sheet isn't worth keeping. */
+const MAX_FAILED_FRAME_RATIO = 0.1;
+
 async function grabFrame(videoPath: string, seconds: number): Promise<Buffer | null> {
   try {
     const { stdout } = await execFileAsync(
@@ -81,7 +85,13 @@ async function grabFrame(videoPath: string, seconds: number): Promise<Buffer | n
         "5",
         "-",
       ],
-      { encoding: "buffer", timeout: FRAME_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
+      {
+        encoding: "buffer",
+        timeout: FRAME_TIMEOUT_MS,
+        // SIGTERM can be ignored by a stuck ffmpeg, leaving it running.
+        killSignal: "SIGKILL",
+        maxBuffer: 4 * 1024 * 1024,
+      },
     );
     return stdout.length > 0 ? stdout : null;
   } catch {
@@ -110,6 +120,20 @@ async function generate(
       }
     }),
   );
+
+  // A seek can time out while the machine is busy (during a scan, say). One
+  // more try for those, one at a time, before deciding the sheet is bad.
+  for (let index = 0; index < count; index++) {
+    if (frames[index] === null) {
+      frames[index] = await grabFrame(videoPath, (index + 0.5) * interval);
+    }
+  }
+
+  // A sheet with many black cells would be cached for good and look broken
+  // for as long as the file's hash stays the same. Better to build nothing
+  // now and try again on the next request, when the load has passed.
+  const failed = frames.filter((frame) => frame === null).length;
+  if (failed > Math.floor(count * MAX_FAILED_FRAME_RATIO)) return null;
 
   const first = frames.find((frame): frame is Buffer => frame !== null);
   if (!first) return null;
@@ -149,10 +173,13 @@ async function generate(
   // half-written image.
   const spritePath = spritePathFor(mediaItemId, contentHash);
   const infoPath = infoPathFor(mediaItemId, contentHash);
-  await writeFile(`${spritePath}.tmp`, sheet);
-  await rename(`${spritePath}.tmp`, spritePath);
-  await writeFile(`${infoPath}.tmp`, JSON.stringify(info));
-  await rename(`${infoPath}.tmp`, infoPath);
+  // Unique temp names: two builds of the same item (the in-flight map is
+  // per process and per item, not per file) must not write the same path.
+  const suffix = `.${randomUUID()}.tmp`;
+  await writeFile(`${spritePath}${suffix}`, sheet);
+  await rename(`${spritePath}${suffix}`, spritePath);
+  await writeFile(`${infoPath}${suffix}`, JSON.stringify(info));
+  await rename(`${infoPath}${suffix}`, infoPath);
   return info;
 }
 

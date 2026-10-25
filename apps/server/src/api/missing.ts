@@ -1,3 +1,4 @@
+import { isId } from "./mediaItemQueries.js";
 import { and, eq, isNotNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { logActivity } from "../activity/log.js";
@@ -71,8 +72,8 @@ export async function missingRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: "ids must be an array" });
       }
       const ids = raw.filter(
-        (id): id is number => typeof id === "number" && Number.isInteger(id),
-      );
+        (id): id is number => isId(id),
+      ).slice(0, 10_000);
       if (ids.length === 0) {
         return reply.code(400).send({ error: "No valid ids" });
       }

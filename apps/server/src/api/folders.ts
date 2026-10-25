@@ -1,3 +1,4 @@
+import { isId } from "./mediaItemQueries.js";
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
@@ -32,9 +33,30 @@ export async function folderRoutes(app: FastifyInstance): Promise<void> {
     "/api/folders",
     async (request, reply) => {
       const { title, parentId } = request.body;
-      if (!title?.trim()) {
+      if (typeof title !== "string" || !title.trim()) {
         reply.code(400);
         return { error: "title is required" };
+      }
+      if (parentId !== undefined && parentId !== null) {
+        // Must be an existing folder: a made-up id would otherwise fail on
+        // the foreign key as a 500, and a non-folder parent would hang the
+        // new folder off an item that can't contain one.
+        const [parent] = isId(parentId)
+          ? await db
+              .select({ typeId: mediaItems.itemTypeId })
+              .from(mediaItems)
+              .where(eq(mediaItems.id, parentId))
+          : [];
+        const [parentType] = parent
+          ? await db
+              .select({ name: mediaItemTypes.name })
+              .from(mediaItemTypes)
+              .where(eq(mediaItemTypes.id, parent.typeId))
+          : [];
+        if (parentType?.name !== "folder") {
+          reply.code(400);
+          return { error: "parentId must be an existing folder" };
+        }
       }
 
       const [folderType] = await db

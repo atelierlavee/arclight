@@ -1,3 +1,4 @@
+import { parsePage } from "./mediaItemQueries.js";
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { visibleItems } from "../library/visibility.js";
 import type { FastifyInstance } from "fastify";
@@ -93,7 +94,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const profile = profileId(request);
       const id = Number(request.params.id);
-      const pageNum = Math.max(1, Number(request.query.page) || 1);
+      const pageNum = parsePage(request.query.page) ?? 1;
 
       const [album] = await db
         .select({

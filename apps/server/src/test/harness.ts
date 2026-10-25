@@ -4,6 +4,7 @@ import { buildApp } from "../buildApp.js";
 import { db, runMigrations } from "../db/client.js";
 import { seed, seedCategories } from "../db/seed.js";
 import { hashPassword } from "../auth/passwords.js";
+import { resetAccountPasswordFailures } from "../auth/profileProof.js";
 import { profiles, sessions, users } from "../db/schema.js";
 import { SESSION_COOKIE } from "../auth/sessions.js";
 import { randomBytes } from "node:crypto";
@@ -46,6 +47,16 @@ export async function registeredRoutes(): Promise<RegisteredRoute[]> {
  * updated whenever a foreign key is added is a suite people stop running.
  */
 export async function resetDatabase(): Promise<void> {
+  // The last line of defence for the real library: whatever the environment
+  // says, never truncate anything but the throwaway test database.
+  const current = await db.execute<{ name: string }>(sql`select current_database() as name`);
+  if (current.rows[0]?.name !== "media_test") {
+    throw new Error(
+      `Refusing to truncate "${current.rows[0]?.name}": tests only reset media_test.`,
+    );
+  }
+  // Counters are keyed by user id, and ids restart with the truncate below.
+  resetAccountPasswordFailures();
   const rows = await db.execute<{ tablename: string }>(
     sql`select tablename from pg_tables where schemaname = 'public'`
   );

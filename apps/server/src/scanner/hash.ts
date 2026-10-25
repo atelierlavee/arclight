@@ -14,15 +14,17 @@ export async function partialContentHash(filePath: string, sizeBytes: number): P
   try {
     const headSize = Math.min(CHUNK_SIZE, sizeBytes);
     const headBuf = Buffer.alloc(headSize);
-    await fh.read(headBuf, 0, headSize, 0);
-    hash.update(headBuf);
+    // Only the bytes actually read: the buffer is zero-filled, and a file
+    // still being copied in would otherwise hash its unwritten tail as zeros.
+    const head = await fh.read(headBuf, 0, headSize, 0);
+    hash.update(headBuf.subarray(0, head.bytesRead));
 
     if (sizeBytes > CHUNK_SIZE) {
       const tailSize = Math.min(CHUNK_SIZE, sizeBytes - headSize);
       if (tailSize > 0) {
         const tailBuf = Buffer.alloc(tailSize);
-        await fh.read(tailBuf, 0, tailSize, sizeBytes - tailSize);
-        hash.update(tailBuf);
+        const tail = await fh.read(tailBuf, 0, tailSize, sizeBytes - tailSize);
+        hash.update(tailBuf.subarray(0, tail.bytesRead));
       }
     }
 

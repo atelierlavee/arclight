@@ -216,6 +216,9 @@ export async function savePlaybackPosition(id: number, positionSeconds: number):
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ positionSeconds }),
+    // Lets the request finish when the page is closing, which is exactly when
+    // the last few seconds of progress would otherwise be lost.
+    keepalive: true,
   });
 }
 

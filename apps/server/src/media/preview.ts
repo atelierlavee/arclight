@@ -1,3 +1,4 @@
+import { markFailed, recentlyFailed } from "./failedArtwork.js";
 import { execFile } from "node:child_process";
 import { access, rename, rm } from "node:fs/promises";
 import path from "node:path";
@@ -127,6 +128,7 @@ export async function generatePreviewClip(
     await rename(tempPath, outputPath);
   } catch (err) {
     await rm(tempPath, { force: true }).catch(() => {});
+    markFailed("preview", mediaItemId, contentHash);
     // Best-effort, exactly like posters: without a clip the UI falls back to
     // the still image rather than failing the scan. Logged rather than
     // swallowed so a systematically broken encode isn't invisible.
@@ -150,5 +152,6 @@ export async function ensurePreviewClip(
   } catch {
     // not cached yet
   }
+  if (recentlyFailed("preview", mediaItemId, contentHash)) return;
   await generatePreviewClip(videoPath, mediaItemId, contentHash, durationSeconds);
 }

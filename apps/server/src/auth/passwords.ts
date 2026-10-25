@@ -37,6 +37,9 @@ export async function verifyPassword(password: string, stored: string): Promise<
   if (!saltHex || !keyHex) return false;
 
   const expected = Buffer.from(keyHex, "hex");
+  // A malformed hash decodes to nothing, and two empty buffers compare equal:
+  // without this a corrupted or crafted hash would accept any password.
+  if (expected.length === 0) return false;
   const derived = await scrypt(
     password,
     Buffer.from(saltHex, "hex"),

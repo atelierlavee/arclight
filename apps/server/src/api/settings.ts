@@ -1,3 +1,4 @@
+import { serialized } from "../auth/serialize.js";
 import { eq, inArray } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
@@ -113,7 +114,13 @@ export function kindCoverFor(covers: KindCovers, kind: string): string | undefin
   return typeof fileName === "string" && fileName ? fileName : undefined;
 }
 
-export async function setKindCover(kind: string, fileName: string | null): Promise<KindCovers> {
+export function setKindCover(kind: string, fileName: string | null): Promise<KindCovers> {
+  // One JSON row holds every cover, so concurrent read-modify-writes would
+  // lose one of the entries.
+  return serialized("kind-covers", () => writeKindCover(kind, fileName));
+}
+
+async function writeKindCover(kind: string, fileName: string | null): Promise<KindCovers> {
   const current = await getKindCovers();
   const next: KindCovers = Object.assign(Object.create(null), current);
   if (fileName) next[kind] = fileName;
@@ -184,70 +191,89 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Nothing to update" };
       }
 
-      if (body.network?.lanExposed !== undefined) {
+      // Every section in the body is applied and answered, not just the first.
+      // All validated before any is written, so a bad section can't leave the
+      // others half-applied.
+      if (
+        body.network?.lanExposed !== undefined &&
         // Rejected rather than coerced: Boolean("false") is true, and this
         // setting decides whether the server answers the LAN at all.
-        if (typeof body.network.lanExposed !== "boolean") {
-          reply.code(400);
-          return { error: "network.lanExposed must be a boolean" };
-        }
-        const network = await setNetworkSettings(body.network.lanExposed);
-        // Pushed into the guard's cache rather than just clearing it, so the
-        // very next request is judged by the new value with no extra query.
-        forgetLanExposure(network.lanExposed);
-        return {
-          network: {
-            ...network,
-            addresses: lanAddresses(),
-            port: lanPort(),
-            containerised: inContainer(),
-          },
-        };
-      }
-
-      if (body.scan?.intervalMinutes !== undefined) {
-        // An interval off the allow-list is coerced to the default by
-        // setScanSettings, deliberately (see routes.test.ts).
-        const scan = await setScanSettings(body.scan.intervalMinutes);
-        // Applied immediately rather than at next boot — changing the interval
-        // and having nothing happen for an hour would read as broken.
-        await restartScanSchedule();
-        return { scan };
+        typeof body.network.lanExposed !== "boolean"
+      ) {
+        reply.code(400);
+        return { error: "network.lanExposed must be a boolean" };
       }
 
       const incoming = body.hero;
-      if (!incoming || typeof incoming !== "object") {
+      const touchesHero = incoming !== undefined;
+      if (touchesHero) {
+        if (!incoming || typeof incoming !== "object") {
+          reply.code(400);
+          return { error: "Nothing to update" };
+        }
+        if (incoming.source !== undefined && !HERO_SOURCES.includes(incoming.source as HeroSource)) {
+          reply.code(400);
+          return { error: `hero.source must be one of ${HERO_SOURCES.join(", ")}` };
+        }
+        if (incoming.itemIds !== undefined && !Array.isArray(incoming.itemIds)) {
+          reply.code(400);
+          return { error: "hero.itemIds must be an array" };
+        }
+      }
+
+      const touchesNetwork = body.network?.lanExposed !== undefined;
+      const touchesScan = body.scan?.intervalMinutes !== undefined;
+      if (!touchesNetwork && !touchesScan && !touchesHero) {
         reply.code(400);
         return { error: "Nothing to update" };
       }
-      if (incoming.source !== undefined && !HERO_SOURCES.includes(incoming.source as HeroSource)) {
-        reply.code(400);
-        return { error: `hero.source must be one of ${HERO_SOURCES.join(", ")}` };
+
+      const result: Record<string, unknown> = {};
+
+      if (touchesNetwork) {
+        const network = await setNetworkSettings(body.network!.lanExposed as boolean);
+        // Pushed into the guard's cache rather than just clearing it, so the
+        // very next request is judged by the new value with no extra query.
+        forgetLanExposure(network.lanExposed);
+        result.network = {
+          ...network,
+          addresses: lanAddresses(),
+          port: lanPort(),
+          containerised: inContainer(),
+        };
       }
-      if (incoming.itemIds !== undefined && !Array.isArray(incoming.itemIds)) {
-        reply.code(400);
-        return { error: "hero.itemIds must be an array" };
+
+      if (touchesScan) {
+        // An interval off the allow-list is coerced to the default by
+        // setScanSettings, deliberately (see routes.test.ts).
+        result.scan = await setScanSettings(body.scan!.intervalMinutes as number);
+        // Applied immediately rather than at next boot — changing the interval
+        // and having nothing happen for an hour would read as broken.
+        await restartScanSchedule();
       }
 
-      const current = await getHeroSettings();
-      const source = HERO_SOURCES.includes(incoming.source as HeroSource)
-        ? (incoming.source as HeroSource)
-        : current.source;
-      const itemIds = Array.isArray(incoming.itemIds)
-        ? [...new Set(incoming.itemIds.filter(isId))].slice(0, MAX_HERO_ITEMS)
-        : current.itemIds;
+      if (touchesHero) {
+        const current = await getHeroSettings();
+        const source = HERO_SOURCES.includes(incoming!.source as HeroSource)
+          ? (incoming!.source as HeroSource)
+          : current.source;
+        const itemIds = Array.isArray(incoming!.itemIds)
+          ? [...new Set(incoming!.itemIds.filter(isId))].slice(0, MAX_HERO_ITEMS)
+          : current.itemIds;
 
-      const value: HeroSettings = { source, itemIds };
+        const value: HeroSettings = { source, itemIds };
 
-      await db
-        .insert(appSettings)
-        .values({ key: HERO_KEY, value })
-        .onConflictDoUpdate({
-          target: appSettings.key,
-          set: { value, updatedAt: new Date() },
-        });
+        await db
+          .insert(appSettings)
+          .values({ key: HERO_KEY, value })
+          .onConflictDoUpdate({
+            target: appSettings.key,
+            set: { value, updatedAt: new Date() },
+          });
+        result.hero = value;
+      }
 
-      return { hero: value };
+      return result;
     }
   );
 }

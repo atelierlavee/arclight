@@ -1,4 +1,5 @@
 import path from "node:path";
+import { serialized } from "../auth/serialize.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { isAuthorisedCastStream } from "../auth/castTokens.js";
@@ -210,7 +211,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Params: { id: string } }>(
     "/api/media-items/:id/thumbnail",
-    async (request, reply) => {
+    async (request, reply) => serialized(`thumb:${request.params.id}`, async () => {
       const id = Number(request.params.id);
       const [item] = await db
         .select()
@@ -253,13 +254,13 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
       await deleteItemThumbnail(previous);
 
       return { ok: true, thumbnailFile: fileName };
-    }
+    })
   );
 
   // Reverts to the generated poster.
   app.delete<{ Params: { id: string } }>(
     "/api/media-items/:id/thumbnail",
-    async (request, reply) => {
+    async (request, reply) => serialized(`thumb:${request.params.id}`, async () => {
       const id = Number(request.params.id);
       const [item] = await db
         .select()
@@ -277,7 +278,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
       await deleteItemThumbnail(item.thumbnailFile);
 
       return { ok: true };
-    }
+    })
   );
 
   app.get<{ Params: { id: string } }>(

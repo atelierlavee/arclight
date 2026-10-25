@@ -13,7 +13,8 @@
 # binary) never shadows the Linux-native modules installed in the image.
 #
 # Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#   docker compose -p media-server-dev -f docker-compose.yml -f docker-compose.dev.yml up --build
+# (`make dev` does this; without -p the stack lands in a separate project.)
 #
 # First run builds the `deps` stage (full npm ci, including devDependencies)
 # instead of the slim production image.
@@ -50,6 +51,11 @@ services:
     volumes:
       - ..:/repo
       - node_modules:/repo/node_modules
+      # Same container path as the base file's backup mount, so this replaces
+      # it. Dev backups must not share a folder with the real stack's: the
+      # newest-10 pruning would evict real archives, and the real app would
+      # list dev archives as restorable.
+      - ${DEV_BACKUP_DIR:-../backups-dev}:/app/backups
 
   postgres:
     ports:

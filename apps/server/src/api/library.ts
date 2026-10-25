@@ -1,5 +1,6 @@
 import { readdir, stat } from "node:fs/promises";
 import { logActivity } from "../activity/log.js";
+import { serialized } from "../auth/serialize.js";
 import { countRemovableData, purgeRemovableData } from "../library/cleanup.js";
 import { DERIVED_DIRS, cacheUsage, clearDerivedCache } from "../media/cache.js";
 import path from "node:path";
@@ -140,8 +141,11 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  app.post<{ Body: { path?: string } }>("/api/library/roots", async (request, reply) => {
-    const candidate = request.body.path ? path.resolve(request.body.path) : "";
+  app.post<{ Body: { path?: string } }>("/api/library/roots", async (request, reply) => serialized("library-roots", async () => {
+    const candidate =
+      typeof request.body?.path === "string" && request.body.path
+        ? path.resolve(request.body.path)
+        : "";
     if (!candidate || !isInsideBrowseRoots(candidate)) {
       reply.code(400);
       return { error: "Choose a folder the server can see" };
@@ -192,7 +196,7 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
     await recomputeScope();
 
     return { root: created };
-  });
+  }));
 
   /**
    * What a removed folder has left behind, and the way to clear it.
@@ -384,7 +388,10 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
     if (request.query.deleteData === "true" && (await privacyLocked(request, reply))) {
       return reply;
     }
-    if (request.query.deleteData === "true" && isScanRunning()) {
+    // Any removal, not only the purge: a scan holds its own snapshot of the
+    // roots and would flag the removed folder's items missing again, or
+    // insert files against a root row that has just gone.
+    if (isScanRunning()) {
       reply.code(409);
       return { error: "A library scan is running — try again when it finishes" };
     }

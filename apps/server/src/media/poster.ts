@@ -1,3 +1,4 @@
+import { markFailed, recentlyFailed } from "./failedArtwork.js";
 import { execFile } from "node:child_process";
 import { access, rename, rm } from "node:fs/promises";
 import path from "node:path";
@@ -50,6 +51,7 @@ export async function generatePosterFrame(
     // Poster generation is best-effort: a missing poster just falls back to
     // the generic icon in the UI, it never fails the scan itself.
     await rm(tempPath, { force: true }).catch(() => {});
+    markFailed("poster", mediaItemId, contentHash);
   }
 }
 
@@ -70,5 +72,6 @@ export async function ensurePosterFrame(
   } catch {
     // not there yet — fall through and build it
   }
+  if (recentlyFailed("poster", mediaItemId, contentHash)) return;
   await generatePosterFrame(videoPath, mediaItemId, contentHash, durationSeconds);
 }

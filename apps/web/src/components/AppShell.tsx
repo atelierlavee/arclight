@@ -5,6 +5,7 @@ import {
   useId,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
@@ -153,6 +154,11 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   // drawer open can never leave a stale overlay over the desktop layout.
   const drawerOpen = isMobile && drawerRequested;
   const [playingId, setPlayingId] = useState<number | null>(null);
+  // Read by the play-request listener, which is registered once.
+  const playingIdRef = useRef<number | null>(null);
+  playingIdRef.current = playingId;
+  // Bumped when the loaded item is requested again, to remount its modal.
+  const [playRequest, setPlayRequest] = useState(0);
   const [miniPlayer, setMiniPlayer] = useState(false);
   const [resumePlayer, setResumePlayer] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -208,6 +214,10 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
       const id = typeof detail === "number" ? detail : detail?.id;
       if (typeof id !== "number") return;
       const wantsDetails = typeof detail !== "number" && detail.details === true;
+      // Asking for the item that is already loaded changes no prop, so the
+      // modal would ignore it — Resume or Play on the video you are watching
+      // did nothing. A new key remounts it so the request is honoured.
+      if (playingIdRef.current === id) setPlayRequest((n) => n + 1);
       setPlayingId(id);
       // The mini player is the answer to "play this", not to "show me this".
       // Opening one in response to a request for details puts the thing you
@@ -396,6 +406,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
 
         {playingId !== null && (
           <MediaDetailModal
+            key={playRequest}
             itemId={playingId}
             autoPlay={miniPlayer}
             resume={resumePlayer}

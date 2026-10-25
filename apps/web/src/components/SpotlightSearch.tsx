@@ -97,9 +97,16 @@ export function SpotlightSearch() {
         shortcut: "R",
         icon: Play,
         run: async () => {
-          const response = await fetch("/api/continue-watching");
-          const data = (await response.json()) as { items?: { id: number }[] };
-          const id = data.items?.[0]?.id;
+          let id: number | undefined;
+          try {
+            const response = await fetch("/api/continue-watching");
+            if (!response.ok) throw new Error(String(response.status));
+            const data = (await response.json()) as { items?: { id: number }[] };
+            id = data.items?.[0]?.id;
+          } catch {
+            toast({ title: "Couldn't load your last video", variant: "error" });
+            return;
+          }
           if (id) {
             window.dispatchEvent(
               new CustomEvent(PLAY_EVENT, { detail: { id, resume: true } }),
