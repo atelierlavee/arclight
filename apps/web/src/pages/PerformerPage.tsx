@@ -12,6 +12,7 @@ import { PerformerStats } from "@/components/PerformerStats";
 import { PerformerVideos } from "@/components/PerformerVideos";
 import { PerformerBanner } from "@/components/PerformerBanner";
 import { PerformerBio } from "@/components/PerformerBio";
+import { PerformerFacts } from "@/components/PerformerFacts";
 import { PerformerImageMenu } from "@/components/PerformerImageMenu";
 import { PerformerImagePicker } from "@/components/PerformerImagePicker";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -336,6 +337,12 @@ export function PerformerPage() {
       {performer && (
         <div className="px-4 pt-6 md:px-6">
           <PerformerBio performerId={performer.id} bio={performer.bio} />
+        </div>
+      )}
+
+      {performer && (
+        <div className="px-4 pt-6 md:px-6">
+          <PerformerFacts performer={performer} />
         </div>
       )}
 

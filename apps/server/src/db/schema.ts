@@ -227,6 +227,23 @@ export const performers = pgTable(
     // exist at all. No source column: the scanner writes `name` and nothing
     // else, so there is no ownership to arbitrate.
     bio: text("bio"),
+    // Profile facts, all typed in by hand for the same reason as the bio, and
+    // all optional: null is "not known", never a default. Gender is one of
+    // PERFORMER_GENDERS (api/performerDetails.ts); the rest are free text
+    // except where arithmetic needs a number — age from the birthdate, and
+    // career years for a range.
+    gender: text("gender"),
+    birthdate: date("birthdate"),
+    country: text("country"),
+    ethnicity: text("ethnicity"),
+    hairColor: text("hair_color"),
+    eyeColor: text("eye_color"),
+    heightCm: integer("height_cm"),
+    measurements: text("measurements"),
+    tattoos: text("tattoos"),
+    piercings: text("piercings"),
+    careerStart: integer("career_start"),
+    careerEnd: integer("career_end"),
     // Favourite moved to profile_performer_state: it is one person's taste,
     // not a fact about the performer.
     // Set when archived: out of the performers grid, the home row, search
@@ -267,6 +284,32 @@ export const performers = pgTable(
   // hand-typed "alice smith" would otherwise become two separate performers.
   (table) => [
     uniqueIndex("performers_name_lower_idx").on(sql`lower(${table.name})`),
+  ],
+);
+
+/**
+ * Other names a performer goes by. The scanner treats an alias exactly like
+ * the name, so a folder or filename spelling "Jane D." credits Jane Doe
+ * instead of creating a second performer.
+ *
+ * Unique on lower(alias) across all performers, and api/performers.ts also
+ * refuses an alias that is some performer's name (and a name that is someone
+ * else's alias): one spelling must resolve to one person, or the scanner
+ * would have to guess.
+ */
+export const performerAliases = pgTable(
+  "performer_aliases",
+  {
+    id: serial("id").primaryKey(),
+    performerId: integer("performer_id")
+      .notNull()
+      .references(() => performers.id, { onDelete: "cascade" }),
+    alias: text("alias").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("performer_aliases_alias_lower_idx").on(sql`lower(${table.alias})`),
+    index("performer_aliases_performer_id_idx").on(table.performerId),
   ],
 );
 

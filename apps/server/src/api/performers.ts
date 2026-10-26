@@ -2,11 +2,13 @@ import { serialized } from "../auth/serialize.js";
 import { aliasedTable, and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
+import { isUniqueViolation } from "../db/errors.js";
 import {
   albums,
   mediaItemPerformers,
   mediaItems,
   mediaItemTypes,
+  performerAliases,
   performers,
   playbackStates,
   profilePerformerState,
@@ -31,6 +33,8 @@ import {
 } from "../media/performerImages.js";
 import { streamFile } from "../media/streamer.js";
 import { normalizeName } from "../scanner/performerNames.js";
+import { findPerformerIdByName, performerNameOwner } from "../library/performerLookup.js";
+import { parseAliases, parsePerformerDetails, type PerformerDetailsBody } from "./performerDetails.js";
 
 import { profileId } from "../auth/profileContext.js";
 import { itemRating, performerIsFavorite, setPerformerFavorite } from "../library/profileState.js";
@@ -43,13 +47,8 @@ import { playbackJoin } from "./mediaItemQueries.js";
 async function ensurePerformerId(rawName: string): Promise<number> {
   const name = normalizeName(rawName);
 
-  const findId = async (): Promise<number | null> => {
-    const [row] = await db
-      .select({ id: performers.id })
-      .from(performers)
-      .where(sql`lower(${performers.name}) = lower(${name})`);
-    return row?.id ?? null;
-  };
+  // By name or alias: typing "Jane D." credits Jane Doe.
+  const findId = () => findPerformerIdByName(name);
 
   const existing = await findId();
   if (existing !== null) return existing;
@@ -81,6 +80,16 @@ function dedupeNames(names: string[]): string[] {
     out.push(name);
   }
   return out;
+}
+
+/** A performer's other names, alphabetically. */
+async function aliasesOf(performerId: number): Promise<string[]> {
+  const rows = await db
+    .select({ alias: performerAliases.alias })
+    .from(performerAliases)
+    .where(eq(performerAliases.performerId, performerId))
+    .orderBy(sql`lower(${performerAliases.alias})`);
+  return rows.map((row) => row.alias);
 }
 
 /** One performer's favourite flag for one profile. */
@@ -494,6 +503,19 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       // Detail only, deliberately: a bio is prose, and the performers grid
       // renders every performer as a card that would carry text nothing shows.
       bio: performer.bio,
+      gender: performer.gender,
+      birthdate: performer.birthdate,
+      country: performer.country,
+      ethnicity: performer.ethnicity,
+      hairColor: performer.hairColor,
+      eyeColor: performer.eyeColor,
+      heightCm: performer.heightCm,
+      measurements: performer.measurements,
+      tattoos: performer.tattoos,
+      piercings: performer.piercings,
+      careerStart: performer.careerStart,
+      careerEnd: performer.careerEnd,
+      aliases: await aliasesOf(performer.id),
       studios: studioBreakdown,
       years: yearBreakdown,
       watch: watch ?? { watched: 0, inProgress: 0, unwatched: 0 },
@@ -674,7 +696,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
 
   app.patch<{
     Params: { id: string };
-    Body: {
+    Body: PerformerDetailsBody & {
       name?: string;
       bio?: string | null;
       isFavorite?: boolean;
@@ -688,6 +710,8 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       avatarPositionX?: number | null;
       avatarPositionY?: number | null;
       avatarScale?: number | null;
+      /** The whole alias list, replacing whatever was there. */
+      aliases?: string[];
     };
   }>(
     "/api/performers/:id",
@@ -716,10 +740,10 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         avatarPositionX,
         avatarPositionY,
         avatarScale,
-      } = request.body;
+      } = body;
 
-      // Everything that can be saved on its own, without re-sending the name:
-      // the drag controls and the bio editor both patch a single field.
+      // Every field is optional and saved on its own: the drag controls, the
+      // bio editor and the details form each patch only what they show.
       const partial: Partial<typeof performers.$inferInsert> = {};
 
       if (archived !== undefined) partial.archivedAt = archived ? new Date() : null;
@@ -747,60 +771,117 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       if (avatarScale !== undefined)
         partial.avatarScale = avatarScale === null ? null : clamp(avatarScale, 100, 300);
 
-      // Answered with this profile's favourite folded in, under the name
-      // the column used to have.
-      const respond = async (row: typeof performers.$inferSelect) => ({
-        performer: { ...row, isFavorite: await isFavoritePerformer(profile, row.id) },
-      });
-
-      if (isFavorite !== undefined) {
-        const [exists] = await db.select({ id: performers.id }).from(performers).where(eq(performers.id, id));
-        if (!exists) {
-          reply.code(404);
-          return { error: "Not found" };
-        }
-        await setPerformerFavorite(profile, id, isFavorite);
-      }
-
-      if (request.body.name === undefined && (Object.keys(partial).length > 0 || isFavorite !== undefined)) {
-        const updated =
-          Object.keys(partial).length > 0
-            ? await db.update(performers).set(partial).where(eq(performers.id, id)).returning()
-            : await db.select().from(performers).where(eq(performers.id, id));
-        if (updated.length === 0) {
-          reply.code(404);
-          return { error: "Not found" };
-        }
-        return respond(updated[0]);
-      }
-
-      const name = normalizeName(request.body.name ?? "");
-      if (!name) {
+      // Profile facts are rejected rather than clamped: see performerDetails.ts.
+      const details = parsePerformerDetails(body);
+      if (!details.ok) {
         reply.code(400);
-        return { error: "name cannot be empty" };
+        return { error: details.error };
       }
+      Object.assign(partial, details.value);
 
-      // Checked up front so a collision reads as a 409 rather than surfacing
-      // the raw unique-index violation as a 500.
-      const [clash] = await db
-        .select({ id: performers.id })
-        .from(performers)
-        .where(sql`lower(${performers.name}) = lower(${name}) and ${performers.id} <> ${id}`);
-      if (clash) {
-        reply.code(409);
-        return { error: `A performer named "${name}" already exists` };
-      }
-
-      const updated = await db
-        .update(performers)
-        .set({ name })
-        .where(eq(performers.id, id))
-        .returning();
-      if (updated.length === 0) {
+      const [existing] = await db.select().from(performers).where(eq(performers.id, id));
+      if (!existing) {
         reply.code(404);
         return { error: "Not found" };
       }
-      return respond(updated[0]);
+
+      if (body.name !== undefined) {
+        const name = normalizeName(body.name ?? "");
+        if (!name) {
+          reply.code(400);
+          return { error: "name cannot be empty" };
+        }
+        // Checked up front so a collision reads as a 409 rather than surfacing
+        // the raw unique-index violation as a 500. Someone else's alias is a
+        // collision too: the scanner could not tell the two apart.
+        const clash = await performerNameOwner(name, id);
+        if (clash) {
+          reply.code(409);
+          return {
+            error: clash.name.toLowerCase() === name.toLowerCase()
+              ? `A performer named "${clash.name}" already exists`
+              : `"${name}" is already an alias of ${clash.name}`,
+          };
+        }
+        partial.name = name;
+      }
+
+      // Checked against what will be stored, so sending only one end of the
+      // range cannot leave it backwards.
+      const careerStart = partial.careerStart !== undefined ? partial.careerStart : existing.careerStart;
+      const careerEnd = partial.careerEnd !== undefined ? partial.careerEnd : existing.careerEnd;
+      if (careerStart != null && careerEnd != null && careerStart > careerEnd) {
+        reply.code(400);
+        return { error: "careerStart cannot be after careerEnd" };
+      }
+
+      let aliases: string[] | undefined;
+      if (body.aliases !== undefined) {
+        const parsed = parseAliases(body.aliases, partial.name ?? existing.name);
+        if (!parsed.ok) {
+          reply.code(400);
+          return { error: parsed.error };
+        }
+        for (const alias of parsed.value) {
+          const clash = await performerNameOwner(alias, id);
+          if (clash) {
+            reply.code(409);
+            return { error: `"${alias}" already belongs to ${clash.name}` };
+          }
+        }
+        aliases = parsed.value;
+      }
+
+      if (isFavorite === undefined && Object.keys(partial).length === 0 && aliases === undefined) {
+        reply.code(400);
+        return { error: "Nothing to update" };
+      }
+
+      if (isFavorite !== undefined) await setPerformerFavorite(profile, id, isFavorite);
+
+      try {
+        await db.transaction(async (tx) => {
+          if (Object.keys(partial).length > 0) {
+            await tx.update(performers).set(partial).where(eq(performers.id, id));
+          }
+          if (aliases !== undefined) {
+            await tx.delete(performerAliases).where(eq(performerAliases.performerId, id));
+            if (aliases.length > 0) {
+              await tx
+                .insert(performerAliases)
+                .values(aliases.map((alias) => ({ performerId: id, alias })));
+            }
+          } else if (partial.name !== undefined) {
+            // Renamed to one of their own aliases: it is the name now, and
+            // keeping it as an alias as well would only be the same spelling
+            // twice.
+            await tx
+              .delete(performerAliases)
+              .where(
+                and(
+                  eq(performerAliases.performerId, id),
+                  sql`lower(${performerAliases.alias}) = lower(${partial.name})`,
+                ),
+              );
+          }
+        });
+      } catch (error) {
+        // Two saves racing for one spelling: the unique index decides.
+        if (!isUniqueViolation(error)) throw error;
+        reply.code(409);
+        return { error: "That name or alias was just taken by another performer" };
+      }
+
+      const [updated] = await db.select().from(performers).where(eq(performers.id, id));
+      // Answered with this profile's favourite folded in, under the name the
+      // column used to have, and the aliases the form edits.
+      return {
+        performer: {
+          ...updated,
+          isFavorite: await isFavoritePerformer(profile, id),
+          aliases: await aliasesOf(id),
+        },
+      };
     }
   );
 

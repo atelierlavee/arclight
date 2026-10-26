@@ -9,6 +9,7 @@ import {
   mediaFiles,
   mediaItemPerformers,
   mediaItems,
+  performerAliases,
   performers,
   series,
   studios,
@@ -133,6 +134,8 @@ export async function purgeEmptyEntities(): Promise<{
   // for performers created by hand before the column existed, which were
   // backfilled as 'scanner'. Favouriting (by any profile) or archiving
   // someone is also a deliberate act about that performer, so either keeps them.
+  // So does any profile fact or alias: those are typed in by hand, and an
+  // alias is often added precisely so the next scan finds files under it.
   const deadPerformers = await db
     .select({ id: performers.id })
     .from(performers)
@@ -149,7 +152,17 @@ export async function purgeEmptyEntities(): Promise<{
       and ${performers.archivedAt} is null
       and ${performers.bio} is null
       and ${performers.imageFile} is null
-      and ${performers.bannerFile} is null`
+      and ${performers.bannerFile} is null
+      and num_nonnulls(
+        ${performers.gender}, ${performers.birthdate}, ${performers.country},
+        ${performers.ethnicity}, ${performers.hairColor}, ${performers.eyeColor},
+        ${performers.heightCm}, ${performers.measurements}, ${performers.tattoos},
+        ${performers.piercings}, ${performers.careerStart}, ${performers.careerEnd}
+      ) = 0
+      and not exists (
+        select 1 from ${performerAliases} pa
+        where pa.performer_id = ${performers.id}
+      )`
     );
 
   // Same reasoning: media_items.studio_id still references a studio whose

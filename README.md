@@ -32,6 +32,9 @@ the files themselves are opened read-only.
   a studio, add or remove a performer, or file them into a collection
 - **Groups** by performer, studio, album and series, each with its own
   browsable page
+- **Profiles performers**: aliases, birthdate (and their age in each video),
+  gender, country, height, measurements, hair and eyes, tattoos, piercings and
+  career years — all typed in by you, all optional
 - **Tracks** watch progress, play counts and a watched state, plus an
   hour-by-hour watch log that powers [Your stats](#your-stats)
 - **Maps who works with whom** — Performers → Network draws a graph linking
@@ -411,6 +414,12 @@ can be organised by hand.
 Images in a folder are treated as a **gallery belonging to the video beside
 them**, not as separate library items — so a scene and its stills stay
 together.
+
+A performer's **aliases** (set under *Edit details* on their page) count as
+their name everywhere the scanner looks: a `Jane D./` folder, or "Jane D." in
+a filename, credits Jane Doe rather than creating a second performer. One
+spelling can only ever mean one person, so an alias that is already someone
+else's name or alias is refused.
 
 ### Filenames
 

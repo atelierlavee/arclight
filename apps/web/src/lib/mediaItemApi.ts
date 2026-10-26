@@ -1,7 +1,12 @@
 import type React from "react";
 import { focalStyle } from "./reposition";
 export type Tag = { id: number; name: string; color: string | null };
-export type Performer = { id: number; name: string };
+export type Performer = {
+  id: number;
+  name: string;
+  /** How old they were when this item was released; null when either date is unknown. */
+  ageAtRelease?: number | null;
+};
 export type Folder = { id: number; title: string; parentId: number | null };
 
 export type VideoMetadata = {

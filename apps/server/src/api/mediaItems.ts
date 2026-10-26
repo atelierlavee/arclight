@@ -19,6 +19,7 @@ import {
   mediaItemTags,
   mediaItemTypes,
   mediaItems,
+  performerAliases,
   performers,
   playbackStates,
   studios,
@@ -516,7 +517,23 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       )
       // Archived performers stay findable through their videos, just not
       // suggested by name.
-      .where(and(ilike(performers.name, pattern), isNull(performers.archivedAt)))
+      // By alias too, through an uncorrelated subquery — the same reason as
+      // above: a correlated one would render `performers.id` ambiguously.
+      .where(
+        and(
+          or(
+            ilike(performers.name, pattern),
+            inArray(
+              performers.id,
+              db
+                .select({ id: performerAliases.performerId })
+                .from(performerAliases)
+                .where(ilike(performerAliases.alias, pattern))
+            )
+          ),
+          isNull(performers.archivedAt)
+        )
+      )
       .groupBy(
         performers.id,
         performers.name,

@@ -48,9 +48,39 @@ export type CoPerformer = {
   videoCount: number;
 };
 
-export type PerformerDetail = PerformerSummary & {
+export const PERFORMER_GENDERS = {
+  female: "Female",
+  male: "Male",
+  trans_female: "Trans female",
+  trans_male: "Trans male",
+  non_binary: "Non-binary",
+  intersex: "Intersex",
+} as const;
+
+export type PerformerGender = keyof typeof PERFORMER_GENDERS;
+
+/** Profile facts, all typed in by hand; null is "not known". */
+export type PerformerFacts = {
+  gender: PerformerGender | null;
+  /** `YYYY-MM-DD`. */
+  birthdate: string | null;
+  country: string | null;
+  ethnicity: string | null;
+  hairColor: string | null;
+  eyeColor: string | null;
+  heightCm: number | null;
+  measurements: string | null;
+  tattoos: string | null;
+  piercings: string | null;
+  careerStart: number | null;
+  careerEnd: number | null;
+};
+
+export type PerformerDetail = PerformerSummary & PerformerFacts & {
   /** Free text, on the profile only — the list endpoint does not carry it. */
   bio: string | null;
+  /** Other names they go by; the scanner matches these like the name. */
+  aliases: string[];
   studios: StudioGroup[];
   years: YearGroup[];
   watch: { watched: number; inProgress: number; unwatched: number };
@@ -381,6 +411,34 @@ export async function savePerformerBio(id: number, bio: string): Promise<void> {
     body: JSON.stringify({ bio }),
   });
   if (!res.ok) throw new Error(`Failed to save bio: ${res.status}`);
+}
+
+/**
+ * Saves profile facts and, when given, the whole alias list. The server's
+ * error is passed on as the message, since a 409 names who already has an
+ * alias and that is the useful part.
+ */
+export async function savePerformerFacts(
+  id: number,
+  patch: Partial<PerformerFacts> & { aliases?: string[] },
+): Promise<void> {
+  const res = await fetch(`/api/performers/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(detail?.error ?? `Failed to save details: ${res.status}`);
+  }
+}
+
+/** Whole years from a `YYYY-MM-DD` birthdate to today, in local time. */
+export function ageToday(birthdate: string, now = new Date()): number {
+  const [y, m, d] = birthdate.split("-").map(Number);
+  const hadBirthday =
+    now.getMonth() + 1 > m || (now.getMonth() + 1 === m && now.getDate() >= d);
+  return now.getFullYear() - y - (hadBirthday ? 0 : 1);
 }
 
 export async function savePortraitFraming(

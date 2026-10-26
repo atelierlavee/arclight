@@ -13,6 +13,7 @@ import {
   tags,
 } from "../db/schema.js";
 import { playbackWarningFor } from "../media/compatibility.js";
+import { ageOn } from "./performerDetails.js";
 import { itemIsFavorite, itemRating } from "../library/profileState.js";
 
 export const PAGE_SIZE = 50;
@@ -328,9 +329,12 @@ export async function fetchTagsByItemIds(
   return map;
 }
 
+/** A performer as credited on an item, with their age when it was released. */
+export type ItemPerformer = { id: number; name: string; ageAtRelease: number | null };
+
 export async function fetchPerformersByItemIds(
   itemIds: number[]
-): Promise<Map<number, { id: number; name: string }[]>> {
+): Promise<Map<number, ItemPerformer[]>> {
   if (itemIds.length === 0) return new Map();
 
   const rows = await db
@@ -338,15 +342,18 @@ export async function fetchPerformersByItemIds(
       mediaItemId: mediaItemPerformers.mediaItemId,
       id: performers.id,
       name: performers.name,
+      birthdate: performers.birthdate,
+      releaseDate: mediaItems.releaseDate,
     })
     .from(mediaItemPerformers)
     .innerJoin(performers, eq(performers.id, mediaItemPerformers.performerId))
+    .innerJoin(mediaItems, eq(mediaItems.id, mediaItemPerformers.mediaItemId))
     .where(inArray(mediaItemPerformers.mediaItemId, itemIds));
 
-  const map = new Map<number, { id: number; name: string }[]>();
+  const map = new Map<number, ItemPerformer[]>();
   for (const row of rows) {
     const list = map.get(row.mediaItemId) ?? [];
-    list.push({ id: row.id, name: row.name });
+    list.push({ id: row.id, name: row.name, ageAtRelease: ageOn(row.birthdate, row.releaseDate) });
     map.set(row.mediaItemId, list);
   }
   return map;
@@ -354,7 +361,7 @@ export async function fetchPerformersByItemIds(
 
 export type RelatedMaps = {
   tagsByItemId: Map<number, { id: number; name: string; color: string | null }[]>;
-  performersByItemId: Map<number, { id: number; name: string }[]>;
+  performersByItemId: Map<number, ItemPerformer[]>;
 };
 
 /**
