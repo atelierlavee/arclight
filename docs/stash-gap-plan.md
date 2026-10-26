@@ -7,7 +7,9 @@ commit `d75aca9` (2026-10-25).*
 
 Stash is the best-known self-hosted organiser for adult collections. Comparing
 its full API with Arc Light's schema and code turned up twelve features Arc
-Light does not have. This plan covers all twelve in nine phases.
+Light does not have. Three of them were dropped (see below); this plan covers
+the other nine in six phases. Phases keep their original numbers, so 3, 5 and
+8 are missing on purpose.
 
 Each phase is built, tested and committed to `main` separately, and each one
 is usable on its own, so the work can stop after any phase.
@@ -29,22 +31,22 @@ is usable on its own, so the work can stop after any phase.
 | Transcoding | Ruled out by the MP4-only policy. |
 | Moving or deleting files | Files are opened read-only on purpose. |
 | DLNA, plugins, SQL console, interactive devices, log viewer | Useful in a large community project, not worth the upkeep in a personal app. |
+| Merging performers, tags and studios (was Phase 3) | The library is named neatly, so duplicate records do not arise; aliases cover the odd stray spelling. |
+| Duplicate-video finder (was Phase 5) | Same reason: no duplicate files to find. |
+| Filename-parsing tool (was Phase 8) | Files are already named the way the scanner reads them. |
 
-## The twelve gaps
+## The nine gaps
 
 | # | Missing feature | Arc Light today | Phase |
 |---|---|---|---|
 | 1 | Scene markers: tagged moments, searchable, with a marker wall | Personal bookmarks with label and note | 4 |
-| 2 | Duplicate finder by appearance (perceptual hash) | Exact content hash only | 5 |
 | 3 | Richer performer profiles: aliases, birthdate, age per scene, attributes | Name, bio, images | 1 |
 | 4 | Tag hierarchy and aliases | Flat tags with name and colour | 2 |
 | 5 | Studio hierarchy (networks and sites) and aliases | Name only | 2 |
-| 6 | Merging performers, tags and studios | None | 3 |
 | 7 | Filtering by technical details and performer attributes | Tags, rating, plays, duration | 6 |
 | 8 | "Organised" flag | Inbox triage is close but not the same | 6 |
 | 9 | O-counter with history | Play count only | 6 |
 | 10 | Subtitles | None | 7 |
-| 11 | Filename-parsing tool with patterns | Fixed parsing rules in the scanner | 8 |
 | 12 | JSON export and import of metadata | Full database backup only | 9 |
 
 ## Rules every phase follows
@@ -58,7 +60,7 @@ These follow from how the code already works:
   profile.
 - **Vault.** Every new list, search or filter goes through `visibleItems`
   (`apps/server/src/library/visibility.ts`), so hidden items never leak through
-  duplicates, markers or filters.
+  markers or filters.
 - **Your edits win.** Anything set by hand is recorded with `source = 'user'`,
   so the scanner never overwrites it.
 - **One migration per phase**, starting at 0048, generated with drizzle-kit.
@@ -120,26 +122,6 @@ These follow from how the code already works:
 
 ---
 
-## Phase 3: Merging
-
-**Size:** medium
-
-Merge performers, tags or studios. Owner only. Each merge runs in one
-transaction:
-
-- **Video links** move from the source to the target. When a video is linked
-  to both, the duplicate link is dropped.
-- **Profile state:** each profile's favourites are combined.
-- **Albums** and their covers are re-pointed to the target.
-- **Smart collections** whose rules name the source are rewritten to name the
-  target.
-- **The source's name becomes an alias** of the target, so future scans keep
-  linking correctly.
-
-The UI shows a preview ("moves 42 videos, 3 albums") before you confirm.
-
----
-
 ## Phase 4: Scene markers
 
 **Size:** large
@@ -168,40 +150,6 @@ The UI shows a preview ("moves 42 videos, 3 albums") before you confirm.
 
 - Search by marker tag.
 - New smart-collection rule: "has a marker tagged X".
-
----
-
-## Phase 5: Duplicate finder by appearance
-
-**Size:** large
-
-**Fingerprint**
-
-- A 64-bit perceptual hash per video, using the same algorithm as Stash: 25
-  frames at 160 px wide, laid out in a 5×5 grid, then a DCT hash.
-- Matching Stash exactly keeps the hashes compatible with StashDB, in case
-  you ever decide to use it.
-- Built with ffmpeg and `sharp`, which the app already uses.
-- Stored in a new `media_files.phash` column.
-
-**When it runs**
-
-- During the scan, for new files.
-- As a background job for the existing library, which can be paused and
-  resumed.
-
-**Matching**
-
-- Two videos match when their hashes differ by only a few bits and their
-  durations are close.
-
-**Duplicates page**
-
-- Shows each group of matches side by side with resolution, codec, size and
-  bitrate.
-- **Mark as the same scene:** links them like the existing quality variants.
-- **Not a duplicate:** remembered, so that pair is not shown again.
-- No delete button. If you want a copy gone, remove it from disk yourself.
 
 ---
 
@@ -246,18 +194,6 @@ The UI shows a preview ("moves 42 videos, 3 albums") before you confirm.
 
 ---
 
-## Phase 8: Filename-parsing tool
-
-**Size:** medium
-
-- An owner page where you type a pattern, for example
-  `{studio} - {performer} & {performer} - {date} - {title}`.
-- It previews the result for a chosen folder, showing exactly what would
-  change, before anything is written.
-- Applied values are saved as your edits, so later scans keep them.
-
----
-
 ## Phase 9: JSON export and import
 
 **Size:** small
@@ -281,13 +217,13 @@ and partly re-imported, which a full backup cannot.
 
 ## Order
 
-1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+1 → 2 → 4 → 6 → 7 → 9
 
-- **Phases 1–3 first.** Aliases and the hierarchy make merging, scanning,
-  filtering and markers all work better.
-- **Phases 4–5 next.** Markers and the duplicate finder are the two largest
-  visible features.
-- **Phases 6–9 last.** Smaller additions built on top.
+- **Phases 1–2 first.** Aliases and the hierarchy make scanning, filtering
+  and markers all work better.
+- **Phase 4 next.** Markers are the largest visible feature.
+- **Phases 6, 7 and 9 last.** Smaller additions built on top. Phase 7 is only
+  worth doing if some videos have subtitle files beside them.
 
 ## Decisions
 
@@ -296,15 +232,13 @@ and partly re-imported, which a full backup cannot.
 | Markers | Library-wide, edited by the owner. Bookmarks stay personal. |
 | Tag parents | A tag may have several parents. A studio has at most one. |
 | Performer fields | The Phase 1 list as written. |
-| Duplicate finder (Phase 5) | Deferred. Revisit later, including whether the hash is Stash-compatible. |
-| Merging (Phase 3) | Undecided. Probably skip for now: the library's own filenames rarely produce duplicate names, and aliases (Phases 1–2) stop new ones. |
+| Merging, duplicate finder, filename tool | Dropped: the library is neatly organised. |
 
 ## Progress
 
 - **Phase 1** — done, commit `b643a7c`.
 - **Phase 2** — done, commit `b7157ef`.
-- **Phase 3** — on hold (see Decisions).
-- **Phase 4** — next, unless Phase 3 is picked up after all.
+- **Phase 4** — next.
 
 ## Picking this up on another machine
 
@@ -316,6 +250,3 @@ and partly re-imported, which a full backup cannot.
   - `scanner/walk.test.ts` — "skips symlinks entirely"
   - `api/routeCoverage.test.ts` — "no GET mentions a hidden item", which
     times out at 5 s on a slower machine, for the owner, the guest or both
-- Optional check before deciding on Phase 3: a read-only query listing
-  performer, studio and tag names that differ only in spaces, dots or
-  capitals. If it finds almost nothing, skip merging.
