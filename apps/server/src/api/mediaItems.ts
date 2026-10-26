@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm";
 import { type FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
+import { studioIdsUnderName, taggedUnder } from "../library/hierarchy.js";
 import {
   mediaItemPerformers,
   mediaItemTags,
@@ -184,14 +185,8 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
         if (match) conditions.push(match);
       }
     }
-    if (tag) {
-      const matchingItemIds = db
-        .select({ id: mediaItemTags.mediaItemId })
-        .from(mediaItemTags)
-        .innerJoin(tags, eq(tags.id, mediaItemTags.tagId))
-        .where(eq(tags.name, tag));
-      conditions.push(inArray(mediaItems.id, matchingItemIds));
-    }
+    // A tag includes every tag under it: "Outdoor" finds the Beach videos.
+    if (tag) conditions.push(taggedUnder(tag));
     if (performer) {
       const matchingItemIds = db
         .select({ id: mediaItemPerformers.mediaItemId })
@@ -210,8 +205,9 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
     if (kind) {
       conditions.push(eq(mediaItems.kind, kind));
     }
+    // And a studio its sites, so a network's page lists all of them.
     if (studio) {
-      conditions.push(sql`lower(${studios.name}) = lower(${studio})`);
+      conditions.push(sql`${mediaItems.studioId} in ${studioIdsUnderName(studio)}`);
     }
     const yearNum = Number(year);
     const filterYear =
@@ -283,16 +279,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
         .slice(0, 10);
 
     for (const name of csv(tagList)) {
-      conditions.push(
-        inArray(
-          mediaItems.id,
-          db
-            .select({ id: mediaItemTags.mediaItemId })
-            .from(mediaItemTags)
-            .innerJoin(tags, eq(tags.id, mediaItemTags.tagId))
-            .where(sql`lower(${tags.name}) = lower(${name})`)
-        )
-      );
+      conditions.push(taggedUnder(name));
     }
     for (const name of csv(performerList)) {
       conditions.push(

@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { visibleItems } from "../library/visibility.js";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
+import { studioIdsUnderName } from "../library/hierarchy.js";
 import { albums, mediaFiles, mediaItemTypes, mediaItems, performers, studios } from "../db/schema.js";
 
 import { profileId } from "../auth/profileContext.js";
@@ -68,7 +69,8 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
           performerFilter
             ? sql`lower(${performers.name}) = lower(${performerFilter})`
             : undefined,
-          studioFilter ? sql`lower(${studios.name}) = lower(${studioFilter})` : undefined
+          // A network's albums include its sites', like its videos do.
+          studioFilter ? sql`${albums.studioId} in ${studioIdsUnderName(studioFilter)}` : undefined
         )
       )
       .groupBy(

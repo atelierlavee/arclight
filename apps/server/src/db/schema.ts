@@ -195,8 +195,50 @@ export const tags = pgTable("tags", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
   color: text("color"),
+  // What the tag means, for the tags page. Typed by hand; null is unwritten.
+  description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+/**
+ * Tag families: a row says `tag_id` sits under `parent_id`. A tag may have
+ * several parents — "Beach" under both "Outdoor" and "Vacation" — so this is
+ * a table rather than a column. Filtering by a tag includes everything under
+ * it (library/hierarchy.ts). api/tags.ts refuses a parent that would make a
+ * loop; the queries walk with UNION, so even a loop could not make one spin.
+ */
+export const tagParents = pgTable(
+  "tag_parents",
+  {
+    tagId: integer("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    parentId: integer("parent_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tagId, table.parentId] }),
+    index("tag_parents_parent_id_idx").on(table.parentId),
+  ],
+);
+
+/** Other spellings of a tag. Same rules as performer_aliases. */
+export const tagAliases = pgTable(
+  "tag_aliases",
+  {
+    id: serial("id").primaryKey(),
+    tagId: integer("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    alias: text("alias").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("tag_aliases_alias_lower_idx").on(sql`lower(${table.alias})`),
+    index("tag_aliases_tag_id_idx").on(table.tagId),
+  ],
+);
 
 export const mediaItemTags = pgTable(
   "media_item_tags",
@@ -318,12 +360,41 @@ export const studios = pgTable(
   {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
+    // The network this studio is a site of. One parent at most: a site
+    // belongs to one network. Filtering by a studio includes everything
+    // under it (library/hierarchy.ts). Set null if the parent goes, so its
+    // sites become top-level rather than disappearing with it.
+    parentId: integer("parent_id").references((): AnyPgColumn => studios.id, {
+      onDelete: "set null",
+    }),
+    // 'scanner' for one a filename or folder named, 'user' for one created
+    // by hand — usually a network, which has no videos of its own and would
+    // otherwise be purged as empty after every scan.
+    origin: text("origin").notNull().default("scanner"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   // Case-insensitive, same reasoning as performers: "[Vixen]" and a typed
   // "vixen" are one studio, not two.
   (table) => [
     uniqueIndex("studios_name_lower_idx").on(sql`lower(${table.name})`),
+    index("studios_parent_id_idx").on(table.parentId),
+  ],
+);
+
+/** Other spellings of a studio. Same rules as performer_aliases. */
+export const studioAliases = pgTable(
+  "studio_aliases",
+  {
+    id: serial("id").primaryKey(),
+    studioId: integer("studio_id")
+      .notNull()
+      .references(() => studios.id, { onDelete: "cascade" }),
+    alias: text("alias").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("studio_aliases_alias_lower_idx").on(sql`lower(${table.alias})`),
+    index("studio_aliases_studio_id_idx").on(table.studioId),
   ],
 );
 

@@ -54,7 +54,7 @@ import { qk } from "@/lib/queryKeys";
 import { useIsOwner } from "@/lib/profile";
 
 type Collection = { id: number; name: string; type: "manual" | "smart" };
-type TagRow = { id: number; name: string };
+type TagRow = { id: number; name: string; parentIds?: number[] };
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -155,6 +155,10 @@ export function Sidebar({
     queryKey: qk.tags,
     queryFn: () => fetchJson<{ tags: TagRow[] }>("/api/tags"),
   });
+  const tagIds = new Set(tagData?.tags.map((t) => t.id));
+  const topLevelTags = (tagData?.tags ?? []).filter(
+    (t) => !(t.parentIds ?? []).some((id) => tagIds.has(id)),
+  );
   const { data: health } = useLibraryStats();
   const healthIssues = health
     ? health.videoMissing + health.videoDuplicateGroups
@@ -457,13 +461,23 @@ export function Sidebar({
               </div>
             ))}
 
-            <SectionLabel>Tags</SectionLabel>
+            <div className="flex items-center justify-between pr-2">
+              <SectionLabel>Tags</SectionLabel>
+              <Link
+                to="/tags"
+                className="mt-3 rounded px-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                All tags
+              </Link>
+            </div>
             {tagData?.tags.length === 0 && (
               <p className="px-3 text-xs text-muted-foreground/60">
                 No tags yet
               </p>
             )}
-            {tagData?.tags.map((t) => (
+            {/* Top-level tags only: each one includes the tags under it, and
+                the full families are on the tags page. */}
+            {topLevelTags.map((t) => (
               <Link
                 key={t.id}
                 to="/browse"

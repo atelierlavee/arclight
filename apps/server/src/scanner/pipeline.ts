@@ -4,6 +4,7 @@ import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import pLimit from "p-limit";
 import { anyInt, anyText } from "../db/anyOf.js";
 import { db } from "../db/client.js";
+import { findStudioIdByName } from "../library/studioLookup.js";
 import {
   albums,
   libraryRoots,
@@ -654,13 +655,8 @@ async function ensurePerformerId(rawName: string): Promise<number> {
 async function ensureStudioId(rawName: string): Promise<number> {
   const name = normalizeName(rawName);
 
-  const findId = async (): Promise<number | null> => {
-    const [row] = await db
-      .select({ id: studios.id })
-      .from(studios)
-      .where(sql`lower(${studios.name}) = lower(${name})`);
-    return row?.id ?? null;
-  };
+  // By name or alias, so a spelling that is an alias never creates a twin.
+  const findId = () => findStudioIdByName(name);
 
   const existing = await findId();
   if (existing !== null) return existing;

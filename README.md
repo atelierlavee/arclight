@@ -32,6 +32,11 @@ the files themselves are opened read-only.
   a studio, add or remove a performer, or file them into a collection
 - **Groups** by performer, studio, album and series, each with its own
   browsable page
+- **Families of tags and networks of studios**: a tag can sit under one or
+  more others ("Beach" under "Outdoor" and "Vacation"), and a studio under a
+  network you create. Browsing, filtering and smart collections by a tag or
+  studio include everything under it. Tags, studios and performers can all
+  have aliases — other spellings that resolve to them
 - **Profiles performers**: aliases, birthdate (and their age in each video),
   gender, country, height, measurements, hair and eyes, tattoos, piercings and
   career years — all typed in by you, all optional
@@ -414,6 +419,12 @@ can be organised by hand.
 Images in a folder are treated as a **gallery belonging to the video beside
 them**, not as separate library items — so a scene and its stills stay
 together.
+
+Studios have aliases too (*Edit network and aliases* on a studio's page), so
+`[BlackedRaw]` and `[Blacked Raw]` can be one studio. And a scanned studio can
+be put under a **network** — a studio you create with *New network* on the
+Studios page, which nothing on disk ever names — so the network's page lists
+all its sites' videos.
 
 A performer's **aliases** (set under *Edit details* on their page) count as
 their name everywhere the scanner looks: a `Jane D./` folder, or "Jane D." in

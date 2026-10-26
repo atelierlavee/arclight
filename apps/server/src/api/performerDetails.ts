@@ -139,8 +139,9 @@ export function parsePerformerDetails(
 
 /**
  * A replacement alias list: normalised like names, case-only duplicates
- * collapsed, and the performer's own name dropped — it already answers to
- * that, and storing it twice would only make the clash checks harder to read.
+ * collapsed, and the owner's own name dropped — it already answers to that,
+ * and storing it twice would only make the clash checks harder to read.
+ * Shared by performers, tags and studios, which all follow the same rules.
  */
 export function parseAliases(raw: unknown, ownName: string): Parsed<string[]> {
   if (!Array.isArray(raw) || raw.some((alias) => typeof alias !== "string")) {

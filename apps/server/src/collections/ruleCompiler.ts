@@ -1,6 +1,6 @@
 import { and, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
-import { db } from "../db/client.js";
-import { mediaItemTags, mediaItems, mediaItemTypes, playbackStates, tags } from "../db/schema.js";
+import { taggedUnder } from "../library/hierarchy.js";
+import { mediaItems, mediaItemTypes, playbackStates } from "../db/schema.js";
 import { itemIsFavorite, itemRating } from "../library/profileState.js";
 
 export type SmartCondition =
@@ -33,12 +33,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 function compileCondition(condition: SmartCondition, profile: number): SQL {
   switch (condition.field) {
     case "tags": {
-      const matchingItemIds = db
-        .select({ id: mediaItemTags.mediaItemId })
-        .from(mediaItemTags)
-        .innerJoin(tags, eq(tags.id, mediaItemTags.tagId))
-        .where(eq(tags.name, condition.value));
-      return inArray(mediaItems.id, matchingItemIds);
+      // The tag and every tag under it, like the browse filter.
+      return taggedUnder(condition.value);
     }
     case "itemType": {
       // Assumes the base query already joins media_item_types (see

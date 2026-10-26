@@ -52,6 +52,9 @@ export const OWNER_ONLY_ROUTES: ReadonlySet<string> = new Set([
   // Metadata and artwork.
   "PUT /api/media-items/:id/performers",
   "PUT /api/media-items/:id/tags",
+  "PATCH /api/tags/:id",
+  "POST /api/studios",
+  "PATCH /api/studios/:id",
   "POST /api/media-items/:id/thumbnail",
   "DELETE /api/media-items/:id/thumbnail",
   "POST /api/folders",

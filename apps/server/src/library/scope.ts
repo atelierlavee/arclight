@@ -12,6 +12,7 @@ import {
   performerAliases,
   performers,
   series,
+  studioAliases,
   studios,
 } from "../db/schema.js";
 import { POSTERS_DIR, PREVIEWS_DIR, SPRITES_DIR, THUMBNAILS_DIR } from "../media/cache.js";
@@ -167,6 +168,9 @@ export async function purgeEmptyEntities(): Promise<{
 
   // Same reasoning: media_items.studio_id still references a studio whose
   // items are only hidden, so scoping this to in_scope would fail the delete.
+  // And the same exceptions for hand-authored studios: one made by hand (a
+  // network, which has no videos of its own), one that still has sites under
+  // it, or one with aliases typed in for it.
   const deadStudios = await db
     .select({ id: studios.id })
     .from(studios)
@@ -174,6 +178,13 @@ export async function purgeEmptyEntities(): Promise<{
       sql`not exists (
         select 1 from ${mediaItems} mi
         where mi.studio_id = ${studios.id}
+      )
+      and ${studios.origin} = 'scanner'
+      and not exists (
+        select 1 from studios site where site.parent_id = studios.id
+      )
+      and not exists (
+        select 1 from ${studioAliases} sa where sa.studio_id = ${studios.id}
       )`
     );
 

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, X } from "lucide-react";
-import { Portal } from "./Portal";
+import { Pencil } from "lucide-react";
+import { EditDialog, SaveButton } from "./EditDialog";
+import { EDIT_INPUT, splitAliases } from "@/lib/editForm";
 import {
   ageToday,
   PERFORMER_GENDERS,
@@ -11,7 +12,6 @@ import {
   type PerformerGender,
 } from "@/lib/performerApi";
 import { invalidatePerformer } from "@/lib/invalidate";
-import { useFocusTrap } from "@/lib/useFocusTrap";
 import { useIsOwner } from "@/lib/profile";
 
 function formatBirthdate(birthdate: string): string {
@@ -141,7 +141,7 @@ function changes(before: Draft, after: Draft): Partial<Facts> & { aliases?: stri
     if (after[key].trim() === before[key].trim()) continue;
     const value = after[key].trim();
     if (key === "aliases") {
-      patch.aliases = value.split(",").map((a) => a.trim()).filter(Boolean);
+      patch.aliases = splitAliases(value);
     } else if (NUMBER_FIELDS.has(key)) {
       patch[key] = value === "" ? null : Number(value);
     } else {
@@ -165,9 +165,6 @@ const FIELDS: { key: keyof Facts; label: string; placeholder?: string; type?: st
   { key: "piercings", label: "Piercings" },
 ];
 
-const INPUT =
-  "w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-ring/60";
-
 function PerformerFactsDialog({
   performer,
   onClose,
@@ -177,26 +174,7 @@ function PerformerFactsDialog({
 }) {
   const [initial] = useState(() => toDraft(performer));
   const [draft, setDraft] = useState(initial);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(dialogRef);
   const queryClient = useQueryClient();
-
-  // In a ref so the listener below is added once, not on every render.
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
-  useEffect(() => {
-    // Stopped here, so Escape does not also close what is behind the dialog.
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        onCloseRef.current();
-      }
-    }
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, []);
 
   const save = useMutation({
     mutationFn: () => savePerformerFacts(performer.id, changes(initial, draft)),
@@ -211,76 +189,56 @@ function PerformerFactsDialog({
   const dirty = Object.keys(changes(initial, draft)).length > 0;
 
   return (
-    <Portal>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-        <div
-          ref={dialogRef}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="performer-facts-title"
-          className="max-h-full w-full max-w-lg space-y-4 overflow-y-auto rounded-lg bg-background p-5 text-foreground"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between">
-            <h2 id="performer-facts-title" className="text-sm font-semibold">
-              Details for <span className="sensitive">{performer.name}</span>
-            </h2>
-            <button type="button" onClick={onClose} aria-label="Close">
-              <X className="size-4" />
-            </button>
-          </div>
+    <EditDialog
+      title={
+        <>
+          Details for <span className="sensitive">{performer.name}</span>
+        </>
+      }
+      onClose={onClose}
+    >
+      <label className="block space-y-1">
+        <span className="text-xs text-muted-foreground">Also known as</span>
+        <input
+          value={draft.aliases}
+          onChange={set("aliases")}
+          placeholder="Other names, separated by commas"
+          className={`sensitive ${EDIT_INPUT}`}
+        />
+        <span className="block text-[11px] text-muted-foreground/70">
+          Folders and filenames using these names are credited to {performer.name} on the next scan.
+        </span>
+      </label>
 
-          <label className="block space-y-1">
-            <span className="text-xs text-muted-foreground">Also known as</span>
-            <input
-              value={draft.aliases}
-              onChange={set("aliases")}
-              placeholder="Other names, separated by commas"
-              className={`sensitive ${INPUT}`}
-            />
-            <span className="block text-[11px] text-muted-foreground/70">
-              Folders and filenames using these names are credited to {performer.name} on the next scan.
-            </span>
-          </label>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1">
-              <span className="text-xs text-muted-foreground">Gender</span>
-              <select value={draft.gender} onChange={set("gender")} className={INPUT}>
-                <option value="">Not set</option>
-                {(Object.keys(PERFORMER_GENDERS) as PerformerGender[]).map((gender) => (
-                  <option key={gender} value={gender}>
-                    {PERFORMER_GENDERS[gender]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {FIELDS.map((field) => (
-              <label key={field.key} className="block space-y-1">
-                <span className="text-xs text-muted-foreground">{field.label}</span>
-                <input
-                  type={field.type ?? "text"}
-                  value={draft[field.key]}
-                  onChange={set(field.key)}
-                  placeholder={field.placeholder}
-                  className={INPUT}
-                />
-              </label>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block space-y-1">
+          <span className="text-xs text-muted-foreground">Gender</span>
+          <select value={draft.gender} onChange={set("gender")} className={EDIT_INPUT}>
+            <option value="">Not set</option>
+            {(Object.keys(PERFORMER_GENDERS) as PerformerGender[]).map((gender) => (
+              <option key={gender} value={gender}>
+                {PERFORMER_GENDERS[gender]}
+              </option>
             ))}
-          </div>
-
-          {save.error && <p className="text-xs text-destructive">{save.error.message}</p>}
-
-          <button
-            type="button"
-            onClick={() => save.mutate()}
-            disabled={save.isPending || !dirty}
-            className="w-full rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
-          >
-            Save
-          </button>
-        </div>
+          </select>
+        </label>
+        {FIELDS.map((field) => (
+          <label key={field.key} className="block space-y-1">
+            <span className="text-xs text-muted-foreground">{field.label}</span>
+            <input
+              type={field.type ?? "text"}
+              value={draft[field.key]}
+              onChange={set(field.key)}
+              placeholder={field.placeholder}
+              className={EDIT_INPUT}
+            />
+          </label>
+        ))}
       </div>
-    </Portal>
+
+      {save.error && <p className="text-xs text-destructive">{save.error.message}</p>}
+
+      <SaveButton onClick={() => save.mutate()} disabled={save.isPending || !dirty} />
+    </EditDialog>
   );
 }

@@ -18,6 +18,7 @@ import { PerformerPage } from "@/pages/PerformerPage";
 import { PerformersPage } from "@/pages/PerformersPage";
 import { StudioPage } from "@/pages/StudioPage";
 import { StudiosPage } from "@/pages/StudiosPage";
+import { TagsPage } from "@/pages/TagsPage";
 import { StatsPage } from "@/pages/StatsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SeriesPage } from "@/pages/SeriesPage";
@@ -169,6 +170,12 @@ const albumRoute = createRoute({
   component: AlbumPage,
 });
 
+const tagsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tags",
+  component: TagsPage,
+});
+
 const studiosRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/studios",
@@ -236,6 +243,7 @@ const routeTree = rootRoute.addChildren([
   seriesRoute,
   albumRoute,
   studiosRoute,
+  tagsRoute,
   studioRoute,
   inboxRoute,
   vaultRoute,

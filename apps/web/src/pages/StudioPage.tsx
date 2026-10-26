@@ -10,6 +10,7 @@ import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { fetchStudio, type StudioDetail } from "@/lib/studioApi";
 import { PlaySurface } from "@/components/PlaySurface";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { StudioNetwork } from "@/components/StudioNetwork";
 import { qk } from "@/lib/queryKeys";
 
 const routeApi = getRouteApi("/studio/$studioId");
@@ -154,6 +155,9 @@ export function StudioPage() {
               { label: studio.name },
             ]}
           />
+          <div className="mt-4">
+            <StudioNetwork studio={studio} />
+          </div>
         </div>
       )}
 
