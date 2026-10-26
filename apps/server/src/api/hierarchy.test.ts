@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { mediaItems, studioAliases, studios, tagAliases, tags } from "../db/schema.js";
+import { studios, tagParents, tags } from "../db/schema.js";
 import { resetDatabase, signIn, signInOtherProfile, testApp } from "../test/harness.js";
 import { linkTag, makeItem, makeLibrary, makeStudio, makeTag } from "../test/fixtures.js";
 import { purgeEmptyEntities } from "../library/scope.js";
@@ -37,14 +37,14 @@ async function tagFamily() {
 }
 
 describe("tag families", () => {
-  it("lists each tag's parents, aliases, description and visible item count", async () => {
+  it("lists each tag's parents, description and visible item count", async () => {
     const { outdoor, vacation, beach } = await tagFamily();
-    await send("PATCH", `/api/tags/${beach}`, { aliases: ["Seaside"], description: "Sand." });
+    await send("PATCH", `/api/tags/${beach}`, { description: "Sand." });
     await linkTag(await makeItem(libraryId), beach);
     await linkTag(await makeItem(libraryId, { hiddenAt: new Date() }), beach);
 
     const listed = (await get("/api/tags")).json().tags.find((t: { id: number }) => t.id === beach);
-    expect(listed).toMatchObject({ aliases: ["Seaside"], description: "Sand.", itemCount: 1 });
+    expect(listed).toMatchObject({ description: "Sand.", itemCount: 1 });
     expect(listed.parentIds.sort()).toEqual([outdoor, vacation].sort());
   });
 
@@ -105,14 +105,6 @@ describe("tag families", () => {
     expect(listed.parentIds).toEqual([]);
   });
 
-  it("refuses an alias that is another tag's name or alias", async () => {
-    const beach = await makeTag("Beach");
-    const pool = await makeTag("Pool");
-    await send("PATCH", `/api/tags/${pool}`, { aliases: ["Swimming"] });
-    expect((await send("PATCH", `/api/tags/${beach}`, { aliases: ["pool"] })).statusCode).toBe(409);
-    expect((await send("PATCH", `/api/tags/${beach}`, { aliases: ["swimming"] })).statusCode).toBe(409);
-  });
-
   it("is the owner's to edit", async () => {
     const beach = await makeTag("Beach");
     const guest = await signInOtherProfile();
@@ -121,36 +113,6 @@ describe("tag families", () => {
 
   it("answers 404 for a tag that does not exist", async () => {
     expect((await send("PATCH", "/api/tags/99999", { description: "x" })).statusCode).toBe(404);
-  });
-});
-
-describe("tagging a video", () => {
-  it("resolves an alias, and a name in other capitals, to the existing tag", async () => {
-    const doggy = await makeTag("Doggy");
-    const beach = await makeTag("Beach");
-    await send("PATCH", `/api/tags/${doggy}`, { aliases: ["Doggystyle"] });
-    const item = await makeItem(libraryId);
-
-    const res = await send("PUT", `/api/media-items/${item}/tags`, {
-      tagNames: ["doggystyle", "beach", "New one"],
-    });
-    expect(res.json().tags.map((t: { id: number; name: string }) => t.name)).toEqual([
-      "Beach",
-      "Doggy",
-      "New one",
-    ]);
-    expect(res.json().tags.map((t: { id: number }) => t.id)).toEqual(
-      expect.arrayContaining([doggy, beach]),
-    );
-    expect(await db.select().from(tags)).toHaveLength(3);
-  });
-
-  it("credits a tag once when its name and its alias are both typed", async () => {
-    const doggy = await makeTag("Doggy");
-    await send("PATCH", `/api/tags/${doggy}`, { aliases: ["Doggystyle"] });
-    const item = await makeItem(libraryId);
-    const res = await send("PUT", `/api/media-items/${item}/tags`, { tagNames: ["Doggy", "Doggystyle"] });
-    expect(res.json().tags).toHaveLength(1);
   });
 });
 
@@ -212,55 +174,34 @@ describe("studio networks", () => {
     expect((await get(`/api/studios/${vixen}`)).json().parent).toBeNull();
   });
 
-  it("resolves a typed studio alias to the existing studio", async () => {
-    const blacked = await makeStudio("Blacked Raw");
-    await send("PATCH", `/api/studios/${blacked}`, { aliases: ["BlackedRaw"] });
-    const item = await makeItem(libraryId);
-    await send("PATCH", `/api/media-items/${item}`, { studio: "blackedraw" });
-
-    const [row] = await db.select().from(mediaItems).where(eq(mediaItems.id, item));
-    expect(row.studioId).toBe(blacked);
-    expect(await db.select().from(studios)).toHaveLength(1);
-    expect((await get(`/api/studios/${blacked}`)).json().aliases).toEqual(["BlackedRaw"]);
-  });
-
-  it("refuses an alias that is another studio's name", async () => {
-    const blacked = await makeStudio("Blacked");
-    await makeStudio("Blacked Raw");
-    expect((await send("PATCH", `/api/studios/${blacked}`, { aliases: ["blacked raw"] })).statusCode).toBe(409);
-  });
-
   it("is the owner's to edit", async () => {
     const vixen = await makeStudio("Vixen");
     const guest = await signInOtherProfile();
-    expect((await send("PATCH", `/api/studios/${vixen}`, { aliases: ["V"] }, guest.cookie)).statusCode).toBe(403);
+    expect((await send("PATCH", `/api/studios/${vixen}`, { parentId: null }, guest.cookie)).statusCode).toBe(403);
     expect((await send("POST", "/api/studios", { name: "Group" }, guest.cookie)).statusCode).toBe(403);
   });
 });
 
 describe("the end-of-scan purge", () => {
-  it("keeps a hand-made network, a studio with sites, and one with aliases", async () => {
+  it("keeps a hand-made network and a studio with sites", async () => {
     const group = (await send("POST", "/api/studios", { name: "Hand Made" })).json().studio.id as number;
     const parent = await makeStudio("Has Sites");
     const site = await makeStudio("Site");
     await db.update(studios).set({ parentId: parent }).where(eq(studios.id, site));
-    const aliased = await makeStudio("Has Alias");
-    await db.insert(studioAliases).values({ studioId: aliased, alias: "HA" });
     await makeStudio("Debris");
 
     await purgeEmptyEntities();
     expect((await db.select().from(studios)).map((s) => s.name).sort()).toEqual([
       "Hand Made",
-      "Has Alias",
       "Has Sites",
     ]);
     expect(group).toBeTruthy();
   });
 
-  it("drops a tag's aliases and family links when the tag goes", async () => {
-    const { beach } = await tagFamily();
-    await send("PATCH", `/api/tags/${beach}`, { aliases: ["Seaside"] });
+  it("drops a tag's family links when the tag goes", async () => {
+    const { beach, nude } = await tagFamily();
+    await db.delete(tags).where(eq(tags.id, nude));
     await db.delete(tags).where(eq(tags.id, beach));
-    expect(await db.select().from(tagAliases)).toEqual([]);
+    expect(await db.select().from(tagParents)).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { EditDialog, SaveButton } from "./EditDialog";
-import { EDIT_INPUT, splitAliases } from "@/lib/editForm";
+import { EDIT_INPUT } from "@/lib/editForm";
 import {
   ageToday,
   PERFORMER_GENDERS,
@@ -53,7 +53,7 @@ function knownFacts(performer: PerformerDetail): [string, string][] {
 }
 
 /**
- * A performer's profile facts and other names, under the stats strip.
+ * A performer's profile facts, under the stats strip.
  *
  * Only what is known is shown — a grid of "Hair: —" for a performer nobody
  * has filled in reads as a broken form. With nothing known, the owner gets a
@@ -63,19 +63,12 @@ export function PerformerFacts({ performer }: { performer: PerformerDetail }) {
   const [editing, setEditing] = useState(false);
   const isOwner = useIsOwner();
   const facts = knownFacts(performer);
-  const empty = facts.length === 0 && performer.aliases.length === 0;
+  const empty = facts.length === 0;
 
   if (empty && !isOwner) return null;
 
   return (
     <div className="max-w-3xl space-y-3">
-      {performer.aliases.length > 0 && (
-        <p className="text-sm text-muted-foreground">
-          Also known as{" "}
-          <span className="sensitive text-foreground">{performer.aliases.join(", ")}</span>
-        </p>
-      )}
-
       {facts.length > 0 && (
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           {facts.map(([label, value]) => (
@@ -106,7 +99,7 @@ export function PerformerFacts({ performer }: { performer: PerformerDetail }) {
 }
 
 /** Every editable fact as the string an input holds. */
-type Draft = Record<keyof Facts, string> & { aliases: string };
+type Draft = Record<keyof Facts, string>;
 
 function toDraft(performer: PerformerDetail): Draft {
   const text = (value: string | number | null) => (value === null ? "" : String(value));
@@ -123,7 +116,6 @@ function toDraft(performer: PerformerDetail): Draft {
     piercings: text(performer.piercings),
     careerStart: text(performer.careerStart),
     careerEnd: text(performer.careerEnd),
-    aliases: performer.aliases.join(", "),
   };
 }
 
@@ -135,14 +127,12 @@ const NUMBER_FIELDS = new Set<keyof Facts>(["heightCm", "careerStart", "careerEn
  * Numbers that do not parse are sent as they are, and the server's 400 says
  * which one.
  */
-function changes(before: Draft, after: Draft): Partial<Facts> & { aliases?: string[] } {
+function changes(before: Draft, after: Draft): Partial<Facts> {
   const patch: Record<string, unknown> = {};
   for (const key of Object.keys(after) as (keyof Draft)[]) {
     if (after[key].trim() === before[key].trim()) continue;
     const value = after[key].trim();
-    if (key === "aliases") {
-      patch.aliases = splitAliases(value);
-    } else if (NUMBER_FIELDS.has(key)) {
+    if (NUMBER_FIELDS.has(key)) {
       patch[key] = value === "" ? null : Number(value);
     } else {
       patch[key] = value === "" ? null : value;
@@ -197,19 +187,6 @@ function PerformerFactsDialog({
       }
       onClose={onClose}
     >
-      <label className="block space-y-1">
-        <span className="text-xs text-muted-foreground">Also known as</span>
-        <input
-          value={draft.aliases}
-          onChange={set("aliases")}
-          placeholder="Other names, separated by commas"
-          className={`sensitive ${EDIT_INPUT}`}
-        />
-        <span className="block text-[11px] text-muted-foreground/70">
-          Folders and filenames using these names are credited to {performer.name} on the next scan.
-        </span>
-      </label>
-
       <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1">
           <span className="text-xs text-muted-foreground">Gender</span>

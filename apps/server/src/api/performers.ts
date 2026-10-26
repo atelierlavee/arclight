@@ -8,7 +8,6 @@ import {
   mediaItemPerformers,
   mediaItems,
   mediaItemTypes,
-  performerAliases,
   performers,
   playbackStates,
   profilePerformerState,
@@ -33,8 +32,7 @@ import {
 } from "../media/performerImages.js";
 import { streamFile } from "../media/streamer.js";
 import { normalizeName } from "../scanner/performerNames.js";
-import { findPerformerIdByName, performerNameOwner } from "../library/performerLookup.js";
-import { parseAliases, parsePerformerDetails, type PerformerDetailsBody } from "./performerDetails.js";
+import { parsePerformerDetails, type PerformerDetailsBody } from "./performerDetails.js";
 
 import { profileId } from "../auth/profileContext.js";
 import { itemRating, performerIsFavorite, setPerformerFavorite } from "../library/profileState.js";
@@ -47,8 +45,13 @@ import { playbackJoin } from "./mediaItemQueries.js";
 async function ensurePerformerId(rawName: string): Promise<number> {
   const name = normalizeName(rawName);
 
-  // By name or alias: typing "Jane D." credits Jane Doe.
-  const findId = () => findPerformerIdByName(name);
+  const findId = async (): Promise<number | null> => {
+    const [row] = await db
+      .select({ id: performers.id })
+      .from(performers)
+      .where(sql`lower(${performers.name}) = lower(${name})`);
+    return row?.id ?? null;
+  };
 
   const existing = await findId();
   if (existing !== null) return existing;
@@ -80,16 +83,6 @@ function dedupeNames(names: string[]): string[] {
     out.push(name);
   }
   return out;
-}
-
-/** A performer's other names, alphabetically. */
-async function aliasesOf(performerId: number): Promise<string[]> {
-  const rows = await db
-    .select({ alias: performerAliases.alias })
-    .from(performerAliases)
-    .where(eq(performerAliases.performerId, performerId))
-    .orderBy(sql`lower(${performerAliases.alias})`);
-  return rows.map((row) => row.alias);
 }
 
 /** One performer's favourite flag for one profile. */
@@ -515,7 +508,6 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       piercings: performer.piercings,
       careerStart: performer.careerStart,
       careerEnd: performer.careerEnd,
-      aliases: await aliasesOf(performer.id),
       studios: studioBreakdown,
       years: yearBreakdown,
       watch: watch ?? { watched: 0, inProgress: 0, unwatched: 0 },
@@ -710,8 +702,6 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       avatarPositionX?: number | null;
       avatarPositionY?: number | null;
       avatarScale?: number | null;
-      /** The whole alias list, replacing whatever was there. */
-      aliases?: string[];
     };
   }>(
     "/api/performers/:id",
@@ -792,16 +782,14 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
           return { error: "name cannot be empty" };
         }
         // Checked up front so a collision reads as a 409 rather than surfacing
-        // the raw unique-index violation as a 500. Someone else's alias is a
-        // collision too: the scanner could not tell the two apart.
-        const clash = await performerNameOwner(name, id);
+        // the raw unique-index violation as a 500.
+        const [clash] = await db
+          .select({ id: performers.id })
+          .from(performers)
+          .where(sql`lower(${performers.name}) = lower(${name}) and ${performers.id} <> ${id}`);
         if (clash) {
           reply.code(409);
-          return {
-            error: clash.name.toLowerCase() === name.toLowerCase()
-              ? `A performer named "${clash.name}" already exists`
-              : `"${name}" is already an alias of ${clash.name}`,
-          };
+          return { error: `A performer named "${name}" already exists` };
         }
         partial.name = name;
       }
@@ -815,73 +803,28 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         return { error: "careerStart cannot be after careerEnd" };
       }
 
-      let aliases: string[] | undefined;
-      if (body.aliases !== undefined) {
-        const parsed = parseAliases(body.aliases, partial.name ?? existing.name);
-        if (!parsed.ok) {
-          reply.code(400);
-          return { error: parsed.error };
-        }
-        for (const alias of parsed.value) {
-          const clash = await performerNameOwner(alias, id);
-          if (clash) {
-            reply.code(409);
-            return { error: `"${alias}" already belongs to ${clash.name}` };
-          }
-        }
-        aliases = parsed.value;
-      }
-
-      if (isFavorite === undefined && Object.keys(partial).length === 0 && aliases === undefined) {
+      if (isFavorite === undefined && Object.keys(partial).length === 0) {
         reply.code(400);
         return { error: "Nothing to update" };
       }
 
       if (isFavorite !== undefined) await setPerformerFavorite(profile, id, isFavorite);
 
-      try {
-        await db.transaction(async (tx) => {
-          if (Object.keys(partial).length > 0) {
-            await tx.update(performers).set(partial).where(eq(performers.id, id));
-          }
-          if (aliases !== undefined) {
-            await tx.delete(performerAliases).where(eq(performerAliases.performerId, id));
-            if (aliases.length > 0) {
-              await tx
-                .insert(performerAliases)
-                .values(aliases.map((alias) => ({ performerId: id, alias })));
-            }
-          } else if (partial.name !== undefined) {
-            // Renamed to one of their own aliases: it is the name now, and
-            // keeping it as an alias as well would only be the same spelling
-            // twice.
-            await tx
-              .delete(performerAliases)
-              .where(
-                and(
-                  eq(performerAliases.performerId, id),
-                  sql`lower(${performerAliases.alias}) = lower(${partial.name})`,
-                ),
-              );
-          }
-        });
-      } catch (error) {
-        // Two saves racing for one spelling: the unique index decides.
-        if (!isUniqueViolation(error)) throw error;
-        reply.code(409);
-        return { error: "That name or alias was just taken by another performer" };
+      if (Object.keys(partial).length > 0) {
+        try {
+          await db.update(performers).set(partial).where(eq(performers.id, id));
+        } catch (error) {
+          // A rename racing another save of the same name: the index decides.
+          if (!isUniqueViolation(error)) throw error;
+          reply.code(409);
+          return { error: `A performer named "${partial.name}" already exists` };
+        }
       }
 
       const [updated] = await db.select().from(performers).where(eq(performers.id, id));
       // Answered with this profile's favourite folded in, under the name the
-      // column used to have, and the aliases the form edits.
-      return {
-        performer: {
-          ...updated,
-          isFavorite: await isFavoritePerformer(profile, id),
-          aliases: await aliasesOf(id),
-        },
-      };
+      // column used to have.
+      return { performer: { ...updated, isFavorite: await isFavoritePerformer(profile, id) } };
     }
   );
 

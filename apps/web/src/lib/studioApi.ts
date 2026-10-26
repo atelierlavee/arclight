@@ -35,7 +35,6 @@ export type StudioDetail = {
   parent: StudioRef | null;
   /** Its direct sites. */
   sites: StudioRef[];
-  aliases: string[];
   /** Every figure here covers the studio and all its sites. */
   videoCount: number;
   totalDurationSeconds: number;
@@ -78,10 +77,10 @@ export async function createStudio(name: string): Promise<StudioRef> {
   return (await res.json()).studio;
 }
 
-/** Sets a studio's network and, when given, replaces its aliases. */
+/** Sets the network a studio belongs to; null takes it out of one. */
 export async function saveStudio(
   id: number,
-  patch: { parentId?: number | null; aliases?: string[] },
+  patch: { parentId: number | null },
 ): Promise<void> {
   await send(`/api/studios/${id}`, "PATCH", patch);
 }

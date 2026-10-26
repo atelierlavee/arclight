@@ -9,10 +9,8 @@ import {
   mediaFiles,
   mediaItemPerformers,
   mediaItems,
-  performerAliases,
   performers,
   series,
-  studioAliases,
   studios,
 } from "../db/schema.js";
 import { POSTERS_DIR, PREVIEWS_DIR, SPRITES_DIR, THUMBNAILS_DIR } from "../media/cache.js";
@@ -135,8 +133,7 @@ export async function purgeEmptyEntities(): Promise<{
   // for performers created by hand before the column existed, which were
   // backfilled as 'scanner'. Favouriting (by any profile) or archiving
   // someone is also a deliberate act about that performer, so either keeps them.
-  // So does any profile fact or alias: those are typed in by hand, and an
-  // alias is often added precisely so the next scan finds files under it.
+  // So does any profile fact: those are typed in by hand.
   const deadPerformers = await db
     .select({ id: performers.id })
     .from(performers)
@@ -159,18 +156,14 @@ export async function purgeEmptyEntities(): Promise<{
         ${performers.ethnicity}, ${performers.hairColor}, ${performers.eyeColor},
         ${performers.heightCm}, ${performers.measurements}, ${performers.tattoos},
         ${performers.piercings}, ${performers.careerStart}, ${performers.careerEnd}
-      ) = 0
-      and not exists (
-        select 1 from ${performerAliases} pa
-        where pa.performer_id = ${performers.id}
-      )`
+      ) = 0`
     );
 
   // Same reasoning: media_items.studio_id still references a studio whose
   // items are only hidden, so scoping this to in_scope would fail the delete.
   // And the same exceptions for hand-authored studios: one made by hand (a
-  // network, which has no videos of its own), one that still has sites under
-  // it, or one with aliases typed in for it.
+  // network, which has no videos of its own), or one that still has sites
+  // under it.
   const deadStudios = await db
     .select({ id: studios.id })
     .from(studios)
@@ -182,9 +175,6 @@ export async function purgeEmptyEntities(): Promise<{
       and ${studios.origin} = 'scanner'
       and not exists (
         select 1 from studios site where site.parent_id = studios.id
-      )
-      and not exists (
-        select 1 from ${studioAliases} sa where sa.studio_id = ${studios.id}
       )`
     );
 

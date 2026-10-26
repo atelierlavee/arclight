@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "../db/client.js";
-import { libraryRoots, mediaFiles, mediaItems, performerAliases, performers, studios } from "../db/schema.js";
+import { libraryRoots, mediaFiles, mediaItems, performers, studios } from "../db/schema.js";
 import { resetDatabase, signIn, testApp } from "../test/harness.js";
 import {
   attachFile,
@@ -129,20 +129,14 @@ describe("purgeEmptyEntities", () => {
     expect((await db.select().from(performers)).map((r) => r.name)).toEqual(["Written About"]);
   });
 
-  it("keeps a performer with no videos but profile facts or an alias", async () => {
-    // Both are typed in by hand, and an alias is often added precisely so
-    // the next scan finds files filed under it.
+  it("keeps a performer with no videos but profile facts", async () => {
+    // Typed in by hand, like a bio.
     const facts = await makePerformer("Has Facts");
     await db.update(performers).set({ heightCm: 165 }).where(eq(performers.id, facts));
-    const aliased = await makePerformer("Has Alias");
-    await db.insert(performerAliases).values({ performerId: aliased, alias: "HA" });
     await makePerformer("Debris");
 
     await purgeEmptyEntities();
-    expect((await db.select().from(performers)).map((r) => r.name).sort()).toEqual([
-      "Has Alias",
-      "Has Facts",
-    ]);
+    expect((await db.select().from(performers)).map((r) => r.name)).toEqual(["Has Facts"]);
   });
 
   it("still purges a performer with no videos and nothing hand-authored", async () => {

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Pencil } from "lucide-react";
 import { EditDialog, SaveButton } from "./EditDialog";
-import { EDIT_INPUT, splitAliases } from "@/lib/editForm";
+import { EDIT_INPUT } from "@/lib/editForm";
 import { fetchStudios, saveStudio, type StudioDetail, type StudioSummary } from "@/lib/studioApi";
 import { qk } from "@/lib/queryKeys";
 import { useIsOwner } from "@/lib/profile";
@@ -12,14 +12,13 @@ const chip =
   "sensitive rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium transition-colors hover:bg-accent";
 
 /**
- * Where a studio sits: the network above it, the sites under it, and its
- * other spellings. Says nothing at all for a studio with none of these,
- * apart from the owner's edit link.
+ * Where a studio sits: the network above it and the sites under it. Says
+ * nothing at all for a studio with neither, apart from the owner's edit link.
  */
 export function StudioNetwork({ studio }: { studio: StudioDetail }) {
   const [editing, setEditing] = useState(false);
   const isOwner = useIsOwner();
-  const empty = !studio.parent && studio.sites.length === 0 && studio.aliases.length === 0;
+  const empty = !studio.parent && studio.sites.length === 0;
   if (empty && !isOwner) return null;
 
   return (
@@ -46,11 +45,6 @@ export function StudioNetwork({ studio }: { studio: StudioDetail }) {
           ))}
         </div>
       )}
-      {studio.aliases.length > 0 && (
-        <p className="text-muted-foreground">
-          Also known as <span className="sensitive text-foreground">{studio.aliases.join(", ")}</span>
-        </p>
-      )}
       {isOwner && (
         <button
           type="button"
@@ -58,7 +52,7 @@ export function StudioNetwork({ studio }: { studio: StudioDetail }) {
           className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <Pencil className="size-3" />
-          {empty ? "Add to a network or add aliases" : "Edit network and aliases"}
+          {empty ? "Add to a network" : "Edit network"}
         </button>
       )}
       {editing && <StudioEditDialog studio={studio} onClose={() => setEditing(false)} />}
@@ -84,7 +78,6 @@ function sitesUnder(studios: StudioSummary[], id: number): Set<number> {
 
 function StudioEditDialog({ studio, onClose }: { studio: StudioDetail; onClose: () => void }) {
   const [parentId, setParentId] = useState(studio.parent ? String(studio.parent.id) : "");
-  const [aliases, setAliases] = useState(studio.aliases.join(", "));
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: qk.studios.all, queryFn: fetchStudios });
 
@@ -98,7 +91,6 @@ function StudioEditDialog({ studio, onClose }: { studio: StudioDetail; onClose: 
     mutationFn: () =>
       saveStudio(studio.id, {
         parentId: parentId ? Number(parentId) : null,
-        aliases: splitAliases(aliases),
       }),
     onSuccess: () => {
       // Both pages change — this one and the network's — and every card.
@@ -131,19 +123,6 @@ function StudioEditDialog({ studio, onClose }: { studio: StudioDetail; onClose: 
         <span className="block text-[11px] text-muted-foreground/70">
           The network&rsquo;s page and filters include this studio&rsquo;s videos. No network listed?
           Create one with &ldquo;New network&rdquo; on the Studios page.
-        </span>
-      </label>
-
-      <label className="block space-y-1">
-        <span className="text-xs text-muted-foreground">Also known as</span>
-        <input
-          value={aliases}
-          onChange={(e) => setAliases(e.target.value)}
-          placeholder="Other spellings, separated by commas"
-          className={`sensitive ${EDIT_INPUT}`}
-        />
-        <span className="block text-[11px] text-muted-foreground/70">
-          Folders and [brackets] using these spellings are credited to {studio.name} on the next scan.
         </span>
       </label>
 

@@ -7,8 +7,6 @@ export type TagRow = {
   itemCount: number;
   /** The tags this one sits under; a tag may have several. */
   parentIds: number[];
-  /** Other spellings that resolve to this tag when typed. */
-  aliases: string[];
 };
 
 export async function fetchTags(): Promise<{ tags: TagRow[] }> {
@@ -20,7 +18,7 @@ export async function fetchTags(): Promise<{ tags: TagRow[] }> {
 /** Each list sent replaces the old one. The server's message is passed on. */
 export async function saveTag(
   id: number,
-  patch: { description?: string | null; parentIds?: number[]; aliases?: string[] },
+  patch: { description?: string | null; parentIds?: number[] },
 ): Promise<void> {
   const res = await fetch(`/api/tags/${id}`, {
     method: "PATCH",

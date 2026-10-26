@@ -1,5 +1,4 @@
 import { performers } from "../db/schema.js";
-import { normalizeName } from "../scanner/performerNames.js";
 
 /**
  * A performer's profile facts: the columns a PATCH may set beyond name, bio
@@ -30,8 +29,6 @@ const TEXT_FIELDS = [
 ] as const;
 
 const MAX_TEXT = 500;
-const MAX_ALIASES = 50;
-const MAX_ALIAS_LENGTH = 100;
 
 export type PerformerDetailsBody = {
   gender?: string | null;
@@ -135,33 +132,6 @@ export function parsePerformerDetails(
   }
 
   return { ok: true, value: values };
-}
-
-/**
- * A replacement alias list: normalised like names, case-only duplicates
- * collapsed, and the owner's own name dropped — it already answers to that,
- * and storing it twice would only make the clash checks harder to read.
- * Shared by performers, tags and studios, which all follow the same rules.
- */
-export function parseAliases(raw: unknown, ownName: string): Parsed<string[]> {
-  if (!Array.isArray(raw) || raw.some((alias) => typeof alias !== "string")) {
-    return { ok: false, error: "aliases must be a list of names" };
-  }
-  const seen = new Set([ownName.toLowerCase()]);
-  const aliases: string[] = [];
-  for (const entry of raw as string[]) {
-    const alias = normalizeName(entry);
-    if (!alias || seen.has(alias.toLowerCase())) continue;
-    if (alias.length > MAX_ALIAS_LENGTH) {
-      return { ok: false, error: `An alias must be at most ${MAX_ALIAS_LENGTH} characters` };
-    }
-    seen.add(alias.toLowerCase());
-    aliases.push(alias);
-  }
-  if (aliases.length > MAX_ALIASES) {
-    return { ok: false, error: `A performer can have at most ${MAX_ALIASES} aliases` };
-  }
-  return { ok: true, value: aliases };
 }
 
 /**

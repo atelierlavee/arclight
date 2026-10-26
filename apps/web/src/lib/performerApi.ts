@@ -79,8 +79,6 @@ export type PerformerFacts = {
 export type PerformerDetail = PerformerSummary & PerformerFacts & {
   /** Free text, on the profile only — the list endpoint does not carry it. */
   bio: string | null;
-  /** Other names they go by; the scanner matches these like the name. */
-  aliases: string[];
   studios: StudioGroup[];
   years: YearGroup[];
   watch: { watched: number; inProgress: number; unwatched: number };
@@ -414,14 +412,10 @@ export async function savePerformerBio(id: number, bio: string): Promise<void> {
 }
 
 /**
- * Saves profile facts and, when given, the whole alias list. The server's
- * error is passed on as the message, since a 409 names who already has an
- * alias and that is the useful part.
+ * Saves profile facts. The server's error is passed on as the message, since
+ * a 400 says which field was wrong.
  */
-export async function savePerformerFacts(
-  id: number,
-  patch: Partial<PerformerFacts> & { aliases?: string[] },
-): Promise<void> {
+export async function savePerformerFacts(id: number, patch: Partial<PerformerFacts>): Promise<void> {
   const res = await fetch(`/api/performers/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

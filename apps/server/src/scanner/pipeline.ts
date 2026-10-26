@@ -4,7 +4,6 @@ import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import pLimit from "p-limit";
 import { anyInt, anyText } from "../db/anyOf.js";
 import { db } from "../db/client.js";
-import { findStudioIdByName } from "../library/studioLookup.js";
 import {
   albums,
   libraryRoots,
@@ -12,13 +11,11 @@ import {
   mediaItemPerformers,
   mediaItemTypes,
   mediaItems,
-  performerAliases,
   performers,
   scanJobs,
   series,
   studios,
 } from "../db/schema.js";
-import { findPerformerIdByName } from "../library/performerLookup.js";
 import { probeVideo } from "../metadata/videoProbe.js";
 import { probePhoto } from "../metadata/photoExif.js";
 import { ensurePosterFrame, generatePosterFrame } from "../media/poster.js";
@@ -632,9 +629,16 @@ async function syncSeriesFromFilename(
 async function ensurePerformerId(rawName: string): Promise<number> {
   const name = normalizeName(rawName);
 
-  // By name or alias, so a folder spelling "Jane D." credits Jane Doe rather
-  // than creating her a second time.
-  const findId = () => findPerformerIdByName(name);
+  // lower(a) = lower(b) rather than ilike: `_` and `%` are LIKE wildcards, so
+  // a performer named "Alice_B" would ilike-match "AliceXB". It also lets
+  // Postgres use the lower(name) unique index.
+  const findId = async (): Promise<number | null> => {
+    const [row] = await db
+      .select({ id: performers.id })
+      .from(performers)
+      .where(sql`lower(${performers.name}) = lower(${name})`);
+    return row?.id ?? null;
+  };
 
   const existing = await findId();
   if (existing !== null) return existing;
@@ -655,8 +659,13 @@ async function ensurePerformerId(rawName: string): Promise<number> {
 async function ensureStudioId(rawName: string): Promise<number> {
   const name = normalizeName(rawName);
 
-  // By name or alias, so a spelling that is an alias never creates a twin.
-  const findId = () => findStudioIdByName(name);
+  const findId = async (): Promise<number | null> => {
+    const [row] = await db
+      .select({ id: studios.id })
+      .from(studios)
+      .where(sql`lower(${studios.name}) = lower(${name})`);
+    return row?.id ?? null;
+  };
 
   const existing = await findId();
   if (existing !== null) return existing;
@@ -976,14 +985,9 @@ async function assignPerformersFromFilenames(
 ): Promise<void> {
   if (filePaths.length === 0) return;
 
-  // Every alias is a spelling to look for too, under the performer it
-  // belongs to.
-  const all = [
-    ...(await db.select({ id: performers.id, name: performers.name }).from(performers)),
-    ...(await db
-      .select({ id: performerAliases.performerId, name: performerAliases.alias })
-      .from(performerAliases)),
-  ];
+  const all = await db
+    .select({ id: performers.id, name: performers.name })
+    .from(performers);
   const candidates = all
     .map((p) => ({ id: p.id, key: matchKey(p.name) }))
     .filter((p) => isUsableMatchKey(p.key));
@@ -1020,14 +1024,12 @@ async function assignPerformersFromFilenames(
     );
     if (matched.length === 0) continue;
 
-    // A name and an alias of the same performer can both match one filename.
-    const performerIds = [...new Set(matched.map((m) => m.id))];
     await db
       .insert(mediaItemPerformers)
       .values(
-        performerIds.map((performerId) => ({
+        matched.map((m) => ({
           mediaItemId: row.mediaItemId,
-          performerId,
+          performerId: m.id,
         })),
       )
       .onConflictDoNothing();

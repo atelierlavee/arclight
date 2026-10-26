@@ -1,6 +1,5 @@
 import { type SQL, and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { findStudioIdByName } from "../library/studioLookup.js";
 import {
   categories,
   mediaFiles,
@@ -421,8 +420,13 @@ export function withPlayback<
 export async function ensureStudioId(rawName: string): Promise<number> {
   const name = rawName.normalize("NFC").replace(/\s+/g, " ").trim();
 
-  // By name or alias, so a spelling that is an alias never creates a twin.
-  const findId = () => findStudioIdByName(name);
+  const findId = async (): Promise<number | null> => {
+    const [row] = await db
+      .select({ id: studios.id })
+      .from(studios)
+      .where(sql`lower(${studios.name}) = lower(${name})`);
+    return row?.id ?? null;
+  };
 
   const existing = await findId();
   if (existing !== null) return existing;

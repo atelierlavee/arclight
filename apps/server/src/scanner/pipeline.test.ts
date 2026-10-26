@@ -4,7 +4,7 @@ import path from "node:path";
 import { desc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../db/client.js";
-import { albums, libraries, libraryRoots, mediaFiles, mediaItemPerformers, mediaItems, performerAliases, performers, scanJobs, series, studioAliases, studios } from "../db/schema.js";
+import { albums, libraries, libraryRoots, mediaFiles, mediaItems, performers, scanJobs, series, studios } from "../db/schema.js";
 import { resetDatabase, signIn, testApp } from "../test/harness.js";
 import { readItemState } from "../library/profileState.js";
 import { ownerProfileId, setItemStateFor } from "../test/fixtures.js";
@@ -94,40 +94,6 @@ describe("scanning", () => {
     await put("Alice/movie.mp4");
     await scan();
     expect((await db.select().from(performers)).map((p) => p.name)).toEqual(["Alice"]);
-  });
-
-  it("credits a folder named with an alias to that performer", async () => {
-    const [jane] = await db.insert(performers).values({ name: "Jane Doe" }).returning();
-    await db.insert(performerAliases).values({ performerId: jane.id, alias: "Jane D." });
-    await put("jane d./movie.mp4");
-    await scan();
-
-    expect((await db.select().from(performers)).map((p) => p.name)).toEqual(["Jane Doe"]);
-    expect(await db.select().from(mediaItemPerformers)).toEqual([
-      expect.objectContaining({ performerId: jane.id }),
-    ]);
-  });
-
-  it("matches an alias in a filename at the root, crediting the performer once", async () => {
-    const [jane] = await db.insert(performers).values({ name: "Jane Doe" }).returning();
-    await db.insert(performerAliases).values({ performerId: jane.id, alias: "Sunny" });
-    await put("Jane Doe aka Sunny - Beach Day.mp4");
-    await scan();
-
-    expect(await db.select().from(mediaItemPerformers)).toEqual([
-      expect.objectContaining({ performerId: jane.id }),
-    ]);
-  });
-
-  it("credits a studio spelled with one of its aliases", async () => {
-    const [blacked] = await db.insert(studios).values({ name: "Blacked Raw" }).returning();
-    await db.insert(studioAliases).values({ studioId: blacked.id, alias: "BlackedRaw" });
-    await put("Alice/[BlackedRaw] Alice - Title.mp4");
-    await scan();
-
-    expect((await db.select().from(studios)).map((s) => s.name)).toEqual(["Blacked Raw"]);
-    const [item] = await db.select().from(mediaItems);
-    expect(item.studioId).toBe(blacked.id);
   });
 
   it("does not select performer artwork from meta folders", async () => {

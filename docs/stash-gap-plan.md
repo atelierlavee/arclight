@@ -7,9 +7,9 @@ commit `d75aca9` (2026-10-25).*
 
 Stash is the best-known self-hosted organiser for adult collections. Comparing
 its full API with Arc Light's schema and code turned up twelve features Arc
-Light does not have. Three of them were dropped (see below); this plan covers
-the other nine in six phases. Phases keep their original numbers, so 3, 5 and
-8 are missing on purpose.
+Light does not have. Four of them were dropped (see below); this plan covers
+the other eight in five phases. Phases keep their original numbers, so 3, 4, 5
+and 8 are missing on purpose.
 
 Each phase is built, tested and committed to `main` separately, and each one
 is usable on its own, so the work can stop after any phase.
@@ -31,18 +31,19 @@ is usable on its own, so the work can stop after any phase.
 | Transcoding | Ruled out by the MP4-only policy. |
 | Moving or deleting files | Files are opened read-only on purpose. |
 | DLNA, plugins, SQL console, interactive devices, log viewer | Useful in a large community project, not worth the upkeep in a personal app. |
-| Merging performers, tags and studios (was Phase 3) | The library is named neatly, so duplicate records do not arise; aliases cover the odd stray spelling. |
+| Merging performers, tags and studios (was Phase 3) | The library is named neatly, so duplicate records do not arise. |
+| Scene markers (was Phase 4) | Every marker would be tagged by hand, with nothing to fill them in automatically, so the marker wall would stay patchy. Bookmarks already cover "remember this moment". |
+| Aliases for performers, tags and studios | Built in Phases 1–2, then removed (migration 0050). Names are managed by hand; no other spellings are matched. |
 | Duplicate-video finder (was Phase 5) | Same reason: no duplicate files to find. |
 | Filename-parsing tool (was Phase 8) | Files are already named the way the scanner reads them. |
 
-## The nine gaps
+## The eight gaps
 
 | # | Missing feature | Arc Light today | Phase |
 |---|---|---|---|
-| 1 | Scene markers: tagged moments, searchable, with a marker wall | Personal bookmarks with label and note | 4 |
-| 3 | Richer performer profiles: aliases, birthdate, age per scene, attributes | Name, bio, images | 1 |
-| 4 | Tag hierarchy and aliases | Flat tags with name and colour | 2 |
-| 5 | Studio hierarchy (networks and sites) and aliases | Name only | 2 |
+| 3 | Richer performer profiles: birthdate, age per scene, attributes | Name, bio, images | 1 |
+| 4 | Tag hierarchy | Flat tags with name and colour | 2 |
+| 5 | Studio hierarchy (networks and sites) | Name only | 2 |
 | 7 | Filtering by technical details and performer attributes | Tags, rating, plays, duration | 6 |
 | 8 | "Organised" flag | Inbox triage is close but not the same | 6 |
 | 9 | O-counter with history | Play count only | 6 |
@@ -55,12 +56,11 @@ These follow from how the code already works:
 
 - **Owner or profile.** Every new write route goes into `OWNER_ONLY_ROUTES` in
   `apps/server/src/auth/ownerRoutes.ts` or is classified as a profile route;
-  the existing test fails otherwise. Library facts (tags, markers, performer
-  details) belong to the owner. Personal things (O-count) belong to each
+  the existing test fails otherwise. Library facts (tags, performer details) belong to the owner. Personal things (O-count) belong to each
   profile.
 - **Vault.** Every new list, search or filter goes through `visibleItems`
   (`apps/server/src/library/visibility.ts`), so hidden items never leak through
-  markers or filters.
+  filters.
 - **Your edits win.** Anything set by hand is recorded with `source = 'user'`,
   so the scanner never overwrites it.
 - **One migration per phase**, starting at 0048, generated with drizzle-kit.
@@ -78,13 +78,6 @@ These follow from how the code already works:
 - New columns on `performers`: gender, birthdate, country, ethnicity, hair
   colour, eye colour, height, measurements, tattoos, piercings, career start
   year, career end year.
-- New `performer_aliases` table. Names and aliases are unique together,
-  ignoring case, so one name can never point at two performers.
-
-**Scanner**
-
-- A file that names "Jane D." links to Jane Doe when "Jane D." is one of her
-  aliases, instead of creating a new performer.
 
 **Computed**
 
@@ -98,7 +91,7 @@ These follow from how the code already works:
 
 ---
 
-## Phase 2: Tag and studio hierarchy and aliases
+## Phase 2: Tag and studio hierarchy
 
 **Size:** medium
 
@@ -106,50 +99,17 @@ These follow from how the code already works:
 
 - A `tag_parents` table (a tag may have several parents), `studios.parent_id`,
   `tags.description`.
-- New `tag_aliases` and `studio_aliases` tables.
 
 **Behaviour**
 
 - Filtering by a parent includes all its children, using a recursive query.
   "Outdoor" includes "Beach"; a network includes all its sites.
-- The scanner resolves studio aliases the same way as performer aliases.
 
 **UI**
 
-- A parent picker and alias editing for tags and studios.
+- A parent picker for tags and studios.
 - Tag pages list their child tags.
 - Studio pages list their sites.
-
----
-
-## Phase 4: Scene markers
-
-**Size:** large
-
-**Database**
-
-- New `scene_markers` table: video, start time, optional end time, primary
-  tag, extra tags, optional title.
-- Markers are library-wide and edited by the owner, because they describe the
-  content, like tags do. Bookmarks stay personal.
-
-**Player**
-
-- Markers show as ticks on the seek bar.
-- A list beside the player jumps to each one.
-- `Shift+B` adds a marker at the current moment.
-- A bookmark can be turned into a marker.
-
-**Marker wall**
-
-- A page that plays only the marked moments, filtered by tag.
-- It plays the original MP4 from the marker's timestamp. No clips are
-  generated and nothing is transcoded.
-
-**Search and smart collections**
-
-- Search by marker tag.
-- New smart-collection rule: "has a marker tagged X".
 
 ---
 
@@ -172,7 +132,7 @@ These follow from how the code already works:
 
 **New smart-collection rules**
 
-- Video: resolution, codec, organised, O-count, has markers.
+- Video: resolution, codec, organised, O-count.
 - People and studios: performer age, performer attributes from Phase 1,
   studio including its child studios.
 - Resolution and codec already sit in `extra_metadata`. Bitrate is added
@@ -200,7 +160,7 @@ These follow from how the code already works:
 
 **Export**
 
-- Performers, studios, tags, markers and each video's metadata, keyed by
+- Performers, studios, tags and each video's metadata, keyed by
   content hash, so the export survives moved files and a move to another
   machine.
 
@@ -217,28 +177,28 @@ and partly re-imported, which a full backup cannot.
 
 ## Order
 
-1 → 2 → 4 → 6 → 7 → 9
+1 → 2 → 6 → 7 → 9
 
-- **Phases 1–2 first.** Aliases and the hierarchy make scanning, filtering
-  and markers all work better.
-- **Phase 4 next.** Markers are the largest visible feature.
-- **Phases 6, 7 and 9 last.** Smaller additions built on top. Phase 7 is only
-  worth doing if some videos have subtitle files beside them.
+- **Phases 1–2** are done.
+- **Phase 6 next.** Filters, the Organised flag and the O-counter work on the
+  library as it is, with no tagging needed first.
+- **Phases 7 and 9 last.** Phase 7 is only worth doing if some videos have
+  subtitle files beside them.
 
 ## Decisions
 
 | Question | Decision |
 |---|---|
-| Markers | Library-wide, edited by the owner. Bookmarks stay personal. |
 | Tag parents | A tag may have several parents. A studio has at most one. |
 | Performer fields | The Phase 1 list as written. |
-| Merging, duplicate finder, filename tool | Dropped: the library is neatly organised. |
+| Merging, duplicate finder, filename tool, aliases | Dropped: the library is neatly organised. |
+| Scene markers | Dropped: hand-tagged only, so never complete. |
 
 ## Progress
 
 - **Phase 1** — done, commit `b643a7c`.
 - **Phase 2** — done, commit `b7157ef`.
-- **Phase 4** — next.
+- **Phase 6** — next.
 
 ## Picking this up on another machine
 

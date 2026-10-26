@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { Pencil, Tag } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { EditDialog, SaveButton } from "@/components/EditDialog";
-import { EDIT_INPUT, splitAliases } from "@/lib/editForm";
+import { EDIT_INPUT } from "@/lib/editForm";
 import { descendantIds, fetchTags, saveTag, type TagRow } from "@/lib/tagApi";
 import { qk } from "@/lib/queryKeys";
 import { useIsOwner } from "@/lib/profile";
@@ -73,9 +73,6 @@ function TagNode({
           {tag.name}
         </Link>
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{tag.itemCount}</span>
-        {tag.aliases.length > 0 && (
-          <span className="truncate text-xs text-muted-foreground/70">also {tag.aliases.join(", ")}</span>
-        )}
         {isOwner && (
           <button
             type="button"
@@ -105,7 +102,6 @@ function TagNode({
 
 function TagEditDialog({ tag, all, onClose }: { tag: TagRow; all: TagRow[]; onClose: () => void }) {
   const [description, setDescription] = useState(tag.description ?? "");
-  const [aliases, setAliases] = useState(tag.aliases.join(", "));
   const [parentIds, setParentIds] = useState(new Set(tag.parentIds));
   const [filter, setFilter] = useState("");
   const queryClient = useQueryClient();
@@ -125,7 +121,6 @@ function TagEditDialog({ tag, all, onClose }: { tag: TagRow; all: TagRow[]; onCl
       saveTag(tag.id, {
         description: description.trim() || null,
         parentIds: [...parentIds],
-        aliases: splitAliases(aliases),
       }),
     onSuccess: () => {
       // The sidebar, the filter bar and every browse filtered by a tag.
@@ -152,19 +147,6 @@ function TagEditDialog({ tag, all, onClose }: { tag: TagRow; all: TagRow[]; onCl
           rows={2}
           className={`${EDIT_INPUT} resize-y`}
         />
-      </label>
-
-      <label className="block space-y-1">
-        <span className="text-xs text-muted-foreground">Also known as</span>
-        <input
-          value={aliases}
-          onChange={(e) => setAliases(e.target.value)}
-          placeholder="Other spellings, separated by commas"
-          className={EDIT_INPUT}
-        />
-        <span className="block text-[11px] text-muted-foreground/70">
-          Typing one of these on a video applies {tag.name}.
-        </span>
       </label>
 
       <div className="space-y-1">
