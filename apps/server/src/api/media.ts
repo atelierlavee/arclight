@@ -12,6 +12,7 @@ import {
   saveItemThumbnail,
 } from "../media/itemThumbnails.js";
 import { streamFile } from "../media/streamer.js";
+import { listSubtitleTracks, readSubtitleAsVtt } from "../media/subtitles.js";
 import { previewPathFor } from "../media/preview.js";
 import { ensureScrubSprite, spritePathFor } from "../media/scrubSprite.js";
 import { getOrCreatePhotoThumbnail, getPosterPath } from "../media/thumbnails.js";
@@ -138,6 +139,51 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
       true
     );
   });
+
+  /**
+   * The subtitle tracks beside a video, for the player's CC menu. Found by
+   * reading the folder (media/subtitles.ts), so the list is always current.
+   * Answers like the stream does: a vault video's subtitles are as hidden as
+   * its bytes.
+   */
+  app.get<{ Params: { id: string } }>(
+    "/api/media-items/:id/subtitles",
+    async (request, reply) => {
+      const file = await resolveItemFile(Number(request.params.id), canSeeHidden(request), viewerProfile(request));
+      if (!file || file.itemType !== "video") {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      if (file.hidden) reply.header("Cache-Control", "private, no-store");
+      const tracks = await listSubtitleTracks(file.filePath);
+      // The server-side path stays server side.
+      return { tracks: tracks.map(({ index, language, label }) => ({ index, language, label })) };
+    },
+  );
+
+  /** One track as WebVTT, named by its position in the list above. */
+  app.get<{ Params: { id: string; index: string } }>(
+    "/api/media-items/:id/subtitles/:index",
+    async (request, reply) => {
+      const file = await resolveItemFile(Number(request.params.id), canSeeHidden(request), viewerProfile(request));
+      if (!file || file.itemType !== "video" || !/^\d{1,3}$/.test(request.params.index)) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const track = (await listSubtitleTracks(file.filePath))[Number(request.params.index)];
+      const vtt = track ? await readSubtitleAsVtt(track.file) : null;
+      if (vtt === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      // Nothing of a vault item is kept in the browser's cache; the rest may
+      // be reused briefly, but not for long — the file beside the video can be
+      // replaced at any time.
+      reply.header("Cache-Control", file.hidden ? "private, no-store" : "private, max-age=60");
+      reply.type("text/vtt; charset=utf-8");
+      return vtt;
+    },
+  );
 
   // Short, low-res clip cut at scan time. Unlike seeking into the full file,
   // this starts instantly and its first frame is the poster image, so the

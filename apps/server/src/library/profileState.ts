@@ -31,6 +31,13 @@ export function itemRating(profileId: number, item: ItemRef): SQL<number | null>
   );
 }
 
+/** How many times this profile has counted the item; 0 when it never has. */
+export function itemOCount(profileId: number, item: ItemRef): SQL<number> {
+  return sql<number>`coalesce((select pis.o_count from profile_item_state pis where pis.profile_id = ${profileId} and pis.media_item_id = ${item}), 0)`.mapWith(
+    Number,
+  );
+}
+
 export function itemHiddenAt(profileId: number, item: ItemRef): SQL<Date | null> {
   return sql<Date | null>`(select pis.hidden_at from profile_item_state pis where pis.profile_id = ${profileId} and pis.media_item_id = ${item})`.mapWith(
     profileItemState.hiddenAt,

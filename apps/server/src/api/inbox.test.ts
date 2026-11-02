@@ -216,7 +216,7 @@ describe("heatmap recording via playback", () => {
     const fiveSecondsAgo = new Date(Date.now() - 5000);
     await db
       .insert(playbackStates)
-      .values({ profileId: await ownerProfileId(), mediaItemId: id, positionSeconds: 8 })
+      .values({ profileId: await ownerProfileId(), mediaItemId: id, positionSeconds: 8, updatedAt: fiveSecondsAgo })
       .onConflictDoUpdate({
         target: [playbackStates.profileId, playbackStates.mediaItemId],
         set: { positionSeconds: 8, updatedAt: fiveSecondsAgo },
@@ -245,7 +245,7 @@ describe("heatmap recording via playback", () => {
     const fiveSecondsAgo = new Date(Date.now() - 5000);
     await db
       .insert(playbackStates)
-      .values({ profileId: await ownerProfileId(), mediaItemId: id, positionSeconds: 8 })
+      .values({ profileId: await ownerProfileId(), mediaItemId: id, positionSeconds: 8, updatedAt: fiveSecondsAgo })
       .onConflictDoUpdate({
         target: [playbackStates.profileId, playbackStates.mediaItemId],
         set: { positionSeconds: 8, updatedAt: fiveSecondsAgo },
@@ -274,7 +274,7 @@ describe("heatmap recording via playback", () => {
     const fiveSecondsAgo = new Date(Date.now() - 5000);
     await db
       .insert(playbackStates)
-      .values({ profileId: await ownerProfileId(), mediaItemId: id, positionSeconds: 9 })
+      .values({ profileId: await ownerProfileId(), mediaItemId: id, positionSeconds: 9, updatedAt: fiveSecondsAgo })
       .onConflictDoUpdate({
         target: [playbackStates.profileId, playbackStates.mediaItemId],
         set: { positionSeconds: 9, updatedAt: fiveSecondsAgo },

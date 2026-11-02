@@ -1,5 +1,6 @@
 import { framingStyle, thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { cn } from "@/lib/utils";
+import type { SubtitleTrack } from "./useSubtitles";
 
 /** What fills the player frame: the poster and <video> for a video, the image for a photo. */
 export function PlayerMedia({
@@ -10,6 +11,7 @@ export function PlayerMedia({
   seeked,
   stillOnly,
   castSrc,
+  subtitleTracks,
   onLoadedMetadata,
   onSeeked,
   onTimeUpdate,
@@ -24,6 +26,8 @@ export function PlayerMedia({
   seeked: boolean;
   stillOnly: boolean;
   castSrc: { id: number; url: string } | null;
+  /** Sidecar subtitle files; only attached during real playback. */
+  subtitleTracks: SubtitleTrack[];
   onLoadedMetadata: () => void;
   onSeeked: () => void;
   onTimeUpdate: () => void;
@@ -53,7 +57,6 @@ export function PlayerMedia({
         />
       )}
       {item?.itemType === "video" ? (
-        // eslint-disable-next-line jsx-a11y/media-has-caption -- no sidecar subtitles yet
         <video
           ref={videoRef}
           // Preview mode plays the pre-cut clip (instant, already at the
@@ -105,7 +108,18 @@ export function PlayerMedia({
             // SeekStrip replaces the native timeline; see index.css.
             mode === "playing" && !mini && "custom-seek",
           )}
-        />
+        >
+          {mode === "playing" &&
+            subtitleTracks.map((track) => (
+              <track
+                key={track.index}
+                kind="subtitles"
+                src={`/api/media-items/${item.id}/subtitles/${track.index}`}
+                srcLang={track.language ?? undefined}
+                label={track.label}
+              />
+            ))}
+        </video>
       ) : item ? (
         <img
           src={`/api/stream/${item.id}`}

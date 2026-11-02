@@ -105,6 +105,7 @@ export const qk = {
   bookmarks: (id: Id) => ["bookmarks", id] as const,
   heatmap: (id: Id) => ["heatmap", id] as const,
   scrubSprite: (id: Id) => ["scrub-sprite", id] as const,
+  subtitles: (id: Id) => ["subtitles", id] as const,
   castLink: (id: Id) => ["cast-link", id] as const,
 
   performers: {
@@ -173,6 +174,7 @@ export const qk = {
   cacheUsage: ["cache-usage"] as const,
   backups: ["backups"] as const,
   settings: ["settings"] as const,
+  stashDbStatus: ["stashdb-status"] as const,
 
   authStatus: ["auth-status"] as const,
   /** The signed-in account's profiles; survives a profile switch, like auth status. */
@@ -208,6 +210,7 @@ export function itemScopedKeys(id: Id) {
     qk.bookmarks(id),
     qk.heatmap(id),
     qk.scrubSprite(id),
+    qk.subtitles(id),
     qk.castLink(id),
   ] as const;
 }

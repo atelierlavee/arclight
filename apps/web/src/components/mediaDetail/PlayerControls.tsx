@@ -1,7 +1,9 @@
 import {
   Bookmark as BookmarkIcon,
   Cast,
+  Captions,
   ChevronRight,
+  Droplets,
   FastForward,
   Gauge,
   Lightbulb,
@@ -41,6 +43,11 @@ export function PlayerControls({
   onToggleSkipOptions,
   onApplySkipSeconds,
   onBookmark,
+  oCount,
+  onCountO,
+  subtitleLabel,
+  hasSubtitles,
+  onCycleSubtitles,
   onCast,
   onTogglePictureInPicture,
   onToggleAmbient,
@@ -67,6 +74,14 @@ export function PlayerControls({
   onToggleSkipOptions: () => void;
   onApplySkipSeconds: (seconds: number) => void;
   onBookmark: () => void;
+  /** The current profile's count for this item. */
+  oCount: number;
+  onCountO: () => void;
+  /** The showing track's name, or null when subtitles are off. */
+  subtitleLabel: string | null;
+  /** Whether the video has any subtitle files beside it. */
+  hasSubtitles: boolean;
+  onCycleSubtitles: () => void;
   onCast: () => void;
   onTogglePictureInPicture: () => void;
   onToggleAmbient: () => void;
@@ -177,6 +192,35 @@ export function PlayerControls({
       >
         <BookmarkIcon className="size-4" />
       </button>
+      <button
+        type="button"
+        onClick={onCountO}
+        aria-label={`Count one (${oCount} so far)`}
+        title="Count one (o)"
+        className="flex h-9 items-center gap-1.5 rounded-full bg-black/60 px-3 text-xs backdrop-blur-sm transition-colors hover:bg-black/80"
+      >
+        <Droplets className="size-4" />
+        {oCount > 0 && <span className="tabular-nums">{oCount}</span>}
+      </button>
+      {/* Only when there is a file beside the video to show. */}
+      {hasSubtitles && (
+        <button
+          type="button"
+          onClick={onCycleSubtitles}
+          aria-pressed={subtitleLabel !== null}
+          aria-label={subtitleLabel ? `Subtitles: ${subtitleLabel}` : "Subtitles off"}
+          title={subtitleLabel ? `Subtitles: ${subtitleLabel} (s)` : "Turn subtitles on (s)"}
+          className={cn(
+            "flex h-9 items-center gap-1.5 rounded-full px-3 text-xs backdrop-blur-sm transition-colors",
+            subtitleLabel
+              ? "bg-white text-black hover:bg-white/90"
+              : "bg-black/60 hover:bg-black/80",
+          )}
+        >
+          <Captions className="size-4" />
+          {subtitleLabel}
+        </button>
+      )}
       {/* Only once the browser has found a device to cast to, so a
           house with no TV on the network never sees it. */}
       {castAvailable && (

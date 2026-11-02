@@ -10,6 +10,7 @@ import {
   secondsByDay,
   newlyEarned,
   streaks,
+  tallySummary,
   trophyShelf,
   type Insights,
 } from "./insights";
@@ -166,5 +167,47 @@ describe("insights", () => {
     expect(fresh).toContain("night-owl");
     expect(fresh).not.toContain("first-hour");
     expect(fresh).not.toContain("streak-5");
+  });
+});
+
+describe("tallySummary", () => {
+  const counted: Insights = {
+    ...data,
+    oLog: [
+      { mediaItemId: 1, at: at(2026, 9, 1) },
+      { mediaItemId: 1, at: at(2026, 9, 1, 22) },
+      { mediaItemId: 1, at: at(2026, 9, 3) },
+      { mediaItemId: 2, at: at(2026, 9, 3) },
+    ],
+  };
+
+  it("totals the counts, the days they fell on and the videos", () => {
+    expect(tallySummary(counted)).toMatchObject({ total: 4, activeDays: 2, videoCount: 2 });
+  });
+
+  it("ranks videos, and credits each performer with their videos' counts", () => {
+    const summary = tallySummary(counted);
+    expect(summary.videos).toEqual([
+      { id: 1, name: "One", count: 3 },
+      { id: 2, name: "Two", count: 1 },
+    ]);
+    expect(summary.performers).toEqual([
+      { id: 10, name: "Ann", count: 3 },
+      { id: 11, name: "Bea", count: 1 },
+    ]);
+  });
+
+  it("reads an older payload with no log as nothing counted", () => {
+    expect(tallySummary(data)).toMatchObject({ total: 0, activeDays: 0, videos: [], performers: [] });
+  });
+
+  it("unlocks a counter badge tier once the total reaches it", () => {
+    const many: Insights = {
+      ...counted,
+      oLog: Array.from({ length: 10 }, () => ({ mediaItemId: 1, at: at(2026, 9, 1) })),
+    };
+    const badge = (d: Insights) => achievements(d, "2026-09-04").find((a) => a.id === "counter-t1");
+    expect(badge(many)?.earned).toBe(true);
+    expect(badge(counted)?.earned).toBe(false);
   });
 });

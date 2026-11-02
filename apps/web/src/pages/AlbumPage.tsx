@@ -16,6 +16,7 @@ import { PlaySurface } from "@/components/PlaySurface";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { qk } from "@/lib/queryKeys";
 import { useIsOwner } from "@/lib/profile";
+import { albumTransition } from "@/lib/albumTransition";
 
 const routeApi = getRouteApi("/album/$albumId");
 
@@ -25,6 +26,12 @@ export function AlbumPage() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const queryClient = useQueryClient();
+
+  // Remembered for the way back, when the albums page folds this album's
+  // photos into its stack.
+  useEffect(() => {
+    albumTransition.returningId = id;
+  }, [id]);
 
   const [reframing, setReframing] = useState(false);
 
@@ -108,7 +115,7 @@ export function AlbumPage() {
       <div className="space-y-6 px-4 py-6 md:px-6 md:py-8">
         <Breadcrumbs
           items={[
-            { label: "Albums", to: "/albums" },
+            { label: "Albums", to: "/albums", viewTransition: true },
             ...(album?.performer ? [{ label: album.performer }] : []),
             ...(album?.studio ? [{ label: album.studio }] : []),
             ...(album ? [{ label: album.title }] : []),
@@ -202,7 +209,19 @@ export function AlbumPage() {
               // A wrapper rather than the tile itself being the button: the
               // cover control is a button too, and a button inside a button is
               // invalid — browsers drop the inner one, so it wouldn't fire.
-              <div key={photo.id} className="group relative">
+              <div
+                key={photo.id}
+                className="group relative"
+                // The photos an album card's stack shows morph into these
+                // tiles. Named only near the top (plus the cover), since each
+                // name is its own snapshot and the grid can hold thousands.
+                data-vt
+                style={
+                  index < 12 || isCover
+                    ? { viewTransitionName: `album-photo-${photo.id}` }
+                    : undefined
+                }
+              >
                 <button
                   type="button"
                   onClick={() => setOpenIndex(index)}

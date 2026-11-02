@@ -394,6 +394,8 @@ function parameterisedGets(s: Seeded): Record<string, string | null> {
     "/api/media-items/:id/gallery": `/api/media-items/${s.visiblePhotoId}/gallery`,
     "/api/media-items/:id/heatmap": item("/heatmap"),
     "/api/media-items/:id/preview": item("/preview"),
+    "/api/media-items/:id/subtitles": item("/subtitles"),
+    "/api/media-items/:id/subtitles/:index": item("/subtitles/0"),
     "/api/media-items/:id/related": item("/related"),
     "/api/media-items/:id/scrub": item("/scrub"),
     "/api/media-items/:id/scrub.jpg": item("/scrub.jpg"),
@@ -586,6 +588,7 @@ const UNGATED_DELETES: Record<string, string> = {
   "/api/kinds/:kind/cover": "custom artwork; falls back to the automatic cover",
   "/api/performers/:id/image": "custom artwork; the performer and their links stay",
   "/api/media-items/:id/thumbnail": "custom artwork; falls back to the generated thumbnail",
+  "/api/media-items/:id/o": "takes back the viewer's own most recent O-count; per profile, the item is untouched",
   "/api/continue-watching":
     "resets resume positions only; play counts and completion are kept (see playback.ts)",
   "/api/profiles/:id":

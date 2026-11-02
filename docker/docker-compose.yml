@@ -29,6 +29,9 @@ services:
       # phone. Filled in by docker/with-lan-host.sh when started through
       # `sh docker/with-lan-host.sh docker compose up -d`.
       LAN_HOST: ${LAN_HOST:-}
+      # Turns on "Look up on StashDB" on performer pages. Unset, the feature
+      # stays off and nothing is sent anywhere.
+      STASHDB_API_KEY: ${STASHDB_API_KEY:-}
     volumes:
       # Kept for compatibility with an existing library: paths already in the
       # database are /media/..., so this must stay pointed where it was.

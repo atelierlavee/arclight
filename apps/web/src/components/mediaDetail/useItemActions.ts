@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FramingValue } from "../FramingEditor";
-import { setWatched, updateItem } from "@/lib/mediaItemApi";
+import { addO, removeO, setOrganised, setWatched, updateItem } from "@/lib/mediaItemApi";
 import { useUndoable } from "@/lib/undo";
 import { qk } from "@/lib/queryKeys";
 import { invalidateItem, invalidateItemEverywhere, invalidateItemWatchState } from "@/lib/invalidate";
@@ -80,5 +80,31 @@ export function useItemActions({
     },
   });
 
-  return { updateKind, toggleFavorite, saveFraming, toggleWatched };
+  const toggleOrganised = useMutation({
+    mutationFn: (next: boolean) => setOrganised(viewingId, next),
+    onSuccess: () => {
+      // The item, and every list that filters on the flag.
+      invalidateItem(queryClient, viewingId);
+    },
+  });
+
+  /**
+   * Counts one, with an undo for the mis-click. Reverting takes back the
+   * latest count rather than setting a number, so an undo after a second
+   * count elsewhere removes one, as the toast says.
+   */
+  function countO() {
+    void runUndoable({
+      message: (total: number) => `Counted · ${total}`,
+      description: title,
+      apply: () => addO(viewingId),
+      revert: () => removeO(viewingId).then(() => undefined),
+      onSettled: () => {
+        invalidateItem(queryClient, viewingId);
+        void queryClient.invalidateQueries({ queryKey: qk.insights });
+      },
+    });
+  }
+
+  return { updateKind, toggleFavorite, saveFraming, toggleWatched, toggleOrganised, countO };
 }

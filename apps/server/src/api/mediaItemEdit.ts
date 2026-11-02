@@ -1,9 +1,10 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { type FastifyInstance } from "fastify";
 import { logActivity } from "../activity/log.js";
 import { isVaultUnlocked, vaultPinConfigured } from "../auth/vaultUnlock.js";
 import { profileId, unlockKey } from "../auth/profileContext.js";
 import { setItemState } from "../library/profileState.js";
+import { hiddenGate } from "../library/visibility.js";
 import { db } from "../db/client.js";
 import { mediaItems, series } from "../db/schema.js";
 import {
@@ -350,5 +351,43 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
 
       return { ok: true, hidden };
     }
+  );
+
+  /**
+   * Marks an item organised, or takes the mark back. Owner only, like every
+   * library fact: it is a judgement about the metadata, shared by everyone.
+   */
+  app.put<{ Params: { id: string }; Body: { organised: boolean } }>(
+    "/api/media-items/:id/organised",
+    async (request, reply) => {
+      const id = parseId(request.params.id);
+      if (id === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const organised = (request.body as { organised?: unknown } | undefined)?.organised;
+      if (typeof organised !== "boolean") {
+        reply.code(400);
+        return { error: "organised must be a boolean" };
+      }
+
+      const [updated] = await db
+        .update(mediaItems)
+        .set({ organisedAt: organised ? new Date() : null })
+        .where(and(eq(mediaItems.id, id), hiddenGate(request)))
+        .returning({ title: mediaItems.title, organisedAt: mediaItems.organisedAt });
+      if (!updated) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+
+      await logActivity(
+        "edit",
+        organised ? `Marked "${updated.title}" organised` : `Marked "${updated.title}" not organised`,
+        { organised },
+        id,
+      );
+      return { ok: true, organised, organisedAt: updated.organisedAt };
+    },
   );
 }

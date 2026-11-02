@@ -177,13 +177,11 @@ and partly re-imported, which a full backup cannot.
 
 ## Order
 
-1 → 2 → 6 → 7 → 9
+1 → 2 → 6 → 7
 
 - **Phases 1–2** are done.
-- **Phase 6 next.** Filters, the Organised flag and the O-counter work on the
-  library as it is, with no tagging needed first.
-- **Phases 7 and 9 last.** Phase 7 is only worth doing if some videos have
-  subtitle files beside them.
+- **Phases 6 and 7** are built (see Progress).
+- **Phase 9** was dropped.
 
 ## Decisions
 
@@ -198,7 +196,12 @@ and partly re-imported, which a full backup cannot.
 
 - **Phase 1** — done, commit `b643a7c`.
 - **Phase 2** — done, commit `b7157ef`.
-- **Phase 6** — next.
+- **Phase 6** — built, not yet committed: organised flag, O-counter, new
+  smart-collection rules, bitrate in the scan (migration 0051).
+- **Phase 7** — built, not yet committed. The subtitle key is `S`, not `C`,
+  which is already cinema mode. Tracks are found by reading the video's folder
+  when asked, so there is no migration.
+- **Phase 9** — dropped: a full backup already restores everything.
 
 ## Picking this up on another machine
 

@@ -66,6 +66,7 @@ const browseRoute = createRoute({
     tags?: string;
     performers?: string;
     watched?: string;
+    organised?: string;
     favorite?: string;
     minDuration?: number;
     maxDuration?: number;
@@ -90,6 +91,8 @@ const browseRoute = createRoute({
     performers:
       typeof search.performers === "string" ? search.performers : undefined,
     watched: typeof search.watched === "string" ? search.watched : undefined,
+    organised:
+      typeof search.organised === "string" ? search.organised : undefined,
     favorite: typeof search.favorite === "string" ? search.favorite : undefined,
     minDuration:
       search.minDuration != null ? Number(search.minDuration) : undefined,

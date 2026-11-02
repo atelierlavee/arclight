@@ -14,7 +14,7 @@ import {
 } from "../db/schema.js";
 import { playbackWarningFor } from "../media/compatibility.js";
 import { ageOn } from "./performerDetails.js";
-import { itemIsFavorite, itemRating } from "../library/profileState.js";
+import { itemIsFavorite, itemOCount, itemRating } from "../library/profileState.js";
 
 export const PAGE_SIZE = 50;
 
@@ -295,6 +295,8 @@ export const itemColumnsFor = (profileId: number) => ({
   thumbnailScale: mediaItems.thumbnailScale,
   tileShape: mediaItems.tileShape,
   rating: itemRating(profileId, mediaItems.id),
+  organisedAt: mediaItems.organisedAt,
+  oCount: itemOCount(profileId, mediaItems.id),
   durationSeconds: mediaItems.durationSeconds,
   takenAt: mediaItems.takenAt,
   releaseDate: mediaItems.releaseDate,

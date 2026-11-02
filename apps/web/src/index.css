@@ -303,6 +303,12 @@
     animation-delay: 200ms;
   }
 
+  /* Tiles that arrive by view transition (the album stack opening) morph in
+     from the stack; the fade-up would fight that. */
+  .stagger > [data-vt] {
+    animation: none;
+  }
+
   .skeleton {
     background-image: linear-gradient(
       90deg,
@@ -589,5 +595,19 @@ video.custom-seek::-webkit-media-controls-timeline {
   100% {
     opacity: 0;
     transform: translate(var(--cx), var(--cy)) scale(0.4);
+  }
+}
+
+/* The album stack unfolding into its grid. Slower than the default 250ms so
+   the sheets can be seen fanning out; the rest of the page just crossfades. */
+::view-transition-group(*) {
+  animation-duration: 450ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
   }
 }

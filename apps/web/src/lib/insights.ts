@@ -8,6 +8,8 @@
  */
 
 export type WatchLogEntry = { mediaItemId: number; hour: string; seconds: number };
+/** One count of one video, with when. */
+export type OLogEntry = { mediaItemId: number; at: string };
 export type InsightItem = {
   id: number;
   title: string;
@@ -18,6 +20,8 @@ export type InsightItem = {
   playCount: number;
   completedAt: string | null;
   performerIds: number[];
+  /** This profile's count. Optional so older payloads still parse. */
+  oCount?: number;
 };
 export type InsightPerformer = {
   id: number;
@@ -40,6 +44,8 @@ export type Insights = {
   items: InsightItem[];
   performers: InsightPerformer[];
   studios: InsightStudio[];
+  /** Every count with its time. Optional so older payloads still parse. */
+  oLog?: OLogEntry[];
   /** Saved bookmarks across the library. Optional so older payloads still parse. */
   bookmarkCount?: number;
 };
@@ -274,6 +280,45 @@ export function hallOfFame(data: Insights, size = 6): HallOfFame {
   };
 }
 
+export type TallyRow = { id: number; name: string; count: number };
+
+/**
+ * The O-counter, summed up: the total, how many days it was used on, and the
+ * most-counted videos and performers. Worked out from the event log rather
+ * than the per-item tallies so the days are in the viewer's own time zone.
+ */
+export function tallySummary(data: Insights, top = 5) {
+  const log = data.oLog ?? [];
+  const byItem = new Map<number, number>();
+  const days = new Set<string>();
+  for (const entry of log) {
+    byItem.set(entry.mediaItemId, (byItem.get(entry.mediaItemId) ?? 0) + 1);
+    days.add(localDay(new Date(entry.at)));
+  }
+
+  const itemsById = new Map(data.items.map((item) => [item.id, item]));
+  const videos: TallyRow[] = [...byItem]
+    .map(([id, count]) => ({ id, name: itemsById.get(id)?.title ?? "Untitled", count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, top);
+
+  // Each count credits every performer on the video it was on.
+  const byPerformer = new Map<number, number>();
+  for (const [id, count] of byItem) {
+    for (const performerId of itemsById.get(id)?.performerIds ?? []) {
+      byPerformer.set(performerId, (byPerformer.get(performerId) ?? 0) + count);
+    }
+  }
+  const namesById = new Map(data.performers.map((performer) => [performer.id, performer.name]));
+  const performers: TallyRow[] = [...byPerformer]
+    .filter(([id]) => namesById.has(id))
+    .map(([id, count]) => ({ id, name: namesById.get(id)!, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, top);
+
+  return { total: log.length, activeDays: days.size, videoCount: byItem.size, videos, performers };
+}
+
 export type Achievement = {
   id: string;
   title: string;
@@ -473,6 +518,11 @@ export function achievements(data: Insights, today: string): Achievement[] {
       ["moments-t1", "Moment keeper", "Save 10 bookmarks.", 10],
       ["moments-t2", "Scrapbooker", "Save 50 bookmarks.", 50],
       ["moments-t3", "Archivist", "Save 100 bookmarks.", 100],
+    ]),
+    ...tiers("counter", data.oLog?.length ?? 0, count_, [
+      ["counter-t1", "First count", "Use the counter ten times.", 10],
+      ["counter-t2", "Tally keeper", "Use the counter 50 times.", 50],
+      ["counter-t3", "Century count", "Use the counter 100 times.", 100],
     ]),
     ...tiers("videos", finished.length, count_, [
       ["videos-t1", "Getting started", "Finish 10 videos.", 10],

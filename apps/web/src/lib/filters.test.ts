@@ -128,3 +128,19 @@ describe("filtersFromSearch", () => {
     expect("studio" in filtersToSearch(EMPTY_FILTERS)).toBe(true);
   });
 });
+
+describe("organised filter", () => {
+  it("is tri-state like watched: false is its own request", () => {
+    expect(filterParams({ ...EMPTY_FILTERS, organised: false }).get("organised")).toBe("false");
+    expect(filterParams({ ...EMPTY_FILTERS, organised: true }).get("organised")).toBe("true");
+    expect(filterParams(EMPTY_FILTERS).has("organised")).toBe(false);
+  });
+
+  it("has a chip that removes only itself, and survives the URL", () => {
+    const filters: Filters = { ...EMPTY_FILTERS, organised: false, favorite: true };
+    const chip = activeFilterChips(filters).find((c) => c.label === "Not organised");
+    expect(chip?.without).toMatchObject({ organised: undefined, favorite: true });
+    expect(filtersFromSearch(filtersToSearch(filters)).organised).toBe(false);
+    expect(filtersFromSearch({ organised: "maybe" }).organised).toBeUndefined();
+  });
+});

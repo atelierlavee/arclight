@@ -7,6 +7,7 @@ import {
   Clock,
   Coffee,
   Compass,
+  Droplets,
   Film,
   Flame,
   Hourglass,
@@ -51,6 +52,7 @@ const FAMILY_ICONS: Record<string, LucideIcon> = {
   explorer: Compass,
   people: Users,
   moments: Bookmark,
+  counter: Droplets,
   videos: Film,
   "active-days": CalendarCheck,
 };

@@ -6,6 +6,8 @@ export type AlbumSummary = {
   photoCount: number;
   coverItemId: number | null;
   videoItemId: number | null;
+  /** The first few photos, for the stack on the albums page. */
+  previewItemIds?: number[];
   /** Cover framing. Defaults are 50 / 50 / 100 — centred and unzoomed. */
   coverPositionX: number;
   coverPositionY: number;

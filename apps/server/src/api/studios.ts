@@ -15,9 +15,10 @@ import { isUniqueViolation } from "../db/errors.js";
 import { studioDescendantIds, studioIdsUnder } from "../library/hierarchy.js";
 import { normalizeName } from "../scanner/performerNames.js";
 
+import { serialized } from "../auth/serialize.js";
 import { profileId } from "../auth/profileContext.js";
 import { performerIsFavorite } from "../library/profileState.js";
-import { playbackJoin } from "./mediaItemQueries.js";
+import { isId, playbackJoin } from "./mediaItemQueries.js";
 /**
  * Studios: who released a scene, derived from the filename's leading
  * [Studio] tag or the folder above it.
@@ -266,7 +267,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
     }
     const parentId = request.body?.parentId ?? null;
     if (parentId !== null) {
-      const [parent] = Number.isInteger(parentId)
+      const [parent] = isId(parentId)
         ? await db.select({ id: studios.id }).from(studios).where(eq(studios.id, parentId))
         : [];
       if (!parent) {
@@ -298,7 +299,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
   /** Which network a studio belongs to; null takes it out of one. */
   app.patch<{ Params: { id: string }; Body: { parentId?: number | null } }>(
     "/api/studios/:id",
-    async (request, reply) => {
+    async (request, reply) => serialized("hierarchy", async () => {
       const id = Number(request.params.id);
       const [studio] = Number.isInteger(id)
         ? await db.select().from(studios).where(eq(studios.id, id))
@@ -311,7 +312,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
 
       const parentId = body.parentId;
       if (parentId !== undefined && parentId !== null) {
-        if (!Number.isInteger(parentId)) {
+        if (!isId(parentId)) {
           reply.code(400);
           return { error: "parentId must be a studio id or null" };
         }
@@ -338,7 +339,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
 
       await db.update(studios).set({ parentId }).where(eq(studios.id, id));
       return { ok: true };
-    },
+    }),
   );
 }
 

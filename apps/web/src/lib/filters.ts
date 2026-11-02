@@ -19,6 +19,8 @@ export type Filters = {
   kind?: string;
   year?: number;
   watched?: boolean;
+  /** Tri-state like `watched`: true is organised only, false is "not organised". */
+  organised?: boolean;
   favorite?: boolean;
   /** Seconds. */
   minDuration?: number;
@@ -147,6 +149,11 @@ export function activeFilterChips(filters: Filters): FilterChip[] {
       label: filters.watched ? "Watched" : "Unwatched",
       without: { ...filters, watched: undefined },
     });
+  if (filters.organised !== undefined)
+    chips.push({
+      label: filters.organised ? "Organised" : "Not organised",
+      without: { ...filters, organised: undefined },
+    });
   if (filters.favorite)
     chips.push({
       label: "Favourites",
@@ -221,6 +228,8 @@ export function filterParams(filters: Filters): URLSearchParams {
   if (filters.year !== undefined) params.set("year", String(filters.year));
   if (filters.watched !== undefined)
     params.set("watched", String(filters.watched));
+  if (filters.organised !== undefined)
+    params.set("organised", String(filters.organised));
   if (filters.favorite) params.set("favorite", "true");
   if (filters.minDuration !== undefined)
     params.set("minDuration", String(filters.minDuration));
@@ -280,6 +289,12 @@ export function filtersFromSearch(search: Record<string, unknown>): Filters {
         : search.watched === "false" || search.watched === false
           ? false
           : undefined,
+    organised:
+      search.organised === "true" || search.organised === true
+        ? true
+        : search.organised === "false" || search.organised === false
+          ? false
+          : undefined,
     favorite: search.favorite === "true" || search.favorite === true,
     minDuration: readNumber(search.minDuration),
     maxDuration: readNumber(search.maxDuration),
@@ -308,6 +323,8 @@ export function filtersToSearch(filters: Filters): Record<string, unknown> {
     kind: filters.kind,
     year: filters.year,
     watched: filters.watched === undefined ? undefined : String(filters.watched),
+    organised:
+      filters.organised === undefined ? undefined : String(filters.organised),
     favorite: filters.favorite ? "true" : undefined,
     minDuration: filters.minDuration,
     maxDuration: filters.maxDuration,

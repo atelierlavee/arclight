@@ -16,7 +16,7 @@ import {
   series,
   studios,
 } from "../db/schema.js";
-import { probeVideo } from "../metadata/videoProbe.js";
+import { probeMetadata, probeVideo } from "../metadata/videoProbe.js";
 import { probePhoto } from "../metadata/photoExif.js";
 import { ensurePosterFrame, generatePosterFrame } from "../media/poster.js";
 import { ensurePreviewClip } from "../media/preview.js";
@@ -400,13 +400,7 @@ async function processFile(
   if (kind === "video") {
     const probe = await probeVideo(filePath);
     durationSeconds = probe.durationSeconds;
-    extraMetadata = {
-      width: probe.width,
-      height: probe.height,
-      codec: probe.codec,
-      containerFormat: probe.containerFormat,
-      embeddedTitle: probe.embeddedTitle,
-    };
+    extraMetadata = probeMetadata(probe);
   } else {
     const exif = await probePhoto(filePath);
     takenAt = exif.takenAt;
@@ -545,11 +539,7 @@ async function reprobeVideo(mediaItemId: number, filePath: string): Promise<void
       durationSeconds: probe.durationSeconds,
       extraMetadata: {
         ...((item.extraMetadata as Record<string, unknown> | null) ?? {}),
-        width: probe.width,
-        height: probe.height,
-        codec: probe.codec,
-        containerFormat: probe.containerFormat,
-        embeddedTitle: probe.embeddedTitle,
+        ...probeMetadata(probe),
       },
       updatedAt: new Date(),
     })
@@ -1065,15 +1055,30 @@ async function ensureArtworkForItem(
           durationSeconds,
           extraMetadata: {
             ...((item.extraMetadata as Record<string, unknown> | null) ?? {}),
-            width: probe.width,
-            height: probe.height,
-            codec: probe.codec,
-            containerFormat: probe.containerFormat,
-            embeddedTitle: probe.embeddedTitle,
+            ...probeMetadata(probe),
           },
         })
         .where(eq(mediaItems.id, mediaItemId));
     }
+  } else if (
+    item.extraMetadata !== null &&
+    typeof item.extraMetadata === "object" &&
+    "codec" in item.extraMetadata &&
+    !("bitrateKbps" in item.extraMetadata)
+  ) {
+    // Videos scanned before bitrate was recorded: filled in once, so the
+    // bitrate rule works on an existing library without a full re-probe. The
+    // key is written even when unknown, which is what stops a retry per scan.
+    const probe = await probeVideo(filePath);
+    await db
+      .update(mediaItems)
+      .set({
+        extraMetadata: {
+          ...(item.extraMetadata as Record<string, unknown>),
+          bitrateKbps: probe.bitrateKbps,
+        },
+      })
+      .where(eq(mediaItems.id, mediaItemId));
   }
 
   await ensurePosterFrame(filePath, mediaItemId, contentHash, durationSeconds);

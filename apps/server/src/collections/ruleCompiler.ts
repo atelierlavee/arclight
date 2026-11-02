@@ -1,7 +1,14 @@
 import { and, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
-import { taggedUnder } from "../library/hierarchy.js";
-import { mediaItems, mediaItemTypes, playbackStates } from "../db/schema.js";
-import { itemIsFavorite, itemRating } from "../library/profileState.js";
+import { studioIdsUnderName, taggedUnder } from "../library/hierarchy.js";
+import {
+  mediaItemPerformers,
+  mediaItems,
+  mediaItemTypes,
+  performers,
+  playbackStates,
+} from "../db/schema.js";
+import { itemIsFavorite, itemOCount, itemRating } from "../library/profileState.js";
+import { RESOLUTIONS } from "../api/mediaItemQueries.js";
 
 export type SmartCondition =
   | { field: "tags"; op: "contains"; value: string }
@@ -14,7 +21,34 @@ export type SmartCondition =
   | { field: "watched"; op: "eq"; value: boolean }
   | { field: "playCount"; op: "gte"; value: number }
   | { field: "durationMinutes"; op: "gte" | "lte"; value: number }
-  | { field: "lastWatched"; op: "older_than_days"; value: number };
+  | { field: "lastWatched"; op: "older_than_days"; value: number }
+  | { field: "resolution"; op: "eq"; value: ResolutionBand }
+  | { field: "codec"; op: "eq"; value: string }
+  | { field: "bitrateKbps"; op: "gte" | "lte"; value: number }
+  | { field: "organised"; op: "eq"; value: boolean }
+  | { field: "oCount"; op: "gte"; value: number }
+  | { field: "studio"; op: "eq"; value: string }
+  | { field: "performerAge"; op: "gte" | "lte"; value: number }
+  | { field: "performerHeight"; op: "gte" | "lte"; value: number }
+  | { field: "performerAttribute"; attribute: PerformerAttribute; op: "eq"; value: string };
+
+export type ResolutionBand = "sd" | "hd" | "fullhd" | "4k";
+
+/**
+ * The performer text columns a rule may match, by the name the API uses, as
+ * the SQL column on the `p` alias the rule's subquery gives performers. An
+ * allow-list rather than a column name from the request, so a rule can never
+ * name a column of its own choosing; the values are fixed strings, never
+ * built from input.
+ */
+export const PERFORMER_ATTRIBUTES = {
+  gender: "gender",
+  country: "country",
+  ethnicity: "ethnicity",
+  hairColor: "hair_color",
+  eyeColor: "eye_color",
+} as const;
+export type PerformerAttribute = keyof typeof PERFORMER_ATTRIBUTES;
 
 export type SmartRule = {
   op: "AND" | "OR";
@@ -81,6 +115,65 @@ function compileCondition(condition: SmartCondition, profile: number): SQL {
       return condition.op === "gte"
         ? gte(mediaItems.durationSeconds, seconds)
         : lte(mediaItems.durationSeconds, seconds);
+    }
+    case "resolution": {
+      // Same height bands as the browse filter, read from the probe metadata.
+      const band = RESOLUTIONS[condition.value];
+      const height = sql`(${mediaItems.extraMetadata} ->> 'height')::int`;
+      return band.max === null
+        ? sql`${height} >= ${band.min}`
+        : sql`(${height} >= ${band.min} and ${height} < ${band.max})`;
+    }
+    case "codec": {
+      return sql`lower(${mediaItems.extraMetadata} ->> 'codec') = lower(${condition.value})`;
+    }
+    case "bitrateKbps": {
+      // Unprobed or unknown (null) fails both ends, as unrated fails a rating rule.
+      const bitrate = sql`(${mediaItems.extraMetadata} ->> 'bitrateKbps')::int`;
+      return condition.op === "gte"
+        ? sql`${bitrate} >= ${condition.value}`
+        : sql`${bitrate} <= ${condition.value}`;
+    }
+    case "organised": {
+      return condition.value
+        ? sql`${mediaItems.organisedAt} is not null`
+        : sql`${mediaItems.organisedAt} is null`;
+    }
+    case "oCount": {
+      return gte(itemOCount(profile, mediaItems.id), condition.value);
+    }
+    case "studio": {
+      // The studio and every site under it, like the browse filter.
+      return sql`${mediaItems.studioId} in ${studioIdsUnderName(condition.value)}`;
+    }
+    case "performerAge": {
+      // Any credited performer who was this age on the release date. An item
+      // with no release date, or a performer with no birthdate, cannot say.
+      const age = sql`extract(year from age(${mediaItems.releaseDate}, p.birthdate))`;
+      return sql`exists (
+        select 1 from ${mediaItemPerformers} mip
+        join ${performers} p on p.id = mip.performer_id
+        where mip.media_item_id = ${mediaItems.id}
+          and ${mediaItems.releaseDate} is not null and p.birthdate is not null
+          and ${condition.op === "gte" ? sql`${age} >= ${condition.value}` : sql`${age} <= ${condition.value}`}
+      )`;
+    }
+    case "performerHeight": {
+      return sql`exists (
+        select 1 from ${mediaItemPerformers} mip
+        join ${performers} p on p.id = mip.performer_id
+        where mip.media_item_id = ${mediaItems.id} and p.height_cm is not null
+          and ${condition.op === "gte" ? sql`p.height_cm >= ${condition.value}` : sql`p.height_cm <= ${condition.value}`}
+      )`;
+    }
+    case "performerAttribute": {
+      const column = sql.raw(`p.${PERFORMER_ATTRIBUTES[condition.attribute]}`);
+      return sql`exists (
+        select 1 from ${mediaItemPerformers} mip
+        join ${performers} p on p.id = mip.performer_id
+        where mip.media_item_id = ${mediaItems.id}
+          and lower(${column}) = lower(${condition.value})
+      )`;
     }
     case "lastWatched": {
       // Played at some point, and not since the cutoff. A never-played item
@@ -154,6 +247,32 @@ export function smartRuleError(rule: unknown): string | null {
           return (c.op === "gte" || c.op === "lte") && isWholeNumber(c.value, 1, 100000);
         case "lastWatched":
           return c.op === "older_than_days" && isWholeNumber(c.value, 1, 36500);
+        case "resolution":
+          return c.op === "eq" && typeof c.value === "string" && Object.hasOwn(RESOLUTIONS, c.value);
+        case "codec":
+        case "studio":
+          return c.op === "eq" && typeof c.value === "string" && c.value.trim() !== "" && c.value.length <= 100;
+        case "bitrateKbps":
+          return (c.op === "gte" || c.op === "lte") && isWholeNumber(c.value, 1, 10_000_000);
+        case "organised":
+          return c.op === "eq" && typeof c.value === "boolean";
+        case "oCount":
+          return c.op === "gte" && isWholeNumber(c.value, 1, 100000);
+        case "performerAge":
+          return (c.op === "gte" || c.op === "lte") && isWholeNumber(c.value, 1, 120);
+        case "performerHeight":
+          return (c.op === "gte" || c.op === "lte") && isWholeNumber(c.value, 50, 300);
+        case "performerAttribute": {
+          const attribute = (c as { attribute?: unknown }).attribute;
+          return (
+            typeof attribute === "string" &&
+            Object.hasOwn(PERFORMER_ATTRIBUTES, attribute) &&
+            c.op === "eq" &&
+            typeof c.value === "string" &&
+            c.value.trim() !== "" &&
+            c.value.length <= 100
+          );
+        }
         default:
           return false;
       }

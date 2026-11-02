@@ -22,6 +22,7 @@ import { MilestonesTimeline } from "./stats/MilestonesTimeline";
 import { Opening } from "./stats/Opening";
 import { Podium } from "./stats/Podium";
 import { Records } from "./stats/Records";
+import { Tally } from "./stats/Tally";
 import { libraryReach, totalSeconds } from "./stats/statsData";
 import { Trophies } from "./stats/Trophies";
 import { useHeadline } from "./stats/useHeadline";
@@ -87,6 +88,7 @@ function StatsStory({
   const hall = useMemo(() => hallOfFame(data), [data]);
   const headline = useHeadline(data, hall.mainEvent);
   const hasHistory = total >= 60;
+  const hasTally = (data.oLog?.length ?? 0) > 0;
   // Shared with the app-wide unlock watcher, which keeps it current.
   const { data: record } = useQuery({ queryKey: qk.achievements, queryFn: fetchAchievements, staleTime: Infinity });
 
@@ -145,7 +147,20 @@ function StatsStory({
           </Chapter>
         )}
 
-        <Chapter id="trophies" number={hasHistory ? "06" : "03"} title="Trophies" kicker="Achievements">
+        {/* Only once the counter has been used: an empty tally is not a goal
+            the way an empty calendar is. */}
+        {hasTally && (
+          <Chapter number={hasHistory ? "06" : "03"} title="The count" kicker="Your tally">
+            <Tally data={data} onOpenItem={onOpenItem} />
+          </Chapter>
+        )}
+
+        <Chapter
+          id="trophies"
+          number={String((hasHistory ? 6 : 3) + (hasTally ? 1 : 0)).padStart(2, "0")}
+          title="Trophies"
+          kicker="Achievements"
+        >
           <Trophies list={achievements(data, today)} unlocked={record?.unlocked ?? {}} />
         </Chapter>
       </div>

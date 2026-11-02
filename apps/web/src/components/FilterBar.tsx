@@ -10,6 +10,7 @@ import {
 } from "@/lib/filters";
 import { cn } from "@/lib/utils";
 import { qk } from "@/lib/queryKeys";
+import { useIsOwner } from "@/lib/profile";
 
 type NamedRow = { id: number; name: string };
 
@@ -85,6 +86,7 @@ export function FilterMenu({
   onChange: (next: Filters) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const isOwner = useIsOwner();
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -198,6 +200,35 @@ export function FilterMenu({
                   Favourites
                 </Choice>
               </Group>
+
+              {/* Marking things organised is the owner's, so the working list
+                  for it is theirs too. */}
+              {isOwner && (
+                <Group label="Metadata">
+                  <Choice
+                    active={filters.organised === false}
+                    onClick={() =>
+                      onChange({
+                        ...filters,
+                        organised: filters.organised === false ? undefined : false,
+                      })
+                    }
+                  >
+                    Not organised
+                  </Choice>
+                  <Choice
+                    active={filters.organised === true}
+                    onClick={() =>
+                      onChange({
+                        ...filters,
+                        organised: filters.organised === true ? undefined : true,
+                      })
+                    }
+                  >
+                    Organised
+                  </Choice>
+                </Group>
+              )}
 
               <Group label="Rating">
                 {[5, 4, 3, 2].map((stars) => (

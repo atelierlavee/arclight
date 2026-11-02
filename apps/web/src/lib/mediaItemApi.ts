@@ -65,6 +65,10 @@ export type MediaItemDetail = {
   seasonNumber: number | null;
   episodeNumber: number | null;
   episodeTitle: string | null;
+  /** When the owner marked it organised, or null. Library-wide. */
+  organisedAt: string | null;
+  /** How many times the current profile has counted it. */
+  oCount: number;
   /** Detail responses only — the source file's own dates and size. */
   fileModifiedAt?: string | null;
   fileSizeBytes?: number | null;
@@ -241,6 +245,30 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
     body: JSON.stringify({ watched }),
   });
   if (!res.ok) throw new Error(`Failed to update watched state: ${res.status}`);
+}
+
+/** Marks an item organised, or takes the mark back. Owner only. */
+export async function setOrganised(id: number, organised: boolean): Promise<void> {
+  const res = await fetch(`/api/media-items/${id}/organised`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ organised }),
+  });
+  if (!res.ok) throw new Error(`Failed to update organised state: ${res.status}`);
+}
+
+/** Adds one to the current profile's O-count; resolves to the new total. */
+export async function addO(id: number): Promise<number> {
+  const res = await fetch(`/api/media-items/${id}/o`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to count: ${res.status}`);
+  return ((await res.json()) as { oCount: number }).oCount;
+}
+
+/** Takes back the most recent count; resolves to the new total. */
+export async function removeO(id: number): Promise<number> {
+  const res = await fetch(`/api/media-items/${id}/o`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Failed to undo the count: ${res.status}`);
+  return ((await res.json()) as { oCount: number }).oCount;
 }
 
 export async function hideItem(id: number, hidden: boolean): Promise<void> {

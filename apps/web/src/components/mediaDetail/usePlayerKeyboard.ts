@@ -19,6 +19,8 @@ export type PlayerKeyboardOptions = {
   toggleMuted: () => void;
   togglePictureInPicture: () => Promise<void>;
   addBookmark: () => void;
+  countO: () => void;
+  cycleSubtitles: () => void;
   jumpToBestPart: () => void;
   seekTo: (seconds: number) => void;
 };
@@ -48,6 +50,8 @@ export function usePlayerKeyboard(options: PlayerKeyboardOptions) {
       toggleMuted,
       togglePictureInPicture,
       addBookmark,
+      countO,
+      cycleSubtitles,
       jumpToBestPart,
       seekTo,
     } = options;
@@ -92,6 +96,8 @@ export function usePlayerKeyboard(options: PlayerKeyboardOptions) {
         e.key !== "c" &&
         e.key !== "i" &&
         e.key !== "b" &&
+        e.key !== "o" &&
+        e.key !== "s" &&
         e.key !== "h" &&
         !isDigitKey(e.key)
       )
@@ -136,6 +142,12 @@ export function usePlayerKeyboard(options: PlayerKeyboardOptions) {
           break;
         case "b":
           addBookmark();
+          break;
+        case "o":
+          countO();
+          break;
+        case "s":
+          cycleSubtitles();
           break;
         case "h":
           jumpToBestPart();

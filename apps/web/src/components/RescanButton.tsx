@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
-import { fetchScanJob, invalidateAfterScan, startScan } from "@/lib/scanApi";
+import {
+  fetchLatestScanJob,
+  fetchScanJob,
+  invalidateAfterScan,
+  startScan,
+} from "@/lib/scanApi";
 import { qk } from "@/lib/queryKeys";
 
 export function RescanButton() {
@@ -18,6 +23,21 @@ export function RescanButton() {
       setBackground(false);
     },
   });
+
+  // Re-attaches to a scan this component did not start, or lost track of when
+  // it remounted — otherwise hiding the progress and leaving the page left no
+  // way to bring it back. Polls only while nothing is tracked, to notice a
+  // scan started elsewhere (the auto-check, the command palette).
+  const { data: latest } = useQuery({
+    queryKey: qk.scanLatest,
+    queryFn: fetchLatestScanJob,
+    refetchInterval: jobId === null ? 5000 : false,
+  });
+  useEffect(() => {
+    if (jobId === null && latest?.job?.status === "running") {
+      setJobId(latest.job.id);
+    }
+  }, [jobId, latest]);
 
   const { data: job } = useQuery({
     queryKey: qk.scanJob(jobId),

@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil } from "lucide-react";
+import { Globe, Pencil } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { StashDbLookupDialog } from "./StashDbLookupDialog";
+import { fetchStashDbStatus } from "@/lib/stashdbApi";
+import { qk } from "@/lib/queryKeys";
 import { EditDialog, SaveButton } from "./EditDialog";
 import { EDIT_INPUT } from "@/lib/editForm";
 import {
@@ -61,7 +65,14 @@ function knownFacts(performer: PerformerDetail): [string, string][] {
  */
 export function PerformerFacts({ performer }: { performer: PerformerDetail }) {
   const [editing, setEditing] = useState(false);
+  const [lookingUp, setLookingUp] = useState(false);
   const isOwner = useIsOwner();
+  // Only asked of the owner, and the button only appears once a key is saved.
+  const { data: stashDb } = useQuery({
+    queryKey: qk.stashDbStatus,
+    queryFn: fetchStashDbStatus,
+    enabled: isOwner,
+  });
   const facts = knownFacts(performer);
   const empty = facts.length === 0;
 
@@ -83,16 +94,29 @@ export function PerformerFacts({ performer }: { performer: PerformerDetail }) {
       )}
 
       {isOwner && (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <Pencil className="size-3" />
-          {empty ? "Add details" : "Edit details"}
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Pencil className="size-3" />
+            {empty ? "Add details" : "Edit details"}
+          </button>
+          {stashDb?.configured && (
+            <button
+              type="button"
+              onClick={() => setLookingUp(true)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Globe className="size-3" />
+              Look up on StashDB
+            </button>
+          )}
+        </div>
       )}
 
+      {lookingUp && <StashDbLookupDialog performer={performer} onClose={() => setLookingUp(false)} />}
       {editing && <PerformerFactsDialog performer={performer} onClose={() => setEditing(false)} />}
     </div>
   );

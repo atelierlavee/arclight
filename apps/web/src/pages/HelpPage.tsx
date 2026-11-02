@@ -122,6 +122,13 @@ export function HelpPage() {
           <Row keys={["Q"]}>
             Show or hide the queue beside the player, whatever is in it.
           </Row>
+          <Row keys={["S"]}>
+            Subtitles: off, then each subtitle file beside the video in turn.
+            The button only appears when the video has one.
+          </Row>
+          <Row keys={["O"]}>
+            Count one on the video that's playing. A toast offers an undo.
+          </Row>
           <Row keys={["Esc"]}>Close the video. Your position is saved.</Row>
         </Group>
 

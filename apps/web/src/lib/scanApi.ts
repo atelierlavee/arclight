@@ -27,6 +27,19 @@ export async function fetchScanJob(id: number): Promise<ScanJob> {
 }
 
 /**
+ * The most recent scan, running or not. Lets a component that never started
+ * the scan (a remounted settings page, a reload, the auto-check, the command
+ * palette) find one in flight and show its progress.
+ */
+export async function fetchLatestScanJob(): Promise<{ job: ScanJob | null }> {
+  const res = await fetch("/api/scan/latest");
+  if (!res.ok) {
+    throw new Error(`Failed to fetch latest scan: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
  * Everything a finished scan can change.
  *
  * A scan can add items, reassign performers and studios, assign albums and

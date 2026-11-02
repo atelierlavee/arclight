@@ -1,53 +1,47 @@
+import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Images } from "lucide-react";
+import { AlbumStack } from "@/components/AlbumStack";
 import { AppShell } from "@/components/AppShell";
 import { PageScope } from "@/lib/appearance";
-import { coverFramingStyle, fetchAlbums, type AlbumSummary } from "@/lib/albumApi";
-import { thumbnailUrl } from "@/lib/mediaItemApi";
-import { cn } from "@/lib/utils";
+import { fetchAlbums, type AlbumSummary } from "@/lib/albumApi";
 import { qk } from "@/lib/queryKeys";
+import { albumTransition } from "@/lib/albumTransition";
 
 function AlbumCard({ album }: { album: AlbumSummary }) {
-  const framing = coverFramingStyle(album);
+  // Set on click, flushed before the router navigates, so the old page's
+  // snapshot already carries the transition names (see AlbumStack).
+  //
+  // Also on for the card of the album just left, so the transition back has
+  // something to fold into; cleared once that has played, because names must
+  // stay unique and the next album opened sets its own.
+  const [opening, setOpening] = useState(() => albumTransition.returningId === album.id);
+  useEffect(() => {
+    if (albumTransition.returningId !== album.id) return;
+    const timer = setTimeout(() => {
+      albumTransition.returningId = null;
+      setOpening(false);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [album.id]);
   return (
     <Link
       to="/album/$albumId"
       params={{ albumId: String(album.id) }}
+      viewTransition
+      onClick={() => {
+        albumTransition.returningId = null;
+        flushSync(() => setOpening(true));
+      }}
       className="motion-card group block rounded-lg focus-visible:outline-none"
     >
-      {/* 3:2, matching the photos themselves (3000x2000). At 16:9 every cover
-          lost its top and bottom to the crop. */}
-      <div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg bg-secondary ring-1 ring-border transition-all duration-200 group-hover:ring-white/40">
-        {album.coverItemId != null ? (
-          <img
-            src={thumbnailUrl({ id: album.coverItemId })}
-            alt=""
-            loading="lazy"
-            style={framing}
-            className={cn(
-              "h-full w-full object-cover transition-transform duration-300",
-              // The framing sets its own transform, and an inline style beats
-              // a class — so the hover zoom only applies where there's no
-              // chosen framing for it to fight with.
-              !framing && "group-hover:scale-[1.03]"
-            )}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <Images className="size-8 text-muted-foreground" />
-          </div>
-        )}
-
-        <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
-          <Images className="size-3" />
-          {album.photoCount}
-        </span>
-      </div>
+      {/* 3:2, matching the photos themselves (3000x2000). */}
+      <AlbumStack album={album} opening={opening} />
 
       {/* Below the cover rather than overlaid: a gradient dark enough to hold
           text covers the part of the photo you are choosing between. */}
-      <div className="mt-2 space-y-0.5">
+      <div className="mt-3 space-y-0.5">
         <h3 className="sensitive truncate text-sm font-medium leading-snug group-hover:underline">
           {album.title}
         </h3>
@@ -70,7 +64,7 @@ export function AlbumsPage() {
       <AppShell title="Albums" subtitle="Photo sets that came with your videos.">
         <div className="px-4 py-6 md:px-6">
           {isLoading ? (
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="skeleton aspect-[3/2] rounded-lg" />
               ))}
@@ -80,7 +74,7 @@ export function AlbumsPage() {
               No albums yet — a folder of images next to a video becomes one automatically.
             </p>
           ) : (
-            <div className="stagger grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="stagger grid grid-cols-2 gap-x-14 gap-y-16 md:grid-cols-4 lg:grid-cols-6">
               {albums.map((album) => (
                 <AlbumCard key={album.id} album={album} />
               ))}

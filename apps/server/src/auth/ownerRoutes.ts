@@ -49,10 +49,16 @@ export const OWNER_ONLY_ROUTES: ReadonlySet<string> = new Set([
   // Site settings: hero, scan interval, LAN exposure.
   "PATCH /api/settings",
 
+  // StashDB lookups, which spend the owner's API key.
+  "GET /api/stashdb",
+  "GET /api/stashdb/performers",
+  "GET /api/stashdb/scenes",
+
   // Metadata and artwork.
   "PUT /api/media-items/:id/performers",
   "PUT /api/media-items/:id/tags",
   "PATCH /api/tags/:id",
+  "PUT /api/media-items/:id/organised",
   "POST /api/studios",
   "PATCH /api/studios/:id",
   "POST /api/media-items/:id/thumbnail",
@@ -119,6 +125,8 @@ export const PROFILE_ROUTES: Readonly<Record<string, string>> = {
   "PATCH /api/bookmarks/:id": "per-profile bookmarks",
   "DELETE /api/bookmarks/:id": "per-profile bookmarks",
   "POST /api/achievements/unlock": "per-profile trophies",
+  "POST /api/media-items/:id/o": "per-profile O-counter",
+  "DELETE /api/media-items/:id/o": "per-profile O-counter undo",
   "PATCH /api/media-items/:id":
     "mixed: isFavorite/rating are per profile; every metadata field is refused for non-owners in the handler (OWNER_FIELDS)",
   "PATCH /api/performers/:id":

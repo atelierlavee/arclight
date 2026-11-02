@@ -3,10 +3,11 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { mediaItemTags, mediaItems, tagParents, tags } from "../db/schema.js";
 import { logActivity } from "../activity/log.js";
+import { serialized } from "../auth/serialize.js";
 import { profileId } from "../auth/profileContext.js";
 import { tagDescendantIds } from "../library/hierarchy.js";
 import { visibleItems } from "../library/visibility.js";
-import { parseId } from "./mediaItemQueries.js";
+import { isId, parseId } from "./mediaItemQueries.js";
 
 /** Generous for a tag editor, small enough that one request can't create thousands of rows. */
 const MAX_TAGS = 200;
@@ -59,7 +60,7 @@ export async function tagRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{
     Params: { id: string };
     Body: { description?: string | null; parentIds?: number[] };
-  }>("/api/tags/:id", async (request, reply) => {
+  }>("/api/tags/:id", async (request, reply) => serialized("hierarchy", async () => {
     const id = parseId(request.params.id);
     const [tag] = id === null ? [] : await db.select().from(tags).where(eq(tags.id, id));
     if (!tag) {
@@ -84,7 +85,7 @@ export async function tagRoutes(app: FastifyInstance): Promise<void> {
     let parentIds: number[] | undefined;
     if (body.parentIds !== undefined) {
       const raw = body.parentIds;
-      if (!Array.isArray(raw) || !raw.every((p) => Number.isInteger(p))) {
+      if (!Array.isArray(raw) || !raw.every((p) => isId(p))) {
         reply.code(400);
         return { error: "parentIds must be a list of tag ids" };
       }
@@ -136,7 +137,7 @@ export async function tagRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return { ok: true };
-  });
+  }));
 
   // Replaces the full tag set for an item in one call (rather than separate
   // add/remove endpoints) — matches how a tag editor UI naturally works: you

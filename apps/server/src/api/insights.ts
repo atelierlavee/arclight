@@ -6,6 +6,7 @@ import {
   mediaItemPerformers,
   mediaItems,
   mediaItemTypes,
+  oEvents,
   performers,
   playbackStates,
   studios,
@@ -14,7 +15,7 @@ import {
 import { notHidden, visibleItems } from "../library/visibility.js";
 
 import { profileId } from "../auth/profileContext.js";
-import { itemRating } from "../library/profileState.js";
+import { itemOCount, itemRating } from "../library/profileState.js";
 import { playbackJoin } from "./mediaItemQueries.js";
 /**
  * Everything the Stats page works from, in one read.
@@ -62,6 +63,7 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         thumbnailFile: mediaItems.thumbnailFile,
         durationSeconds: mediaItems.durationSeconds,
         rating: itemRating(profile, mediaItems.id),
+        oCount: itemOCount(profile, mediaItems.id),
         studio: studios.name,
         playCount: sql<number>`coalesce(${playbackStates.playCount}, 0)::int`,
         completedAt: playbackStates.completedAt,
@@ -77,7 +79,8 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
             sql`exists (select 1 from ${watchLog} where ${watchLog.mediaItemId} = ${mediaItems.id} and ${watchLog.profileId} = ${profile})`,
             isNotNull(playbackStates.completedAt),
             sql`${playbackStates.playCount} > 0`,
-            isNotNull(itemRating(profile, mediaItems.id))
+            isNotNull(itemRating(profile, mediaItems.id)),
+            sql`${itemOCount(profile, mediaItems.id)} > 0`
           )
         )
       );
@@ -142,7 +145,18 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
       .innerJoin(mediaItems, and(eq(mediaItems.id, bookmarks.mediaItemId), eq(bookmarks.profileId, profile)))
       .where(notHidden(profile));
 
+    // Each count with its time, for the O-counter section: totals, a calendar,
+    // and "most counted" by video and performer are all worked out from these
+    // in the viewer's own time zone, like the watch log.
+    const oLog = await db
+      .select({ mediaItemId: oEvents.mediaItemId, createdAt: oEvents.createdAt })
+      .from(oEvents)
+      .innerJoin(mediaItems, and(eq(mediaItems.id, oEvents.mediaItemId), eq(oEvents.profileId, profile)))
+      .where(notHidden(profile))
+      .orderBy(oEvents.createdAt);
+
     return {
+      oLog: oLog.map((row) => ({ mediaItemId: row.mediaItemId, at: row.createdAt.toISOString() })),
       log: log.map((row) => ({ ...row, hour: row.hour.toISOString() })),
       items: items.map((item) => ({
         ...item,

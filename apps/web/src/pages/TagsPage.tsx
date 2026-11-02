@@ -24,6 +24,21 @@ export function TagsPage() {
   const ids = new Set(tags.map((tag) => tag.id));
   // A parent that no longer exists does not make a tag disappear.
   const roots = tags.filter((tag) => !tag.parentIds.some((id) => ids.has(id)));
+  // Nor does a loop (a restore can bring one back): every tag in it has a
+  // parent, so none is a root and none would be drawn. Anything the roots
+  // cannot reach is drawn as a root of its own, one per loop.
+  const reached = new Set<number>();
+  const reach = (id: number) => {
+    if (reached.has(id)) return;
+    reached.add(id);
+    tags.filter((tag) => tag.parentIds.includes(id)).forEach((child) => reach(child.id));
+  };
+  roots.forEach((root) => reach(root.id));
+  for (const tag of tags) {
+    if (reached.has(tag.id)) continue;
+    roots.push(tag);
+    reach(tag.id);
+  }
 
   return (
     <AppShell

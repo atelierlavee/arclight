@@ -20,10 +20,12 @@ import { discoveryRoutes } from "./api/discovery.js";
 import { mediaItemDetailRoutes } from "./api/mediaItemDetail.js";
 import { mediaItemEditRoutes } from "./api/mediaItemEdit.js";
 import { mediaRoutes } from "./api/media.js";
+import { oCounterRoutes } from "./api/oCounter.js";
 import { playbackRoutes } from "./api/playback.js";
 import { privacyRoutes } from "./api/privacy.js";
 import { scanRoutes } from "./api/scan.js";
 import { settingsRoutes } from "./api/settings.js";
+import { stashDbRoutes } from "./api/stashdb.js";
 import { missingRoutes } from "./api/missing.js";
 import { statsRoutes } from "./api/stats.js";
 import { seriesRoutes } from "./api/series.js";
@@ -214,6 +216,7 @@ export async function buildApp({
   await app.register(discoveryRoutes);
   await app.register(mediaItemDetailRoutes);
   await app.register(mediaItemEditRoutes);
+  await app.register(oCounterRoutes);
   await app.register(mediaRoutes);
   await app.register(tagRoutes);
   await app.register(appearanceRoutes);
@@ -228,6 +231,7 @@ export async function buildApp({
   await app.register(missingRoutes);
   await app.register(seriesRoutes);
   await app.register(settingsRoutes);
+  await app.register(stashDbRoutes);
   await app.register(libraryRoutes);
   await app.register(backupRoutes);
   await app.register(categoryRoutes);

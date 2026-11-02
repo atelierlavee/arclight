@@ -74,6 +74,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       month?: string;
       seed?: string;
       minRating?: string;
+      organised?: string;
     };
   }>("/api/media-items", async (request, reply) => {
     const profile = profileId(request);
@@ -101,6 +102,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       resolution,
       format,
       addedWithin,
+      organised,
       month,
       seed,
     } = request.query;
@@ -344,6 +346,16 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       );
     }
 
+    // Tri-state like watched: absent means either. "Not organised" is the
+    // working list for going through videos that still need their metadata.
+    const organisedFilter =
+      organised === "true" ? true : organised === "false" ? false : null;
+    if (organisedFilter !== null) {
+      conditions.push(
+        organisedFilter ? isNotNull(mediaItems.organisedAt) : isNull(mediaItems.organisedAt),
+      );
+    }
+
     // Capped for the same reason: make_interval takes an int, and a century
     // covers any library.
     const withinDays = Math.min(Number(addedWithin), 36_500);
@@ -378,6 +390,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       (Number.isFinite(maxSeconds) && maxSeconds > 0) ||
       Boolean(band) ||
       Boolean(format) ||
+      organisedFilter !== null ||
       (Number.isFinite(withinDays) && withinDays > 0);
 
     if (!anyGlobalFilter) {

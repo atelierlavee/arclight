@@ -6,6 +6,8 @@ export type Breadcrumb = {
   label: string;
   to?: "/" | "/browse" | "/performers" | "/studios" | "/albums" | "/series";
   search?: Record<string, string | number | undefined>;
+  /** Animate the navigation as a view transition (the album stack folding). */
+  viewTransition?: boolean;
 };
 
 export function Breadcrumbs({
@@ -51,6 +53,7 @@ export function Breadcrumbs({
             <Link
               to={item.to}
               search={item.search}
+              viewTransition={item.viewTransition}
               className={cn(
                 "max-w-48 truncate",
                 overlay ? "hover:text-white" : "hover:text-foreground",

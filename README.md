@@ -39,6 +39,17 @@ the files themselves are opened read-only.
 - **Profiles performers**: birthdate (and their age in each video),
   gender, country, height, measurements, hair and eyes, tattoos, piercings and
   career years — all typed in by you, all optional
+- **Marks videos organised**: the owner flags a video once its title, cast and
+  tags are as they want them, and the filter menu's *Not organised* view is
+  the working list for the rest
+- **Shows subtitles** from a `.vtt` or `.srt` file beside a video with the
+  same name — `movie.srt`, or `movie.en.srt` to name the language. An SRT is
+  converted to WebVTT as it is served; the video is never touched. The player's
+  CC button (or `S`) steps through the tracks, and appears only when there is
+  one
+- **Counts** with a per-profile O-counter: a button in the player (or `O`)
+  adds one, with an undo, and each count is kept with its time for
+  [Your stats](#your-stats)
 - **Tracks** watch progress, play counts and a watched state, plus an
   hour-by-hour watch log that powers [Your stats](#your-stats)
 - **Maps who works with whom** — Performers → Network draws a graph linking
@@ -527,6 +538,8 @@ back on your watching as a year in review:
   (time, top performer and studio, busiest day, what you had on repeat), and
   the last twelve months as GitHub-style calendars, one block per month
 - **03 Your habits** — the hours and weekdays you watch most
+- **The count** — shown once the counter has been used: how many, on how
+  many days, and your most-counted videos and performers
 - **04 Trophies** — achievements unlocked and still to unlock
 
 It is built from the watch log, which records how long you watched each video
@@ -540,6 +553,12 @@ A smart collection is a saved rule rather than a list, so it keeps itself up
 to date. Conditions can be combined with *all* or *any*: tag, type, title,
 added within N days, rated at least N stars, favourite, watched, played at
 least N times, longer or shorter than N minutes, and not watched in N days.
+Also: resolution, codec and bitrate (bitrate is recorded during the scan, so
+a library scanned before it existed fills it in on the next scan), organised,
+counted at least N times, studio (including its sites), and facts about
+performers — their age on the release date, height, gender, country,
+ethnicity, hair and eye colour. A performer rule matches a video if *any*
+credited performer fits.
 
 The last one only matches things you *have* played, so "favourite and not
 watched in 90 days" finds forgotten favourites rather than everything you've
@@ -560,6 +579,8 @@ start from.
 | `↑` `↓` | Volume |
 | `F` / `M` | Fullscreen / mute |
 | `B` | Bookmark the current moment |
+| `O` | Count one on the video that's playing |
+| `S` | Subtitles: off, then each track in turn |
 | `Esc` | Close the innermost thing that's open |
 
 The full list, including search and editing, is at `/help` in the app. Single-

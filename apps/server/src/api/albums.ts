@@ -50,6 +50,15 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
         videoItemId: sql<number | null>`min(${mediaItems.id}) filter (
           where ${mediaItemTypes.name} = 'video'
         )`,
+        // The first three photos, for the stack of prints on the albums page.
+        // Three because one of them may be the cover, and the stack shows two
+        // others. Sliced in SQL so a thousand-photo album does not ship all
+        // its ids.
+        previewItemIds: sql<number[]>`coalesce(
+          (array_agg(${mediaItems.id} order by ${mediaItems.id})
+            filter (where ${mediaItemTypes.name} = 'photo'))[1:3],
+          '{}'
+        )`,
         coverPositionX: albums.coverPositionX,
         coverPositionY: albums.coverPositionY,
         coverScale: albums.coverScale,

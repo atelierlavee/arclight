@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -28,14 +28,6 @@ export async function* walk(
       yield* walk(fullPath, unreadable);
     } else if (entry.isFile()) {
       yield fullPath;
-    } else if (entry.isSymbolicLink()) {
-      // Symlinked files are indexed; symlinked directories are not followed,
-      // which keeps a link cycle from walking forever.
-      try {
-        if ((await stat(fullPath)).isFile()) yield fullPath;
-      } catch {
-        // Dangling link: nothing to index.
-      }
     }
   }
 }

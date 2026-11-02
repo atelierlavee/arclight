@@ -4,6 +4,8 @@ import { Plus, X } from "lucide-react";
 import { Portal } from "./Portal";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { qk } from "@/lib/queryKeys";
+import { RESOLUTION_OPTIONS } from "@/lib/filters";
+import { PERFORMER_GENDERS } from "@/lib/performerApi";
 
 type Option = { value: string; label: string };
 
@@ -92,6 +94,96 @@ const FIELDS = {
     unit: "days",
     toApi: (value) => ({ field: "lastWatched", op: "older_than_days", value: Number(value) }),
   },
+  resolution: {
+    label: "resolution is",
+    input: RESOLUTION_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
+    toApi: (value) => ({ field: "resolution", op: "eq", value }),
+  },
+  codec: {
+    label: "codec is",
+    input: "text",
+    toApi: (value) => ({ field: "codec", op: "eq", value }),
+  },
+  bitrateAbove: {
+    label: "bitrate at least",
+    input: "number",
+    unit: "kbps",
+    toApi: (value) => ({ field: "bitrateKbps", op: "gte", value: Number(value) }),
+  },
+  bitrateBelow: {
+    label: "bitrate at most",
+    input: "number",
+    unit: "kbps",
+    toApi: (value) => ({ field: "bitrateKbps", op: "lte", value: Number(value) }),
+  },
+  organised: {
+    label: "organised",
+    input: YES_NO,
+    toApi: (value) => ({ field: "organised", op: "eq", value: value === "true" }),
+  },
+  oCount: {
+    label: "counted at least",
+    input: "number",
+    unit: "times",
+    toApi: (value) => ({ field: "oCount", op: "gte", value: Number(value) }),
+  },
+  studio: {
+    label: "studio (and its sites)",
+    input: "text",
+    toApi: (value) => ({ field: "studio", op: "eq", value }),
+  },
+  performerAgeAbove: {
+    label: "a performer aged at least",
+    input: "number",
+    unit: "years, at release",
+    toApi: (value) => ({ field: "performerAge", op: "gte", value: Number(value) }),
+  },
+  performerAgeBelow: {
+    label: "a performer aged at most",
+    input: "number",
+    unit: "years, at release",
+    toApi: (value) => ({ field: "performerAge", op: "lte", value: Number(value) }),
+  },
+  performerTaller: {
+    label: "a performer at least",
+    input: "number",
+    unit: "cm tall",
+    toApi: (value) => ({ field: "performerHeight", op: "gte", value: Number(value) }),
+  },
+  performerShorter: {
+    label: "a performer at most",
+    input: "number",
+    unit: "cm tall",
+    toApi: (value) => ({ field: "performerHeight", op: "lte", value: Number(value) }),
+  },
+  performerGender: {
+    label: "a performer whose gender is",
+    input: (Object.keys(PERFORMER_GENDERS) as (keyof typeof PERFORMER_GENDERS)[]).map((gender) => ({
+      value: gender,
+      label: PERFORMER_GENDERS[gender].toLowerCase(),
+    })),
+    toApi: (value) => ({ field: "performerAttribute", attribute: "gender", op: "eq", value }),
+  },
+  performerCountry: {
+    label: "a performer from",
+    input: "text",
+    toApi: (value) => ({ field: "performerAttribute", attribute: "country", op: "eq", value }),
+  },
+  performerEthnicity: {
+    label: "a performer whose ethnicity is",
+    input: "text",
+    toApi: (value) => ({ field: "performerAttribute", attribute: "ethnicity", op: "eq", value }),
+  },
+  performerHair: {
+    label: "a performer with hair colour",
+    input: "text",
+    toApi: (value) => ({ field: "performerAttribute", attribute: "hairColor", op: "eq", value }),
+  },
+  performerEyes: {
+    label: "a performer with eye colour",
+    input: "text",
+    toApi: (value) => ({ field: "performerAttribute", attribute: "eyeColor", op: "eq", value }),
+  },
 } satisfies Record<string, FieldSpec>;
 
 type ConditionField = keyof typeof FIELDS;
@@ -116,6 +208,8 @@ const PRESETS: { name: string; op: "AND" | "OR"; conditions: ConditionRow[] }[] 
   },
   { name: "Never watched", op: "AND", conditions: [{ field: "watched", value: "false" }] },
   { name: "Most replayed", op: "AND", conditions: [{ field: "playCount", value: "3" }] },
+  { name: "Needs organising", op: "AND", conditions: [{ field: "organised", value: "false" }] },
+  { name: "Most counted", op: "AND", conditions: [{ field: "oCount", value: "3" }] },
 ];
 
 async function createCollection(body: unknown) {

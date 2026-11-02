@@ -122,6 +122,10 @@ export const mediaItems = pgTable("media_items", {
   // whatever the filename implied over a hand-made correction.
   seriesSource: text("series_source").notNull().default("scanner"),
   triagedAt: timestamp("triaged_at"),
+  // When the owner marked this item as done: tagged, credited, titled the way
+  // they want. Library-wide like triagedAt, but not the same thing — triage
+  // clears the inbox of new arrivals, this is a judgement about the metadata.
+  organisedAt: timestamp("organised_at"),
   durationSeconds: integer("duration_seconds"),
   takenAt: timestamp("taken_at"),
   extraMetadata: jsonb("extra_metadata"),
@@ -580,11 +584,37 @@ export const profileItemState = pgTable(
     // is nobody else's business, and hiding it from them too would tell them
     // something is hidden.
     hiddenAt: timestamp("hidden_at"),
+    // How many times this profile has counted this item. Kept beside the
+    // history in o_events so the grid and smart rules read one integer rather
+    // than counting rows; the two are changed together, in one transaction.
+    oCount: integer("o_count").notNull().default(0),
   },
   (table) => [
     primaryKey({ columns: [table.profileId, table.mediaItemId] }),
     index("profile_item_state_hidden_idx").on(table.profileId, table.hiddenAt),
     index("profile_item_state_favorite_idx").on(table.profileId).where(sql`${table.isFavorite}`),
+  ],
+);
+
+/**
+ * One row per time a profile counted an item, so stats can ask when and not
+ * only how often. Deleting an item or a profile takes its events with it.
+ */
+export const oEvents = pgTable(
+  "o_events",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    mediaItemId: integer("media_item_id")
+      .notNull()
+      .references(() => mediaItems.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("o_events_profile_created_idx").on(table.profileId, table.createdAt),
+    index("o_events_item_idx").on(table.mediaItemId),
   ],
 );
 

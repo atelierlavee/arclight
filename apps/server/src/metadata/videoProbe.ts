@@ -10,6 +10,8 @@ export type VideoProbeResult = {
   codec: string | null;
   containerFormat: string | null;
   embeddedTitle: string | null;
+  /** Overall bitrate in kilobits per second, container-reported. */
+  bitrateKbps: number | null;
 };
 
 type FfprobeStream = {
@@ -23,6 +25,7 @@ type FfprobeOutput = {
   format?: {
     duration?: string;
     format_name?: string;
+    bit_rate?: string;
     tags?: { title?: string };
   };
   streams?: FfprobeStream[];
@@ -42,7 +45,22 @@ const EMPTY_RESULT: VideoProbeResult = {
   codec: null,
   containerFormat: null,
   embeddedTitle: null,
+  bitrateKbps: null,
 };
+
+/** What the scan stores in media_items.extra_metadata for a probed video. */
+export function probeMetadata(probe: VideoProbeResult) {
+  return {
+    width: probe.width,
+    height: probe.height,
+    codec: probe.codec,
+    containerFormat: probe.containerFormat,
+    embeddedTitle: probe.embeddedTitle,
+    // Always present once probed, null when the container doesn't say, so
+    // "not probed yet" and "probed, unknown" can be told apart.
+    bitrateKbps: probe.bitrateKbps,
+  };
+}
 
 export async function probeVideo(filePath: string): Promise<VideoProbeResult> {
   try {
@@ -67,8 +85,17 @@ export async function probeVideo(filePath: string): Promise<VideoProbeResult> {
       codec: videoStream?.codec_name ?? null,
       containerFormat: data.format?.format_name ?? null,
       embeddedTitle: data.format?.tags?.title ?? null,
+      bitrateKbps: parseBitrateKbps(data.format?.bit_rate),
     };
   } catch {
     return EMPTY_RESULT;
   }
+}
+
+function parseBitrateKbps(raw: string | undefined): number | null {
+  const bitsPerSecond = raw === undefined ? NaN : Number(raw);
+  // Capped well past any real file: the value is compared against an integer.
+  return Number.isFinite(bitsPerSecond) && bitsPerSecond > 0
+    ? Math.min(Math.round(bitsPerSecond / 1000), 10_000_000)
+    : null;
 }

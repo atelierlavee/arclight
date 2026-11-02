@@ -88,7 +88,11 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
 
         await db
           .insert(playbackStates)
-          .values({ profileId: profile, mediaItemId, positionSeconds })
+          // updatedAt written explicitly: left to the column's default it would
+          // be the database's clock, while elapsed time below is measured
+          // against this process's, and any skew between the two made the
+          // first report after a gap look like it came from the past.
+          .values({ profileId: profile, mediaItemId, positionSeconds, updatedAt: now })
           .onConflictDoUpdate({
             target: [playbackStates.profileId, playbackStates.mediaItemId],
             set: { positionSeconds, updatedAt: now },

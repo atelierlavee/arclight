@@ -25,6 +25,7 @@ import { useCastStream } from "./mediaDetail/useCastStream";
 import { useItemActions } from "./mediaDetail/useItemActions";
 import { useMiniPlayerFrame } from "./mediaDetail/useMiniPlayerFrame";
 import { usePlaybackProgress } from "./mediaDetail/usePlaybackProgress";
+import { useSubtitles, useSubtitleTracks } from "./mediaDetail/useSubtitles";
 import { usePlayerControlsVisibility } from "./mediaDetail/usePlayerControlsVisibility";
 import { usePlayerData } from "./mediaDetail/usePlayerData";
 import { usePlayerKeyboard } from "./mediaDetail/usePlayerKeyboard";
@@ -106,7 +107,7 @@ export function MediaDetailModal({
 
   const { bookmarks, scrubSprite, heatmapBuckets, categories, accent, addBookmark } =
     usePlayerData({ viewingId, item, mode, mini, videoRef });
-  const { updateKind, toggleFavorite, saveFraming, toggleWatched } =
+  const { updateKind, toggleFavorite, saveFraming, toggleWatched, toggleOrganised, countO } =
     useItemActions({
       viewingId,
       title: item?.title,
@@ -126,6 +127,8 @@ export function MediaDetailModal({
     itemId,
   });
   const { skipSeconds, startPosition, seekTo, startPlaying } = playback;
+  const subtitleTracks = useSubtitleTracks(viewingId, isVideo && mode === "playing");
+  const subtitles = useSubtitles({ videoRef, tracks: subtitleTracks, mode, videoId: viewingId });
   const progress = usePlaybackProgress({
     videoRef,
     item,
@@ -232,6 +235,8 @@ export function MediaDetailModal({
     setQueueChoice: queue.setQueueChoice,
     onClose,
     addBookmark,
+    countO,
+    cycleSubtitles: subtitles.cycle,
     jumpToBestPart,
   });
 
@@ -331,6 +336,7 @@ export function MediaDetailModal({
               seeked={playback.seeked}
               stillOnly={stillOnly}
               castSrc={castSrc}
+              subtitleTracks={subtitleTracks}
               onLoadedMetadata={playback.handleLoadedMetadata}
               onSeeked={() => playback.setSeeked(true)}
               onTimeUpdate={progress.handleTimeUpdate}
@@ -418,6 +424,11 @@ export function MediaDetailModal({
                 onToggleSkipOptions={() => playback.setShowSkipOptions((v) => !v)}
                 onApplySkipSeconds={playback.applySkipSeconds}
                 onBookmark={addBookmark}
+                oCount={item.oCount}
+                onCountO={countO}
+                subtitleLabel={subtitles.label}
+                hasSubtitles={subtitleTracks.length > 0}
+                onCycleSubtitles={subtitles.cycle}
                 onCast={startCasting}
                 onTogglePictureInPicture={() => void screenModes.togglePictureInPicture()}
                 onToggleAmbient={toggleAmbient}
@@ -486,6 +497,9 @@ export function MediaDetailModal({
               onJumpToBookmark={jumpTo}
               kindPending={updateKind.isPending}
               onChangeKind={(kind) => updateKind.mutate(kind)}
+              organisedPending={toggleOrganised.isPending}
+              onToggleOrganised={(next) => toggleOrganised.mutate(next)}
+              onCountO={countO}
               reframing={reframing}
               setReframing={setReframing}
               framingSaving={saveFraming.isPending}
