@@ -11,7 +11,7 @@ import {
   studios,
   tags,
 } from "../db/schema.js";
-import { visibleItems } from "../library/visibility.js";
+import { reachableItems } from "../library/visibility.js";
 import { isId, parsePage } from "./mediaItemQueries.js";
 
 import { profileId } from "../auth/profileContext.js";
@@ -31,7 +31,7 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
       .select({ count: sql<number>`count(*)::int` })
       .from(mediaItems)
       .where(
-        and(visibleItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
+        and(reachableItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
       );
     return { count: row?.count ?? 0 };
   });
@@ -54,12 +54,22 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
       .select({
         id: mediaItems.id,
         title: mediaItems.title,
+        description: mediaItems.description,
         thumbnailFile: mediaItems.thumbnailFile,
         thumbnailPositionX: mediaItems.thumbnailPositionX,
         thumbnailPositionY: mediaItems.thumbnailPositionY,
         thumbnailScale: mediaItems.thumbnailScale,
         durationSeconds: mediaItems.durationSeconds,
         releaseDate: mediaItems.releaseDate,
+        // The file as named on disk, so the page can suggest a better name.
+        // An item can have more than one file; the first is the one shown.
+        fileName: sql<string | null>`(
+          select regexp_replace(mf.path, '^.*/', '')
+          from media_files mf
+          where mf.media_item_id = ${mediaItems.id}
+          order by mf.id
+          limit 1
+        )`,
         itemType: sql<string>`'video'`,
         studioId: mediaItems.studioId,
         studioName: studios.name,
@@ -70,7 +80,7 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
       .from(mediaItems)
       .leftJoin(studios, eq(studios.id, mediaItems.studioId))
       .where(
-        and(visibleItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
+        and(reachableItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
       )
       .orderBy(desc(mediaItems.createdAt), desc(mediaItems.id))
       .limit(pageSize)
@@ -149,7 +159,7 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
       .update(mediaItems)
       .set({ triagedAt: new Date() })
       .where(
-        and(visibleItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
+        and(reachableItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
       )
       .returning({ id: mediaItems.id });
 

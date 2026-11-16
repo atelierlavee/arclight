@@ -1,7 +1,7 @@
-import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, not, sql, type SQL } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { db } from "../db/client.js";
-import { mediaItems } from "../db/schema.js";
+import { mediaItems, mediaItemTypes } from "../db/schema.js";
 import { unlockKey } from "../auth/profileContext.js";
 import { isVaultUnlocked } from "../auth/vaultUnlock.js";
 import { itemNotHidden } from "./profileState.js";
@@ -22,6 +22,14 @@ import { itemNotHidden } from "./profileState.js";
  * manager, which asks for them by name rather than going through here.
  */
 export function visibleItems(profileId: number): SQL {
+  return and(reachableItems(profileId), not(awaitingApproval()))!;
+}
+
+/**
+ * Everything `visibleItems` checks except approval: what the inbox itself
+ * lists, and what a by-id lookup from the inbox may open.
+ */
+export function reachableItems(profileId: number): SQL {
   // Hidden is per profile (profile_item_state.hidden_at): what A put in A's
   // vault is still an ordinary item to B.
   //
@@ -32,6 +40,22 @@ export function visibleItems(profileId: number): SQL {
     isNull(mediaItems.missingSince),
     itemNotHidden(profileId, mediaItems.id),
   )!;
+}
+
+/**
+ * A video the owner has not approved from the inbox yet.
+ *
+ * An import lands every video here, and nothing else in the app shows it
+ * until it is approved (media_items.triaged_at set). Photos never pass
+ * through the inbox, so they are not held back — gating on triaged_at alone
+ * would hide every photo for good.
+ */
+export function awaitingApproval(): SQL {
+  const videoTypeIds = db
+    .select({ id: mediaItemTypes.id })
+    .from(mediaItemTypes)
+    .where(eq(mediaItemTypes.name, "video"));
+  return and(isNull(mediaItems.triagedAt), inArray(mediaItems.itemTypeId, videoTypeIds))!;
 }
 
 /** Just the "file is still there" half, for queries that scope differently. */
@@ -57,7 +81,11 @@ export function notHidden(profileId: number): SQL {
  */
 export function visibleItemsSql(alias: string, profileId: number): SQL {
   if (!/^[a-z_][a-z0-9_]*$/i.test(alias)) throw new Error(`Bad table alias: ${alias}`);
-  return sql`(${sql.raw(`${alias}.in_scope = true and ${alias}.missing_since is null`)} and ${itemNotHidden(
+  return sql`(${sql.raw(
+    `${alias}.in_scope = true and ${alias}.missing_since is null ` +
+      `and not (${alias}.triaged_at is null and ${alias}.item_type_id in ` +
+      `(select id from media_item_types where name = 'video'))`,
+  )} and ${itemNotHidden(
     profileId,
     sql.raw(`${alias}.id`),
   )})`;

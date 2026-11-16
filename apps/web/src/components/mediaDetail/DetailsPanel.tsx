@@ -1,9 +1,4 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Check, CircleCheck, Droplets, Globe, Move, Pencil } from "lucide-react";
-import { StashDbSceneDialog } from "../StashDbSceneDialog";
-import { fetchStashDbStatus } from "@/lib/stashdbApi";
-import { qk } from "@/lib/queryKeys";
+import { Check, CircleCheck, Droplets, Move, Pencil } from "lucide-react";
 import { PerformerEditor } from "../PerformerEditor";
 import { ClampedText } from "../ClampedText";
 import { DescriptionEditor } from "../DescriptionEditor";
@@ -99,13 +94,6 @@ export function DetailsPanel({
 }) {
   const { density, heroHeight } = useAppearance();
   const isOwner = useIsOwner();
-  const [lookingUp, setLookingUp] = useState(false);
-  // Only asked of the owner; the button appears once StashDB is configured.
-  const { data: stashDb } = useQuery({
-    queryKey: qk.stashDbStatus,
-    queryFn: fetchStashDbStatus,
-    enabled: isOwner,
-  });
   return (
     <div className="grid gap-6 p-4 sm:grid-cols-[1.6fr_1fr] sm:p-6">
       <div className="space-y-3">
@@ -158,17 +146,6 @@ export function DetailsPanel({
               there, so the control that turns editing on goes too. */}
           {!isMobile && isOwner && (
             <div className="ml-auto flex items-center gap-1">
-              {item.itemType === "video" && stashDb?.configured && (
-                <button
-                  type="button"
-                  onClick={() => setLookingUp(true)}
-                  title="Look up on StashDB"
-                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  <Globe className="size-3.5" />
-                  StashDB
-                </button>
-              )}
               <button
                 type="button"
                 onClick={onToggleEditing}
@@ -218,8 +195,6 @@ export function DetailsPanel({
             )}
           </>
         )}
-
-        {lookingUp && <StashDbSceneDialog item={item} onClose={() => setLookingUp(false)} />}
 
         <div className="space-y-1.5 pt-1">
           <FieldLabel accent={accent}>Performers</FieldLabel>

@@ -214,3 +214,41 @@ describe("matchKey and matching helpers", () => {
     expect(hasWordBoundaryMatch("anna (uk) scene", "anna (uk)")).toBe(true);
   });
 });
+
+// The inbox suggests names in this shape (web/src/lib/suggestedFilename.ts);
+// these are the exact strings it produces, so a rename the page asks for is one
+// the scanner reads back in full.
+describe("names suggested by the inbox", () => {
+  const read = (name: string) => parseDeclaredName(`/media/${name}`);
+
+  it("read back as studio, cast, date and title", () => {
+    expect(read("[X-Art] Little Caprice - 12.25.2018 - Once A Year.mp4")).toEqual({
+      studio: "X-Art",
+      performerNames: ["Little Caprice"],
+      releaseDate: "2018-12-25",
+      title: "Once A Year",
+    });
+    expect(read("[X-Art] Ann, Bea - Once A Year.mkv")).toMatchObject({
+      performerNames: ["Ann", "Bea"],
+      releaseDate: null,
+      title: "Once A Year",
+    });
+  });
+
+  it("read back with no cast", () => {
+    expect(read("[X-Art] - 12.25.2018 - Once A Year.mp4")).toMatchObject({
+      studio: "X-Art",
+      performerNames: [],
+      releaseDate: "2018-12-25",
+      title: "Once A Year",
+    });
+    expect(read("[X-Art] - Once A Year.mp4")).toMatchObject({ performerNames: [], title: "Once A Year" });
+  });
+
+  it("keep a title that contains dashes", () => {
+    expect(read("[X-Art] Little Caprice - 12.25.2018 - Girls - Girls - Girls.mp4")).toMatchObject({
+      performerNames: ["Little Caprice"],
+      title: "Girls - Girls - Girls",
+    });
+  });
+});

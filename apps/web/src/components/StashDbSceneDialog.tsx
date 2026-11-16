@@ -34,7 +34,7 @@ export function StashDbSceneDialog({
   const [match, setMatch] = useState<StashDbScene | null>(null);
 
   const results = useQuery({
-    queryKey: ["stashdb-scenes", searched],
+    queryKey: qk.stashDbScenes(searched),
     queryFn: () => searchStashDbScenes(searched),
     // A request to someone else's server: once per search, not refreshed.
     staleTime: Infinity,
@@ -88,7 +88,7 @@ export function StashDbSceneDialog({
                     <span className="block truncate text-sm font-medium">
                       {candidate.title ?? "Untitled"}
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span className="block text-xs text-muted-foreground">
                       {[
                         candidate.studio?.name,
                         candidate.date,
@@ -139,6 +139,9 @@ function ApplyStep({
   const newTags = match.tags.filter((t) => !has(item.tags.map((x) => x.name), t.name));
   const showTitle = !!match.title && match.title !== item.title;
   const showDetails = !!match.details && match.details !== item.description;
+  // StashDB can give a partial date ("2018" or "2018-12"); only a full one is a day.
+  const matchDate = match.date && /^\d{4}-\d{2}-\d{2}$/.test(match.date) ? match.date : null;
+  const showDate = !!matchDate && matchDate !== (item.releaseDate ?? "").slice(0, 10);
   const showStudio =
     !!match.studio && match.studio.name.toLowerCase() !== (item.studio ?? "").toLowerCase();
 
@@ -148,6 +151,7 @@ function ApplyStep({
   const [ticked, setTicked] = useState(() => {
     const start = new Set<string>();
     if (showDetails && !item.description) start.add("details");
+    if (showDate && !item.releaseDate) start.add("date");
     if (showStudio && !item.studio && match.studio?.inLibrary) start.add("studio");
     for (const p of newPerformers) if (p.inLibrary) start.add(`p:${p.name}`);
     for (const t of newTags) if (t.inLibrary) start.add(`t:${t.name}`);
@@ -158,6 +162,7 @@ function ApplyStep({
   const allKeys = [
     ...(showTitle ? ["title"] : []),
     ...(showDetails ? ["details"] : []),
+    ...(showDate ? ["date"] : []),
     ...(showStudio ? ["studio"] : []),
     ...newPerformers.map((p) => `p:${p.name}`),
     ...newTags.map((t) => `t:${t.name}`),
@@ -177,6 +182,7 @@ function ApplyStep({
       const patch: Parameters<typeof updateItem>[1] = {};
       if (ticked.has("title") && match.title) patch.title = match.title;
       if (ticked.has("details")) patch.description = match.details;
+      if (ticked.has("date") && matchDate) patch.releaseDate = matchDate;
       if (ticked.has("studio") && match.studio) patch.studio = match.studio.name;
       if (Object.keys(patch).length > 0) await updateItem(item.id, patch);
 
@@ -203,7 +209,7 @@ function ApplyStep({
     },
   });
 
-  const nothing = !showTitle && !showDetails && !showStudio && !newPerformers.length && !newTags.length;
+  const nothing = !showTitle && !showDetails && !showDate && !showStudio && !newPerformers.length && !newTags.length;
 
   function row(key: string, label: string, body: React.ReactNode) {
     return (
@@ -239,6 +245,23 @@ function ApplyStep({
         )}
       </>,
     );
+
+  // A performer the video already has: shown so the list matches StashDB's,
+  // but there is nothing to copy.
+  const onVideo = (key: string, name: string) => (
+    <li key={key}>
+      <div className="flex items-start gap-3 rounded-md px-2 py-1.5 opacity-60">
+        <input type="checkbox" checked disabled aria-label={`${name} is already on this video`} className="mt-1" />
+        <span className="min-w-0 flex-1 text-sm">
+          <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">Performer</span>
+          {name}
+          <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            already added
+          </span>
+        </span>
+      </div>
+    </li>
+  );
 
   return (
     <div className="space-y-3">
@@ -284,8 +307,23 @@ function ApplyStep({
               "Details",
               <span className="line-clamp-3 text-muted-foreground">{match.details}</span>,
             )}
+          {showDate &&
+            row(
+              "date",
+              "Release date",
+              <>
+                {item.releaseDate && (
+                  <span className="mr-2 text-muted-foreground line-through">{item.releaseDate.slice(0, 10)}</span>
+                )}
+                {matchDate}
+              </>,
+            )}
           {showStudio && match.studio && named("studio", "Studio", match.studio)}
-          {newPerformers.map((p) => named(`p:${p.name}`, "Performer", p))}
+          {match.performers.map((p) =>
+            has(item.performers.map((x) => x.name), p.name)
+              ? onVideo(`pa:${p.name}`, p.name)
+              : named(`p:${p.name}`, "Performer", p),
+          )}
           {newTags.map((t) => named(`t:${t.name}`, "Tag", t))}
         </ul>
       )}

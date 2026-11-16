@@ -38,7 +38,16 @@ the files themselves are opened read-only.
   studio include everything under it
 - **Profiles performers**: birthdate (and their age in each video),
   gender, country, height, measurements, hair and eyes, tattoos, piercings and
-  career years — all typed in by you, all optional
+  career years — typed in by you, or filled in from StashDB, all optional
+- **Holds new videos in an inbox**: nothing a scan finds is visible anywhere
+  in the app until you approve it from the Inbox, where you review each video's
+  title, description, cast, studio and tags, then mark it done
+- **Looks things up on StashDB** (optional, with your own API key): *Sync
+  details* in the inbox and the look-up on a performer's page show matches you
+  tick through before anything is saved — cast (women only), studio, tags,
+  description and release date
+- **Suggests a filename** in the convention below, with a copy button in the
+  inbox. If the studio or title is missing it opens a small form to fill them in
 - **Marks videos organised**: the owner flags a video once its title, cast and
   tags are as they want them, and the filter menu's *Not organised* view is
   the working list for the rest
@@ -441,6 +450,9 @@ The declared convention, opted into by a **leading `[`**:
 ```
 [Studio] Performer 1, Performer 2 - MM.DD.YYYY - Video title.mp4
 ```
+
+The inbox builds this name for you from what you have saved and copies it, so
+you can rename the file at its source.
 
 Everything in it is optional except the studio bracket. A filename that
 doesn't start with `[` is read the older, looser way: the folder names the

@@ -151,7 +151,7 @@ export function HelpPage() {
           <Row keys={["Esc"]}>Dismiss the suggestions.</Row>
         </Group>
 
-        <Group title="Editing a title, tag or bio">
+        <Group title="Editing a title or tag">
           <Row keys={["Enter"]}>Save and finish.</Row>
           <Row keys={["Esc"]}>Cancel, leaving the original.</Row>
         </Group>

@@ -188,7 +188,7 @@ type RawScene = {
   details: string | null;
   date: string | null;
   studio: { name: string } | null;
-  performers: { performer: { name: string; disambiguation: string | null } }[];
+  performers: { performer: { name: string; disambiguation: string | null; gender: string | null } }[];
   tags: { name: string }[];
 };
 
@@ -204,6 +204,15 @@ export type StashDbScene = {
   tags: string[];
 };
 
+/**
+ * Whether a scene's performer is listed in the results: only those StashDB
+ * marks FEMALE. Anyone else is left out, including performers whose gender
+ * StashDB does not know.
+ */
+export function isListedPerformer(gender: string | null): boolean {
+  return gender === "FEMALE";
+}
+
 export function mapScene(raw: RawScene): StashDbScene {
   return {
     id: raw.id,
@@ -212,7 +221,9 @@ export function mapScene(raw: RawScene): StashDbScene {
     date: raw.date,
     url: `https://stashdb.org/scenes/${raw.id}`,
     studio: raw.studio?.name ?? null,
-    performers: raw.performers.map((entry) => entry.performer.name),
+    performers: raw.performers
+      .filter((entry) => isListedPerformer(entry.performer.gender))
+      .map((entry) => entry.performer.name),
     tags: raw.tags.map((tag) => tag.name),
   };
 }
@@ -221,7 +232,7 @@ const SEARCH_SCENE = `query ($term: String!, $limit: Int) {
   searchScene(term: $term, limit: $limit) {
     id title details date
     studio { name }
-    performers { performer { name disambiguation } }
+    performers { performer { name disambiguation gender } }
     tags { name }
   }
 }`;

@@ -11,7 +11,6 @@ import { PerformerCoPerformers } from "@/components/PerformerCoPerformers";
 import { PerformerStats } from "@/components/PerformerStats";
 import { PerformerVideos } from "@/components/PerformerVideos";
 import { PerformerBanner } from "@/components/PerformerBanner";
-import { PerformerBio } from "@/components/PerformerBio";
 import { PerformerFacts } from "@/components/PerformerFacts";
 import { PerformerImageMenu } from "@/components/PerformerImageMenu";
 import { PerformerImagePicker } from "@/components/PerformerImagePicker";
@@ -322,21 +321,13 @@ export function PerformerPage() {
         </div>
       </section>
 
-      {/* Out of the header column for the same reason the bio is: five figures
-          crammed beside a 4xl name and a portrait had nowhere to be noticed. */}
+      {/* Out of the header column: five figures crammed beside a 4xl name and
+          a portrait had nowhere to be noticed. */}
       {performer && (
         // The margin lives here rather than in the component: the strip should
         // not have an opinion about what sits above it.
         <div className="mt-6">
           <PerformerStats performer={performer} />
-        </div>
-      )}
-
-      {/* Full width rather than squeezed into the header column beside the
-          avatar — prose needs a readable line length. */}
-      {performer && (
-        <div className="px-4 pt-6 md:px-6">
-          <PerformerBio performerId={performer.id} bio={performer.bio} />
         </div>
       )}
 

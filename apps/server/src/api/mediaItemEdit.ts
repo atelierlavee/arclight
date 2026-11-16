@@ -53,6 +53,7 @@ export const OWNER_FIELDS = [
   "parentId",
   "title",
   "description",
+  "releaseDate",
   "kind",
   "studio",
   "thumbnailPositionX",
@@ -65,6 +66,15 @@ export const OWNER_FIELDS = [
   "episodeTitle",
 ] as const;
 
+/** A calendar date as `YYYY-MM-DD`: 2026-02-31 is refused, not rolled into March. */
+function isRealDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const year = Number(value.slice(0, 4));
+  if (year < 1900 || year > 2100) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
   app.patch<{
     Params: { id: string };
@@ -72,6 +82,8 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       parentId?: number | null;
       title?: string;
       description?: string | null;
+      /** `YYYY-MM-DD`, or null to clear. */
+      releaseDate?: string | null;
       isFavorite?: boolean;
       kind?: string;
       studio?: string | null;
@@ -106,6 +118,7 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       parentId,
       title,
       description,
+      releaseDate,
       isFavorite,
       kind,
       studio,
@@ -129,6 +142,10 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
     if (title !== undefined && !title.trim()) {
       reply.code(400);
       return { error: "title cannot be empty" };
+    }
+    if (releaseDate !== undefined && releaseDate !== null && !isRealDate(releaseDate)) {
+      reply.code(400);
+      return { error: "releaseDate must be a date written YYYY-MM-DD, or null" };
     }
     if (!isOptionalString(description)) {
       reply.code(400);
@@ -204,6 +221,7 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       patch.titleSource = "user";
     }
     if (description !== undefined) patch.description = description;
+    if (releaseDate !== undefined) patch.releaseDate = releaseDate;
     // Favourite and rating are the current profile's, written separately.
     const personal: { isFavorite?: boolean; rating?: number | null } = {};
     if (isFavorite !== undefined) personal.isFavorite = isFavorite;
@@ -291,6 +309,7 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
     if (isFavorite !== undefined) changes.push(isFavorite ? "favorited" : "unfavorited");
     if (studio !== undefined) changes.push(studio ? `studio → "${studio}"` : "studio cleared");
     if (description !== undefined) changes.push("description updated");
+    if (releaseDate !== undefined) changes.push(releaseDate ? `release date → ${releaseDate}` : "release date cleared");
     // Another profile's favourites and stars are its own business, not the
     // library's activity log, which the owner reads.
     if (changes.length > 0 && request.profile?.isOwner) {

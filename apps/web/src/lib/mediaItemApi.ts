@@ -158,6 +158,8 @@ export async function updateItem(
   patch: {
     title?: string;
     description?: string | null;
+    /** `YYYY-MM-DD`, or null to clear. */
+    releaseDate?: string | null;
     isFavorite?: boolean;
     kind?: string;
     studio?: string | null;

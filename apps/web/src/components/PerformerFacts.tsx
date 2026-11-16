@@ -28,40 +28,72 @@ function formatBirthdate(birthdate: string): string {
   });
 }
 
-/** The facts that are known, as label and value, in reading order. */
-function knownFacts(performer: PerformerDetail): [string, string][] {
-  const rows: [string, string | null][] = [
-    [
-      "Age",
-      performer.birthdate
-        ? `${ageToday(performer.birthdate)} · born ${formatBirthdate(performer.birthdate)}`
-        : null,
-    ],
-    ["Gender", performer.gender ? PERFORMER_GENDERS[performer.gender] : null],
-    ["Country", performer.country],
-    ["Ethnicity", performer.ethnicity],
-    ["Height", performer.heightCm ? `${performer.heightCm} cm` : null],
-    ["Measurements", performer.measurements],
-    ["Hair", performer.hairColor],
-    ["Eyes", performer.eyeColor],
-    [
-      "Career",
-      performer.careerStart || performer.careerEnd
-        ? `${performer.careerStart ?? "?"}–${performer.careerEnd ?? "present"}`
-        : null,
-    ],
-    ["Tattoos", performer.tattoos],
-    ["Piercings", performer.piercings],
+type Fact = { label: string; value: string };
+
+/** The facts that are known, in reading order. */
+function knownFacts(performer: PerformerDetail): Fact[] {
+  const facts: (Fact | null)[] = [
+    performer.birthdate ? { label: "Age", value: String(ageToday(performer.birthdate)) } : null,
+    performer.birthdate ? { label: "Born", value: formatBirthdate(performer.birthdate) } : null,
+    performer.gender ? { label: "Gender", value: PERFORMER_GENDERS[performer.gender] } : null,
+    performer.country ? { label: "Country", value: performer.country } : null,
+    performer.ethnicity ? { label: "Ethnicity", value: performer.ethnicity } : null,
+    performer.heightCm ? { label: "Height", value: `${performer.heightCm} cm` } : null,
+    performer.measurements ? { label: "Measurements", value: performer.measurements } : null,
+    performer.hairColor ? { label: "Hair", value: performer.hairColor } : null,
+    performer.eyeColor ? { label: "Eyes", value: performer.eyeColor } : null,
+    performer.careerStart || performer.careerEnd
+      ? {
+          label: "Career",
+          value: `${performer.careerStart ?? "?"}–${performer.careerEnd ?? "present"}`,
+        }
+      : null,
   ];
-  return rows.filter((row): row is [string, string] => row[1] !== null);
+  return facts.filter((fact): fact is Fact => fact !== null);
 }
 
 /**
- * A performer's profile facts, under the stats strip.
+ * "Inside left ankle (Cat), Navel" as separate items. Commas inside brackets
+ * belong to one item, so a description is not cut in half.
+ */
+function splitList(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of text) {
+    if (char === "(") depth++;
+    else if (char === ")") depth = Math.max(0, depth - 1);
+    if (char === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current.trim());
+  return parts.filter(Boolean);
+}
+
+/** A fact as a pill: its label muted, its value beside it. */
+const PILL = "inline-flex items-baseline gap-1.5 rounded-full bg-secondary/60 px-3.5 py-1.5 text-sm";
+
+/** Edit and look-up: the same shape as a fact, dashed, so they read as actions. */
+const ACTION =
+  "inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3.5 py-1.5 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent hover:text-foreground";
+
+/**
+ * A performer's profile facts, as one wrapping cloud of pills under the stats strip.
  *
  * Only what is known is shown — a grid of "Hair: —" for a performer nobody
  * has filled in reads as a broken form. With nothing known, the owner gets a
- * single "Add details" link and everyone else gets nothing.
+ * single "Add details" button and everyone else gets nothing.
+ *
+ * A pill per fact, label muted and value beside it, wrapping as needed: the
+ * whole profile takes a line or two instead of a table's worth of height, and
+ * a fact never has a wide gap to cross between its label and its value. Each
+ * tattoo and piercing is a pill of its own, so a long list wraps instead of
+ * being cut off. Edit and look-up are dashed pills at the end of the same
+ * cloud, rather than a header of their own.
  */
 export function PerformerFacts({ performer }: { performer: PerformerDetail }) {
   const [editing, setEditing] = useState(false);
@@ -74,51 +106,57 @@ export function PerformerFacts({ performer }: { performer: PerformerDetail }) {
     enabled: isOwner,
   });
   const facts = knownFacts(performer);
-  const empty = facts.length === 0;
+  const empty = facts.length === 0 && !performer.tattoos && !performer.piercings;
 
   if (empty && !isOwner) return null;
 
-  return (
-    <div className="max-w-3xl space-y-3">
-      {facts.length > 0 && (
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
-          {facts.map(([label, value]) => (
-            <div key={label} className="min-w-0">
-              <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
-              <dd className="truncate" title={value}>
-                {value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
+  const tattoos = performer.tattoos ? splitList(performer.tattoos) : [];
+  const piercings = performer.piercings ? splitList(performer.piercings) : [];
 
-      {isOwner && (
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <Pencil className="size-3" />
-            {empty ? "Add details" : "Edit details"}
-          </button>
-          {stashDb?.configured && (
-            <button
-              type="button"
-              onClick={() => setLookingUp(true)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <Globe className="size-3" />
-              Look up on StashDB
-            </button>
-          )}
-        </div>
-      )}
+  return (
+    <section aria-label="Details">
+      <ul className="flex flex-wrap items-center gap-2">
+        {facts.map((fact) => (
+          <li key={fact.label} className={PILL}>
+            <span className="text-muted-foreground">{fact.label}</span>
+            <span className="font-medium">{fact.value}</span>
+          </li>
+        ))}
+        {tattoos.map((item) => (
+          <li key={`tattoo-${item}`} className={PILL}>
+            <span className="text-muted-foreground">Tattoo</span>
+            <span className="font-medium">{item}</span>
+          </li>
+        ))}
+        {piercings.map((item) => (
+          <li key={`piercing-${item}`} className={PILL}>
+            <span className="text-muted-foreground">Piercing</span>
+            <span className="font-medium">{item}</span>
+          </li>
+        ))}
+        {isOwner && (
+          <>
+            <li>
+              <button type="button" onClick={() => setEditing(true)} className={ACTION}>
+                <Pencil className="size-3.5" />
+                {empty ? "Add details" : "Edit details"}
+              </button>
+            </li>
+            {stashDb?.configured && (
+              <li>
+                <button type="button" onClick={() => setLookingUp(true)} className={ACTION}>
+                  <Globe className="size-3.5" />
+                  Look up on StashDB
+                </button>
+              </li>
+            )}
+          </>
+        )}
+      </ul>
 
       {lookingUp && <StashDbLookupDialog performer={performer} onClose={() => setLookingUp(false)} />}
       {editing && <PerformerFactsDialog performer={performer} onClose={() => setEditing(false)} />}
-    </div>
+    </section>
   );
 }
 

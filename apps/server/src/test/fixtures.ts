@@ -67,6 +67,10 @@ export async function makeItem(
       libraryId,
       itemTypeId: await typeId("video"),
       title: "A Video",
+      // Approved by default: an unapproved video is hidden everywhere but the
+      // inbox, so a fixture that is not about the inbox must not be one.
+      // Pass `triagedAt: null` to put it in the inbox.
+      triagedAt: new Date(),
       ...columns,
     })
     .returning();

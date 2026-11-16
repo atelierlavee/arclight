@@ -175,6 +175,8 @@ export const qk = {
   backups: ["backups"] as const,
   settings: ["settings"] as const,
   stashDbStatus: ["stashdb-status"] as const,
+  stashDbPerformers: (term: string) => ["stashdb-performers", term] as const,
+  stashDbScenes: (term: string) => ["stashdb-scenes", term] as const,
 
   authStatus: ["auth-status"] as const,
   /** The signed-in account's profiles; survives a profile switch, like auth status. */

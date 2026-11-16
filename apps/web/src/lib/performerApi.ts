@@ -77,8 +77,6 @@ export type PerformerFacts = {
 };
 
 export type PerformerDetail = PerformerSummary & PerformerFacts & {
-  /** Free text, on the profile only — the list endpoint does not carry it. */
-  bio: string | null;
   studios: StudioGroup[];
   years: YearGroup[];
   watch: { watched: number; inProgress: number; unwatched: number };
@@ -399,16 +397,6 @@ export async function saveCircleFraming(
     ),
   });
   if (!res.ok) throw new Error(`Failed to save circle framing: ${res.status}`);
-}
-
-export async function savePerformerBio(id: number, bio: string): Promise<void> {
-  const res = await fetch(`/api/performers/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    // Sent alone: the endpoint accepts any single field without the name.
-    body: JSON.stringify({ bio }),
-  });
-  if (!res.ok) throw new Error(`Failed to save bio: ${res.status}`);
 }
 
 /**

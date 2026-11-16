@@ -11,6 +11,7 @@ import {
 } from "@/lib/performerApi";
 import { searchStashDbPerformers, type StashDbPerformer } from "@/lib/stashdbApi";
 import { invalidatePerformer } from "@/lib/invalidate";
+import { qk } from "@/lib/queryKeys";
 
 type FactKey = keyof PerformerFacts;
 
@@ -68,7 +69,7 @@ export function StashDbLookupDialog({
   const [match, setMatch] = useState<StashDbPerformer | null>(null);
 
   const results = useQuery({
-    queryKey: ["stashdb-performers", searched],
+    queryKey: qk.stashDbPerformers(searched),
     queryFn: () => searchStashDbPerformers(searched),
     // A lookup is a request to someone else's server, so it is made once per
     // search and not refreshed in the background.

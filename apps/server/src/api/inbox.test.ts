@@ -12,6 +12,7 @@ import {
   makePhoto,
   makeFolder,
   ownerProfileId,
+  attachFile,
 } from "../test/fixtures.js";
 import { db } from "../db/client.js";
 import { playbackHeatmap, playbackStates } from "../db/schema.js";
@@ -20,6 +21,7 @@ import { eq } from "drizzle-orm";
 let app: FastifyInstance;
 let cookie: string;
 let libraryId: number;
+let rootId: number;
 
 beforeAll(async () => {
   app = await testApp();
@@ -28,7 +30,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await resetDatabase();
   cookie = await signIn();
-  ({ libraryId } = await makeLibrary());
+  ({ libraryId, rootId } = await makeLibrary());
 });
 
 const get = (url: string) =>
@@ -293,5 +295,15 @@ describe("heatmap recording via playback", () => {
       .where(eq(playbackHeatmap.mediaItemId, id));
 
     expect(row.count).toBeGreaterThan(3);
+  });
+
+  it("returns the name of the file as it is on disk", async () => {
+    const id = await makeItem(libraryId, { triagedAt: null });
+    await attachFile(id, rootId, "/media/Ann/Studio/x art caprice xmas 1080.mp4");
+    await makeItem(libraryId, { title: "No file", triagedAt: null });
+
+    const { items } = (await get("/api/inbox")).json() as { items: { title: string; fileName: string | null }[] };
+    expect(items.find((i) => i.title !== "No file")?.fileName).toBe("x art caprice xmas 1080.mp4");
+    expect(items.find((i) => i.title === "No file")?.fileName).toBeNull();
   });
 });

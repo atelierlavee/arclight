@@ -307,6 +307,22 @@ describe("PATCH /api/media-items/:id", () => {
     expect(item.titleSource).toBe("user");
   });
 
+  it("sets and clears the release date", async () => {
+    const id = await makeItem(libraryId);
+    expect((await patch(id, { releaseDate: "2018-12-25" })).json()).toEqual({ ok: true });
+    expect((await get(`/api/media-items/${id}`)).json().releaseDate).toBe("2018-12-25");
+
+    await patch(id, { releaseDate: null });
+    expect((await get(`/api/media-items/${id}`)).json().releaseDate).toBeNull();
+  });
+
+  it("rejects a release date that is not a real calendar date", async () => {
+    const id = await makeItem(libraryId);
+    for (const releaseDate of ["12/25/2018", "2018-02-31", "2018-13-01", "soon", 20181225]) {
+      expect((await patch(id, { releaseDate })).statusCode).toBe(400);
+    }
+  });
+
   it("rejects an empty title", async () => {
     const id = await makeItem(libraryId);
     expect((await patch(id, { title: "   " })).statusCode).toBe(400);
