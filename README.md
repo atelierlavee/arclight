@@ -1,13 +1,14 @@
 # Arc Light
 
 A self-hosted media library for a personal video collection, built around one
-idea: **your filesystem is the source of truth, and no metadata ever comes from
-the internet.**
+idea: **your filesystem is the source of truth.**
 
 It scans folders you point it at, works out performers, studios, release dates
 and titles from how the files are named and filed, and gives you a browsable
-library over the top. Nothing is looked up externally, nothing is uploaded, and
-the files themselves are opened read-only.
+library over the top. Nothing is uploaded and the files themselves are opened
+read-only. The only metadata that comes from the internet is an optional
+StashDB lookup, which runs only when you ask for it and saves nothing until
+you tick what to keep.
 
 ## Built around your collection
 
@@ -31,7 +32,8 @@ the files themselves are opened read-only.
 - **Edits in bulk**: select any number of tiles to favourite, rate, tag, set
   a studio, add or remove a performer, or file them into a collection
 - **Groups** by performer, studio, album and series, each with its own
-  browsable page
+  browsable page. An album's cover is drawn as a small stack of its photos,
+  which fans out on hover
 - **Families of tags and networks of studios**: a tag can sit under one or
   more others ("Beach" under "Outdoor" and "Vacation"), and a studio under a
   network you create. Browsing, filtering and smart collections by a tag or
@@ -61,6 +63,17 @@ the files themselves are opened read-only.
   [Your stats](#your-stats)
 - **Tracks** watch progress, play counts and a watched state, plus an
   hour-by-hour watch log that powers [Your stats](#your-stats)
+- **Has profiles**: one sign-in, then a *Who's watching?* picker. Each
+  profile can have a PIN and keeps its own watch history and stats,
+  favourites, ratings, bookmarks, vault, privacy password and appearance. The
+  library itself is shared, and only the owner profile can manage it
+- **Keeps a vault**: hide any item in your profile's vault and it disappears
+  from every page, search and count until you open the vault with its own
+  PIN or a passkey. Leaving the vault page locks it again
+- **Locks on open**: once a privacy password or passkey is set, opening the
+  app asks for it before showing anything
+- **Remembers the best part**: the seek bar shows a heatmap of the parts you
+  replay most, and a button jumps straight to the hottest one
 - **Maps who works with whom** — Performers → Network draws a graph linking
   performers by the videos they share or the studios they have in common,
   with focus, hide and shortest-path tools
@@ -85,6 +98,16 @@ the files themselves are opened read-only.
   total and what it is made of, a studio donut, performers ranked by space,
   the largest files, space by release year, resolution, and scenes kept at
   more than one quality
+- **Looks after the library** — Site settings → Library: a health summary,
+  duplicate files (same content under two names, with paths and sizes but
+  no delete button — that belongs in your file manager), and a clean-up for
+  performers and studios left behind by a removed folder. Videos whose files
+  have gone are listed as posters on the Missing page, where you can forget
+  them; nothing on disk is ever touched
+- **Logs activity** — Site settings → Activity: scans, new videos, edits,
+  tags, backups, watching and privacy changes, in one feed you can filter by
+  kind and clear with the privacy credential. Events about vault items stay
+  out of it while the vault is locked
 - **Backs up** the database and your uploaded artwork to a single archive
 - **Survives reorganisation**: files are matched by content hash, so moving or
   renaming one keeps its tags, framing and watch history
@@ -129,16 +152,24 @@ erDiagram
 
     media_items ||--o{ media_item_tags : ""
     tags ||--o{ media_item_tags : ""
+    tags ||--o{ tag_parents : "families — several parents allowed"
+    studios ||--o{ studios : "parent_id — network, one at most"
     media_items ||--o{ media_item_performers : ""
     performers ||--o{ media_item_performers : ""
 
     collections ||--o{ collection_items : "manual membership"
     media_items ||--o{ collection_items : ""
 
+    users ||--o{ profiles : "who's watching"
     users ||--o{ sessions : ""
-    users ||--o{ webauthn_credentials : "passkeys"
-    users ||--o{ playback_states : ""
-    media_items ||--o{ playback_states : "position, watched, play count"
+    sessions }o--o| profiles : "picked profile"
+    profiles ||--o{ webauthn_credentials : "passkeys"
+    profiles ||--o{ profile_item_state : "favourite, rating, vault, O-count"
+    media_items ||--o{ profile_item_state : ""
+    profiles ||--o{ playback_states : "position, watched, play count"
+    media_items ||--o{ playback_states : ""
+    profiles ||--o{ bookmarks : ""
+    profiles ||--o{ watch_log : "hourly buckets for stats"
 
     media_items {
         int id PK
@@ -156,7 +187,7 @@ erDiagram
         int episode_number
         text episode_title
         date release_date "parsed from the filename"
-        bool is_favorite
+        timestamp organised_at "set when the owner marks it organised"
         bool in_scope "folder still watched?"
         timestamp missing_since "file gone from a watched folder"
         jsonb extra_metadata "codec, camera, GPS"
@@ -204,10 +235,13 @@ Four decisions worth knowing:
   already points back at `media_items` for its cover, and a hard constraint in
   both directions needs deferred checks for no practical gain.
 
-Not shown, because nothing references them: `scan_jobs`, `categories`,
-`app_settings` (a key/JSONB store holding hero picks, scan interval,
-appearance and the privacy password hash) and `activity_events` (an
-append-only log of type/message/metadata rows behind the activity feed).
+Not shown, to keep the diagram readable: `scan_jobs`, `categories`,
+`app_settings` (a key/JSONB store for site-wide settings such as hero picks
+and the scan interval), `profile_settings` (the same per profile: appearance,
+privacy password, vault PIN), `profile_performer_state` (favourite
+performers), `o_events` (each count with its time), `playback_heatmap` (what
+the seek bar's heatmap is drawn from) and `activity_events` (an append-only
+log of type/message/metadata rows behind the activity feed).
 
 ## Running it
 
@@ -221,7 +255,8 @@ make up
 
 (`make up` is `docker compose -f docker/docker-compose.yml up -d --build` plus a lookup of this machine's
 address for the phone link in Settings. `make` on its own lists the other
-commands: `down`, `restart`, `logs`, `ps`, `dev`, `reset`.)
+commands: `build`, `down`, `restart`, `logs`, `ps`, `shell`, `dev`,
+`dev-down`, `reset`.)
 
 Open <http://localhost:3000>. The first screen creates your account; there is
 no default login. Then add your video folders under Settings → Library; the
@@ -348,8 +383,8 @@ From desktop Chrome, the browser streams the video to the TV itself, so it
 works with no setup. From an Android phone, and with AirPlay, the TV is handed
 a link and fetches the video on its own. That link carries a signed token for
 that one video, valid for six hours, so the TV needs no login — but it has to
-be able to reach this machine, which the npm start scripts arrange by passing
-in `LAN_HOST` (see above).
+be able to reach this machine, which `make up` arranges by passing in
+`LAN_HOST` (see above).
 The token also lets the stream through when Local network access is off; every
 other request from the network is still refused.
 
@@ -689,8 +724,9 @@ Photos: `jpg` `jpeg` `png` `gif` `webp` `heic`.
 
 ## Status
 
-Built for one person's library and used daily against it. There is no
-multi-user support, no transcoding (by design — see [Formats](#formats)), and
-no native mobile app — the web app
-is laid out for phones instead. The API is stable enough
+Built for one person's library and used daily against it. There is one
+account, with [profiles](#what-it-does) for the people who share it — not
+separate users with separate libraries. There is no transcoding (by design —
+see [Formats](#formats)), and no native mobile app — the web app is laid out
+for phones instead. The API is stable enough
 to build against but not versioned.

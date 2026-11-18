@@ -180,7 +180,7 @@ and partly re-imported, which a full backup cannot.
 1 → 2 → 6 → 7
 
 - **Phases 1–2** are done.
-- **Phases 6 and 7** are built (see Progress).
+- **Phases 6 and 7** are done.
 - **Phase 9** was dropped.
 
 ## Decisions
@@ -196,9 +196,9 @@ and partly re-imported, which a full backup cannot.
 
 - **Phase 1** — done, commit `b643a7c`.
 - **Phase 2** — done, commit `b7157ef`.
-- **Phase 6** — built, not yet committed: organised flag, O-counter, new
+- **Phase 6** — done, commit `d4c6b65`: organised flag, O-counter, new
   smart-collection rules, bitrate in the scan (migration 0051).
-- **Phase 7** — built, not yet committed. The subtitle key is `S`, not `C`,
+- **Phase 7** — done, commit `d4c6b65`. The subtitle key is `S`, not `C`,
   which is already cinema mode. Tracks are found by reading the video's folder
   when asked, so there is no migration.
 - **Phase 9** — dropped: a full backup already restores everything.
