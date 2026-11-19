@@ -622,6 +622,10 @@ back on your watching as a year in review:
   days — with an Unfollow beside each
 - **04 Trophies** — achievements unlocked and still to unlock
 
+The **Diary** (sidebar, under Your stats) reads the same log as a history:
+month by month, each day you watched something with what it was, for how
+long, whether you finished it, your stars, counts and your note beside it.
+
 It is built from the watch log, which records how long you watched each video
 in hour-sized buckets. Only time watched since the log was added counts, so a
 fresh install — or a month you haven't watched in yet — starts quiet and fills

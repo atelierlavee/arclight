@@ -15,7 +15,7 @@ import {
 import { notHidden, visibleItems } from "../library/visibility.js";
 
 import { profileId } from "../auth/profileContext.js";
-import { itemOCount, itemRating } from "../library/profileState.js";
+import { itemNote, itemOCount, itemRating } from "../library/profileState.js";
 import { playbackJoin } from "./mediaItemQueries.js";
 /**
  * Everything the Stats page works from, in one read.
@@ -67,6 +67,8 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         studio: studios.name,
         playCount: sql<number>`coalesce(${playbackStates.playCount}, 0)::int`,
         completedAt: playbackStates.completedAt,
+        // This profile's own note, for the watch diary.
+        note: itemNote(profile, mediaItems.id),
       })
       .from(mediaItems)
       .leftJoin(playbackStates, playbackJoin(profile))

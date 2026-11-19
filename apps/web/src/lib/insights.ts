@@ -22,6 +22,8 @@ export type InsightItem = {
   performerIds: number[];
   /** This profile's count. Optional so older payloads still parse. */
   oCount?: number;
+  /** This profile's private note. Optional so older payloads still parse. */
+  note?: string | null;
 };
 export type InsightPerformer = {
   id: number;

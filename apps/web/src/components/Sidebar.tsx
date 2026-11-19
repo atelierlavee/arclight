@@ -25,6 +25,7 @@ import {
   X,
   Grid2x2,
   UserCheck,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreateCollectionModal } from "./CreateCollectionModal";
@@ -605,6 +606,15 @@ export function Sidebar({
         >
           <BarChart3 className="size-4 shrink-0" />
           {!collapsed && "Your stats"}
+        </Link>
+        <Link
+          to="/diary"
+          className={cn(navItemClass, "mb-1")}
+          title={collapsed ? "Diary" : undefined}
+          activeProps={{ className: "bg-accent text-foreground font-medium" }}
+        >
+          <BookOpen className="size-4 shrink-0" />
+          {!collapsed && "Diary"}
         </Link>
         <Link
           to="/settings"

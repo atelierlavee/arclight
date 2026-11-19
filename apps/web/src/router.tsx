@@ -12,6 +12,7 @@ import { BrowsePage } from "@/pages/BrowsePage";
 import { HelpPage } from "@/pages/HelpPage";
 import { MultiViewPage } from "./pages/MultiViewPage";
 import { FollowingPage } from "./pages/FollowingPage";
+import { DiaryPage } from "./pages/DiaryPage";
 import { HomePage } from "@/pages/HomePage";
 import { InboxPage } from "@/pages/InboxPage";
 import { VaultPage } from "@/pages/VaultPage";
@@ -241,6 +242,19 @@ const followingRoute = createRoute({
   component: FollowingPage,
 });
 
+// The watch log as a diary; the month is in the URL so back and forward
+// step through months.
+const diaryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/diary",
+  // "at" rather than "month": the browse page's search already has a
+  // numeric month, and the router merges every route's search types.
+  validateSearch: (search: Record<string, unknown>): { at?: string } => ({
+    at: typeof search.at === "string" && /^\d{4}-\d{2}$/.test(search.at) ? search.at : undefined,
+  }),
+  component: DiaryPage,
+});
+
 // Several videos at once. The ids are in the URL so a set can be reopened.
 const multiviewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -283,6 +297,7 @@ const routeTree = rootRoute.addChildren([
   accountRoute,
   multiviewRoute,
   followingRoute,
+  diaryRoute,
 ]);
 
 export const router = createRouter({
