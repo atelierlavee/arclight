@@ -1,4 +1,5 @@
 import {
+  Clock,
   Eye,
   EyeOff,
   Heart,
@@ -25,6 +26,7 @@ export function PreviewOverlay({
   onStartPlaying,
   onToggleFavorite,
   onToggleWatched,
+  onToggleWatchLater,
   onQueue,
   onSetHallOfFamePin,
   onToggleMuted,
@@ -37,6 +39,7 @@ export function PreviewOverlay({
   onStartPlaying: (positionSeconds: number) => void;
   onToggleFavorite: (next: boolean) => void;
   onToggleWatched: (next: boolean) => void;
+  onToggleWatchLater: (next: boolean) => void;
   onQueue: (next: boolean) => void;
   onSetHallOfFamePin: (id: number) => void;
   onToggleMuted: () => void;
@@ -126,6 +129,27 @@ export function PreviewOverlay({
               ) : (
                 <EyeOff className="size-4 sm:size-5" />
               )}
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleWatchLater(!item.watchLaterAt)}
+              aria-pressed={Boolean(item.watchLaterAt)}
+              aria-label={
+                item.watchLaterAt ? "Remove from Watch Later" : "Save to Watch Later"
+              }
+              title={
+                item.watchLaterAt
+                  ? "On Watch Later — click to remove"
+                  : "Save to Watch Later"
+              }
+              className="flex size-8 shrink-0 items-center justify-center rounded-full border border-white/40 backdrop-blur-sm transition-colors hover:border-white sm:size-10"
+            >
+              <Clock
+                className={cn(
+                  "size-4 transition-colors sm:size-5",
+                  item.watchLaterAt && "text-sky-400",
+                )}
+              />
             </button>
             <button
               type="button"

@@ -588,11 +588,19 @@ export const profileItemState = pgTable(
     // history in o_events so the grid and smart rules read one integer rather
     // than counting rows; the two are changed together, in one transaction.
     oCount: integer("o_count").notNull().default(0),
+    // On this profile's Watch Later list since then, or null when it is not.
+    // A timestamp rather than a flag so the list reads newest-saved first.
+    // Cleared when the video is marked watched: the list is a to-do, and a
+    // finished item on it is just clutter.
+    watchLaterAt: timestamp("watch_later_at"),
   },
   (table) => [
     primaryKey({ columns: [table.profileId, table.mediaItemId] }),
     index("profile_item_state_hidden_idx").on(table.profileId, table.hiddenAt),
     index("profile_item_state_favorite_idx").on(table.profileId).where(sql`${table.isFavorite}`),
+    index("profile_item_state_watch_later_idx")
+      .on(table.profileId, table.watchLaterAt)
+      .where(sql`${table.watchLaterAt} is not null`),
   ],
 );
 

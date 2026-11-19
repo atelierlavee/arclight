@@ -22,6 +22,7 @@ import { MobilePlayButton, PreviewOverlay } from "./mediaDetail/PreviewOverlay";
 import { UpNextCard } from "./mediaDetail/UpNextCard";
 import { MIN_RESUMABLE_SECONDS } from "./mediaDetail/playerUtils";
 import { useCastStream } from "./mediaDetail/useCastStream";
+import { useToggleWatchLater } from "@/lib/watchLater";
 import { useItemActions } from "./mediaDetail/useItemActions";
 import { useMiniPlayerFrame } from "./mediaDetail/useMiniPlayerFrame";
 import { usePlaybackProgress } from "./mediaDetail/usePlaybackProgress";
@@ -113,6 +114,8 @@ export function MediaDetailModal({
       title: item?.title,
       onFramingSaved: () => setReframing(false),
     });
+
+  const toggleWatchLater = useToggleWatchLater();
 
   const { showPlayerControls, revealPlayerControls, scheduleHideControls } =
     usePlayerControlsVisibility(mode);
@@ -390,6 +393,9 @@ export function MediaDetailModal({
                 onStartPlaying={startPlaying}
                 onToggleFavorite={toggleFavorite}
                 onToggleWatched={(next) => toggleWatched.mutate(next)}
+                onToggleWatchLater={(next) => {
+                  if (item) void toggleWatchLater(item, next);
+                }}
                 onQueue={queue.queueCurrent}
                 onSetHallOfFamePin={(id) => setAppearance({ hallOfFamePin: id })}
                 onToggleMuted={playback.toggleMuted}

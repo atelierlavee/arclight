@@ -14,7 +14,7 @@ import {
 } from "../db/schema.js";
 import { playbackWarningFor } from "../media/compatibility.js";
 import { ageOn } from "./performerDetails.js";
-import { itemIsFavorite, itemOCount, itemRating } from "../library/profileState.js";
+import { itemIsFavorite, itemOCount, itemRating, itemWatchLaterAt } from "../library/profileState.js";
 
 export const PAGE_SIZE = 50;
 
@@ -63,6 +63,7 @@ export const SORTS = [
   "watched",
   "played",
   "rating",
+  "watchLater",
   "largest",
   "smallest",
   "random",
@@ -169,6 +170,9 @@ export function orderFor(sort: string | undefined, randomSeed: number, profileId
     // reasoning as undated items under the release sorts.
     case "rating":
       return [sql`${itemRating(profileId, mediaItems.id)} desc nulls last`, desc(mediaItems.id)];
+    // Newest saved first; anything not on the list sorts after it.
+    case "watchLater":
+      return [sql`${itemWatchLaterAt(profileId, mediaItems.id)} desc nulls last`, desc(mediaItems.id)];
     case "largest":
       return [sql`${fileSizeExpr} desc nulls last`, desc(mediaItems.id)];
     case "smallest":
@@ -297,6 +301,7 @@ export const itemColumnsFor = (profileId: number) => ({
   rating: itemRating(profileId, mediaItems.id),
   organisedAt: mediaItems.organisedAt,
   oCount: itemOCount(profileId, mediaItems.id),
+  watchLaterAt: itemWatchLaterAt(profileId, mediaItems.id),
   durationSeconds: mediaItems.durationSeconds,
   takenAt: mediaItems.takenAt,
   releaseDate: mediaItems.releaseDate,

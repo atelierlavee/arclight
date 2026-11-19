@@ -63,6 +63,9 @@ you tick what to keep.
   [Your stats](#your-stats)
 - **Tracks** watch progress, play counts and a watched state, plus an
   hour-by-hour watch log that powers [Your stats](#your-stats)
+- **Keeps a Watch Later list** per profile: save a video from its tile menu
+  or the player, find it in the homepage row or the browse filter, and it
+  drops off by itself once you've watched it
 - **Has profiles**: one sign-in, then a *Who's watching?* picker. Each
   profile can have a PIN and keeps its own watch history and stats,
   favourites, ratings, bookmarks, vault, privacy password and appearance. The

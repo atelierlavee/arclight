@@ -5,6 +5,7 @@ import {
   EyeOff,
   EyeClosed,
   FolderOpen,
+  Clock,
   Heart,
   ListPlus,
   ListVideo,
@@ -27,6 +28,7 @@ import { forgetRecent, recordRecent } from "./recent";
 import { removeFolderPins } from "./pinned";
 import { invalidateItemEverywhere } from "./invalidate";
 import { useToast } from "./toast";
+import { useToggleWatchLater } from "./watchLater";
 import type { TileShape } from "./layout";
 
 /**
@@ -139,6 +141,7 @@ export function useTileMenu({
   const isOwner = useIsOwner();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const toggleWatchLater = useToggleWatchLater();
 
   /**
    * Hides an item and takes it off every surface that could still show it.
@@ -240,6 +243,11 @@ export function useTileMenu({
               },
               ...(isVideo
                 ? [
+                    {
+                      label: item.watchLaterAt ? "Remove from Watch Later" : "Watch later",
+                      icon: Clock,
+                      onSelect: () => void toggleWatchLater(item, !item.watchLaterAt),
+                    },
                     {
                       label: "Toggle watched",
                       icon: item.lastPositionSeconds ? Eye : EyeOff,

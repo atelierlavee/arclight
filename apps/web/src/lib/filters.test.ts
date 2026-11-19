@@ -99,6 +99,7 @@ describe("filtersFromSearch", () => {
       year: 2019,
       watched: false,
       favorite: true,
+      watchLater: true,
       minDuration: 600,
       maxDuration: 1800,
       resolution: "hd",

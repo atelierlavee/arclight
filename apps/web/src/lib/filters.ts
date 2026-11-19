@@ -22,6 +22,8 @@ export type Filters = {
   /** Tri-state like `watched`: true is organised only, false is "not organised". */
   organised?: boolean;
   favorite?: boolean;
+  /** On the current profile's Watch Later list. */
+  watchLater?: boolean;
   /** Seconds. */
   minDuration?: number;
   maxDuration?: number;
@@ -80,6 +82,7 @@ export const SORT_OPTIONS = [
   { value: "watched", label: "Recently watched" },
   { value: "played", label: "Most played" },
   { value: "rating", label: "Highest rated" },
+  { value: "watchLater", label: "Saved for later" },
   { value: "largest", label: "Largest file" },
   { value: "smallest", label: "Smallest file" },
   { value: "random", label: "Random" },
@@ -159,6 +162,11 @@ export function activeFilterChips(filters: Filters): FilterChip[] {
       label: "Favourites",
       without: { ...filters, favorite: undefined },
     });
+  if (filters.watchLater)
+    chips.push({
+      label: "Watch Later",
+      without: { ...filters, watchLater: undefined },
+    });
   if (filters.minRating !== undefined)
     chips.push({
       label: filters.minRating === 5 ? "5 stars" : `${filters.minRating}+ stars`,
@@ -231,6 +239,7 @@ export function filterParams(filters: Filters): URLSearchParams {
   if (filters.organised !== undefined)
     params.set("organised", String(filters.organised));
   if (filters.favorite) params.set("favorite", "true");
+  if (filters.watchLater) params.set("watchLater", "true");
   if (filters.minDuration !== undefined)
     params.set("minDuration", String(filters.minDuration));
   if (filters.maxDuration !== undefined)
@@ -296,6 +305,10 @@ export function filtersFromSearch(search: Record<string, unknown>): Filters {
           ? false
           : undefined,
     favorite: search.favorite === "true" || search.favorite === true,
+    // Undefined rather than false when absent, which is what "no filter"
+    // means everywhere else in this type.
+    watchLater:
+      search.watchLater === "true" || search.watchLater === true ? true : undefined,
     minDuration: readNumber(search.minDuration),
     maxDuration: readNumber(search.maxDuration),
     resolution:
@@ -326,6 +339,7 @@ export function filtersToSearch(filters: Filters): Record<string, unknown> {
     organised:
       filters.organised === undefined ? undefined : String(filters.organised),
     favorite: filters.favorite ? "true" : undefined,
+    watchLater: filters.watchLater ? "true" : undefined,
     minDuration: filters.minDuration,
     maxDuration: filters.maxDuration,
     resolution: filters.resolution,

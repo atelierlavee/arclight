@@ -51,6 +51,8 @@ export type MediaCardItem = {
    */
   isFavorite?: boolean;
   watched?: boolean;
+  /** When the current profile saved it to Watch Later, or null. */
+  watchLaterAt?: string | null;
   tags?: { id: number; name: string }[];
   performers?: { id: number; name: string }[];
   studio?: string | null;

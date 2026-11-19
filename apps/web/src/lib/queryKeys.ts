@@ -56,6 +56,7 @@ export const qk = {
       ] as const,
     recent: ["media-items", "recent"] as const,
     favorites: ["media-items", "favorites"] as const,
+    watchLater: ["media-items", "watch-later"] as const,
     recentlyWatched: ["media-items", "recently-watched"] as const,
     mostPlayed: ["media-items", "most-played"] as const,
     unwatched: ["media-items", "unwatched"] as const,

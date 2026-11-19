@@ -44,7 +44,7 @@ import {
 } from "./mediaItemQueries.js";
 
 import { profileId } from "../auth/profileContext.js";
-import { itemFavoriteFilter, itemRating } from "../library/profileState.js";
+import { itemFavoriteFilter, itemRating, itemWatchLaterFilter } from "../library/profileState.js";
 export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
   app.get<{
     Querystring: {
@@ -53,6 +53,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       tag?: string;
       performer?: string;
       favorite?: string;
+      watchLater?: string;
       kind?: string;
       studio?: string;
       parentId?: string;
@@ -84,6 +85,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       tag,
       performer,
       favorite,
+      watchLater,
       studio,
       kind,
       parentId,
@@ -260,6 +262,10 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
     if (favoritesOnly) {
       conditions.push(itemFavoriteFilter(profile, mediaItems.id));
     }
+    const watchLaterOnly = watchLater === "true";
+    if (watchLaterOnly) {
+      conditions.push(itemWatchLaterFilter(profile, mediaItems.id));
+    }
 
     /**
      * The composable half of §7.
@@ -377,6 +383,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       Boolean(performer) ||
       Boolean(search) ||
       favoritesOnly ||
+      watchLaterOnly ||
       Boolean(studio) ||
       Boolean(kind) ||
       filterYear !== null ||

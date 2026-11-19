@@ -36,6 +36,7 @@ export const HOME_ROWS = [
   { key: "forgottenGems", label: "Forgotten gems" },
   { key: "tasteTwins", label: "You might like" },
   { key: "continue", label: "Continue watching" },
+  { key: "watchLater", label: "Watch later" },
   { key: "favourites", label: "Favourites" },
   { key: "performers", label: "Performers" },
   { key: "studios", label: "Studios" },

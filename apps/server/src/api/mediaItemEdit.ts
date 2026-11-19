@@ -373,6 +373,40 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
   );
 
   /**
+   * Puts an item on this profile's Watch Later list, or takes it off.
+   * Per profile, like favourites: one person's to-do is nobody else's.
+   * Not logged — the activity log is the library's, read by the owner.
+   */
+  app.put<{ Params: { id: string }; Body: { watchLater: boolean } }>(
+    "/api/media-items/:id/watch-later",
+    async (request, reply) => {
+      const id = parseId(request.params.id);
+      if (id === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const watchLater = (request.body as { watchLater?: unknown } | undefined)?.watchLater;
+      if (typeof watchLater !== "boolean") {
+        reply.code(400);
+        return { error: "watchLater must be a boolean" };
+      }
+
+      const [item] = await db
+        .select({ id: mediaItems.id })
+        .from(mediaItems)
+        .where(and(eq(mediaItems.id, id), hiddenGate(request)));
+      if (!item) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+
+      const watchLaterAt = watchLater ? new Date() : null;
+      await setItemState(profileId(request), id, { watchLaterAt });
+      return { ok: true, watchLater, watchLaterAt };
+    },
+  );
+
+  /**
    * Marks an item organised, or takes the mark back. Owner only, like every
    * library fact: it is a judgement about the metadata, shared by everyone.
    */

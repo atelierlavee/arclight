@@ -1,0 +1,2 @@
+ALTER TABLE "profile_item_state" ADD COLUMN "watch_later_at" timestamp;--> statement-breakpoint
+CREATE INDEX "profile_item_state_watch_later_idx" ON "profile_item_state" USING btree ("profile_id","watch_later_at") WHERE "profile_item_state"."watch_later_at" is not null;

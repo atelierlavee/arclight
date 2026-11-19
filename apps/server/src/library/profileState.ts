@@ -38,6 +38,18 @@ export function itemOCount(profileId: number, item: ItemRef): SQL<number> {
   );
 }
 
+/** When this profile put the item on Watch Later, or null when it is not on it. */
+export function itemWatchLaterAt(profileId: number, item: ItemRef): SQL<Date | null> {
+  return sql<Date | null>`(select pis.watch_later_at from profile_item_state pis where pis.profile_id = ${profileId} and pis.media_item_id = ${item})`.mapWith(
+    profileItemState.watchLaterAt,
+  );
+}
+
+/** As a filter: on this profile's Watch Later list. */
+export function itemWatchLaterFilter(profileId: number, item: ItemRef): SQL {
+  return sql`exists (select 1 from profile_item_state pis where pis.profile_id = ${profileId} and pis.media_item_id = ${item} and pis.watch_later_at is not null)`;
+}
+
 export function itemHiddenAt(profileId: number, item: ItemRef): SQL<Date | null> {
   return sql<Date | null>`(select pis.hidden_at from profile_item_state pis where pis.profile_id = ${profileId} and pis.media_item_id = ${item})`.mapWith(
     profileItemState.hiddenAt,
@@ -77,7 +89,12 @@ export function performerFavoriteFilter(profileId: number, performer: ItemRef): 
 export async function setItemState(
   profileId: number,
   mediaItemId: number,
-  patch: { isFavorite?: boolean; rating?: number | null; hiddenAt?: Date | null },
+  patch: {
+    isFavorite?: boolean;
+    rating?: number | null;
+    hiddenAt?: Date | null;
+    watchLaterAt?: Date | null;
+  },
 ): Promise<void> {
   if (Object.keys(patch).length === 0) return;
   await db

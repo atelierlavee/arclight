@@ -69,6 +69,8 @@ export type MediaItemDetail = {
   organisedAt: string | null;
   /** How many times the current profile has counted it. */
   oCount: number;
+  /** When the current profile saved it to Watch Later, or null. */
+  watchLaterAt: string | null;
   /** Detail responses only — the source file's own dates and size. */
   fileModifiedAt?: string | null;
   fileSizeBytes?: number | null;
@@ -247,6 +249,16 @@ export async function setWatched(id: number, watched: boolean): Promise<void> {
     body: JSON.stringify({ watched }),
   });
   if (!res.ok) throw new Error(`Failed to update watched state: ${res.status}`);
+}
+
+/** Puts an item on the current profile's Watch Later list, or takes it off. */
+export async function setWatchLater(id: number, watchLater: boolean): Promise<void> {
+  const res = await fetch(`/api/media-items/${id}/watch-later`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ watchLater }),
+  });
+  if (!res.ok) throw new Error(`Failed to update Watch Later: ${res.status}`);
 }
 
 /** Marks an item organised, or takes the mark back. Owner only. */

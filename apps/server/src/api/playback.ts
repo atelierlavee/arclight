@@ -1,8 +1,8 @@
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { serialized } from "../auth/serialize.js";
 import { db } from "../db/client.js";
-import { mediaItems, playbackHeatmap, playbackStates, watchLog } from "../db/schema.js";
+import { mediaItems, playbackHeatmap, playbackStates, profileItemState, watchLog } from "../db/schema.js";
 import { logActivity } from "../activity/log.js";
 import { hiddenGate, itemReachable } from "../library/visibility.js";
 import { profileId } from "../auth/profileContext.js";
@@ -258,6 +258,18 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
           },
         })
         .returning({ playCount: playbackStates.playCount });
+
+      // Finished means done with: it comes off Watch Later by itself.
+      await db
+        .update(profileItemState)
+        .set({ watchLaterAt: null })
+        .where(
+          and(
+            eq(profileItemState.profileId, profile),
+            eq(profileItemState.mediaItemId, mediaItemId),
+            isNotNull(profileItemState.watchLaterAt),
+          ),
+        );
 
       // The owner's viewing only: the log is library-wide and read by the
       // owner, and another profile's history is its own.

@@ -24,6 +24,7 @@ export type SeeMoreDestination =
         sort?: string;
         watched?: string;
         favorite?: string;
+        watchLater?: string;
       };
     };
 

@@ -120,6 +120,7 @@ export const PROFILE_ROUTES: Readonly<Record<string, string>> = {
   "PUT /api/media-items/:id/hidden": "hides in the current profile's vault",
   "PUT /api/media-items/:id/playback": "per-profile watch progress",
   "PUT /api/media-items/:id/watched": "per-profile watched state",
+  "PUT /api/media-items/:id/watch-later": "per-profile Watch Later list",
   "DELETE /api/continue-watching": "per-profile history",
   "POST /api/media-items/:id/bookmarks": "per-profile bookmarks",
   "PATCH /api/bookmarks/:id": "per-profile bookmarks",

@@ -111,6 +111,11 @@ export function HomePage() {
     queryKey: qk.mediaItems.favorites,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/media-items?favorite=true"),
   });
+  const { data: watchLater, isLoading: watchLaterLoading } = useQuery({
+    queryKey: qk.mediaItems.watchLater,
+    queryFn: () =>
+      fetchJson<{ items: MediaCardItem[] }>("/api/media-items?watchLater=true&sort=watchLater"),
+  });
   const { data: recentlyWatched, isLoading: recentlyWatchedLoading } = useQuery({
     queryKey: qk.mediaItems.recentlyWatched,
     queryFn: () =>
@@ -269,6 +274,19 @@ export function HomePage() {
                       action={<ClearContinueWatching />}
                       items={(continueWatching?.items ?? []).slice(0, ROW_TILE_LIMIT)}
                       loading={continueLoading}
+                      onSelectItem={(id) => openItem(id, false)}
+                      onPlayItem={(id) => openItem(id, true)}
+                      onOpenFolder={noopOpenFolder}
+                    />
+                  );
+                case "watchLater":
+                  return (
+                    <MediaRow
+                      key={key}
+                      title="Watch Later"
+                      seeMore={{ to: "/browse", search: { watchLater: "true", sort: "watchLater" } }}
+                      items={withoutFolders(watchLater?.items ?? []).slice(0, ROW_TILE_LIMIT)}
+                      loading={watchLaterLoading}
                       onSelectItem={(id) => openItem(id, false)}
                       onPlayItem={(id) => openItem(id, true)}
                       onOpenFolder={noopOpenFolder}

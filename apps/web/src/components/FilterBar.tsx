@@ -199,6 +199,17 @@ export function FilterMenu({
                 >
                   Favourites
                 </Choice>
+                <Choice
+                  active={filters.watchLater === true}
+                  onClick={() =>
+                    onChange({
+                      ...filters,
+                      watchLater: filters.watchLater ? undefined : true,
+                    })
+                  }
+                >
+                  Watch Later
+                </Choice>
               </Group>
 
               {/* Marking things organised is the owner's, so the working list
