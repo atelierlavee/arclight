@@ -613,6 +613,10 @@ back on your watching as a year in review:
 - **03 Your habits** — the hours and weekdays you watch most
 - **The count** — shown once the counter has been used: how many, on how
   many days, and your most-counted videos and performers
+- **Following** — shown once you follow someone: the share of your watching
+  that was who you follow (last 30 days and all time), who you watched most
+  this month, and who has *gone quiet* — followed but not watched in over 60
+  days — with an Unfollow beside each
 - **04 Trophies** — achievements unlocked and still to unlock
 
 It is built from the watch log, which records how long you watched each video

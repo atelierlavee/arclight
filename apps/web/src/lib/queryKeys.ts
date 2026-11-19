@@ -87,6 +87,7 @@ export const qk = {
     all: ["following"] as const,
     list: ["following", "list"] as const,
     suggestions: ["following", "suggestions"] as const,
+    stats: ["following", "stats"] as const,
   },
   /** The bell's count of new videos from who this profile follows. */
   followingSummary: ["following-summary"] as const,

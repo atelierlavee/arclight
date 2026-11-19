@@ -10,6 +10,12 @@ import { parseId, playbackJoin } from "./mediaItemQueries.js";
 /** How far back "new from who you follow" looks, in days. */
 export const FOLLOWING_NEW_DAYS = 7;
 
+/** "Most watched this month" looks back this far, in days. */
+export const FOLLOWING_RECENT_DAYS = 30;
+
+/** Followed but not watched for this long, in days, counts as gone quiet. */
+export const FOLLOWING_QUIET_DAYS = 60;
+
 /**
  * Following performers and studios, per profile.
  *
@@ -217,6 +223,128 @@ export async function followingRoutes(app: FastifyInstance): Promise<void> {
     `);
 
     return { performers: performerRows.rows, studios: studioRows.rows };
+  });
+
+  /**
+   * Following, as the stats page tells it: how much of this profile's
+   * watching is of who it follows, who it watched most this month, and who
+   * it follows but has not watched in a long while — a hint to unfollow.
+   *
+   * Built from the watch log, so only time watched since the log existed
+   * counts, as everywhere else on that page. Vault items are left out.
+   */
+  app.get("/api/following/stats", async (request) => {
+    const profile = profileId(request);
+    const visible = visibleItemsSql("mi", profile);
+    const isVideo = sql`mi.item_type_id in (select id from media_item_types where name = 'video')`;
+    const followedItem = itemFromFollowed(profile, sql`mi.id`, sql`mi.studio_id`);
+    const recent = sql`w.hour >= now() - make_interval(days => ${FOLLOWING_RECENT_DAYS})`;
+
+    const [counts] = (
+      await db.execute<{ performers: number; studios: number }>(sql`
+        select
+          (select count(*) from profile_performer_state where profile_id = ${profile} and followed_at is not null)::int as performers,
+          (select count(*) from profile_studio_state where profile_id = ${profile} and followed_at is not null)::int as studios
+      `)
+    ).rows;
+
+    const [share] = (
+      await db.execute<{ total: number; followed: number; recentTotal: number; recentFollowed: number }>(sql`
+        select
+          coalesce(sum(w.seconds), 0)::int as total,
+          coalesce(sum(w.seconds) filter (where ${followedItem}), 0)::int as followed,
+          coalesce(sum(w.seconds) filter (where ${recent}), 0)::int as "recentTotal",
+          coalesce(sum(w.seconds) filter (where ${recent} and ${followedItem}), 0)::int as "recentFollowed"
+        from watch_log w
+        join media_items mi on mi.id = w.media_item_id
+        where w.profile_id = ${profile} and ${visible}
+      `)
+    ).rows;
+
+    const topPerformers = await db.execute(sql`
+      select p.id, p.name, (p.image_file is not null) as "hasImage", (p.banner_file is not null) as "hasBanner",
+        sum(w.seconds)::int as seconds
+      from watch_log w
+      join media_items mi on mi.id = w.media_item_id and ${visible}
+      join media_item_performers mip on mip.media_item_id = mi.id
+      join performers p on p.id = mip.performer_id
+      join profile_performer_state pps
+        on pps.performer_id = p.id and pps.profile_id = ${profile} and pps.followed_at is not null
+      where w.profile_id = ${profile} and ${recent}
+      group by p.id
+      order by seconds desc, lower(p.name)
+      limit 5
+    `);
+
+    const topStudios = await db.execute(sql`
+      select s.id, s.name, sum(w.seconds)::int as seconds
+      from profile_studio_state pss
+      join studios s on s.id = pss.studio_id
+      join lateral (
+        with recursive under(id) as (
+          select s.id
+          union
+          select c.id from studios c join under u on c.parent_id = u.id
+        )
+        select id from under
+      ) site on true
+      join media_items mi on mi.studio_id = site.id and ${visible}
+      join watch_log w on w.media_item_id = mi.id and w.profile_id = ${profile} and ${recent}
+      where pss.profile_id = ${profile} and pss.followed_at is not null
+      group by s.id
+      order by seconds desc, lower(s.name)
+      limit 5
+    `);
+
+    // Quiet since the later of the last watch and the follow, so someone
+    // followed yesterday is not already "quiet".
+    const quietSince = sql`coalesce(max(w.hour), pps.followed_at)`;
+    const quietPerformers = await db.execute(sql`
+      select p.id, p.name, (p.image_file is not null) as "hasImage", (p.banner_file is not null) as "hasBanner",
+        pps.followed_at as "followedAt", max(w.hour) as "lastWatchedAt",
+        count(distinct mi.id)::int as "videoCount"
+      from profile_performer_state pps
+      join performers p on p.id = pps.performer_id
+      left join media_item_performers mip on mip.performer_id = p.id
+      left join media_items mi on mi.id = mip.media_item_id and ${visible} and ${isVideo}
+      left join watch_log w on w.media_item_id = mi.id and w.profile_id = ${profile}
+      where pps.profile_id = ${profile} and pps.followed_at is not null
+      group by p.id, pps.followed_at
+      having ${quietSince} < now() - make_interval(days => ${FOLLOWING_QUIET_DAYS})
+      order by ${quietSince} asc
+      limit 8
+    `);
+
+    const quietStudios = await db.execute(sql`
+      select s.id, s.name, pss.followed_at as "followedAt", max(w.hour) as "lastWatchedAt",
+        count(distinct mi.id)::int as "videoCount"
+      from profile_studio_state pss
+      join studios s on s.id = pss.studio_id
+      join lateral (
+        with recursive under(id) as (
+          select s.id
+          union
+          select c.id from studios c join under u on c.parent_id = u.id
+        )
+        select id from under
+      ) site on true
+      left join media_items mi on mi.studio_id = site.id and ${visible} and ${isVideo}
+      left join watch_log w on w.media_item_id = mi.id and w.profile_id = ${profile}
+      where pss.profile_id = ${profile} and pss.followed_at is not null
+      group by s.id, pss.followed_at
+      having coalesce(max(w.hour), pss.followed_at) < now() - make_interval(days => ${FOLLOWING_QUIET_DAYS})
+      order by coalesce(max(w.hour), pss.followed_at) asc
+      limit 8
+    `);
+
+    return {
+      following: { performers: counts?.performers ?? 0, studios: counts?.studios ?? 0 },
+      share: share ?? { total: 0, followed: 0, recentTotal: 0, recentFollowed: 0 },
+      top: { performers: topPerformers.rows, studios: topStudios.rows },
+      quiet: { performers: quietPerformers.rows, studios: quietStudios.rows },
+      recentDays: FOLLOWING_RECENT_DAYS,
+      quietDays: FOLLOWING_QUIET_DAYS,
+    };
   });
 
   /**

@@ -99,3 +99,34 @@ export function arrivedAgo(iso: string | null, now = Date.now()): string | null 
   if (days < 730) return `${Math.floor(days / 30)} months ago`;
   return `${Math.floor(days / 365)} years ago`;
 }
+
+export type FollowingStatsEntry = {
+  id: number;
+  name: string;
+  hasImage?: boolean;
+  hasBanner?: boolean;
+};
+
+export type FollowingStats = {
+  following: { performers: number; studios: number };
+  share: { total: number; followed: number; recentTotal: number; recentFollowed: number };
+  top: {
+    performers: (FollowingStatsEntry & { seconds: number })[];
+    studios: (FollowingStatsEntry & { seconds: number })[];
+  };
+  quiet: {
+    performers: (FollowingStatsEntry & { followedAt: string; lastWatchedAt: string | null; videoCount: number })[];
+    studios: (FollowingStatsEntry & { followedAt: string; lastWatchedAt: string | null; videoCount: number })[];
+  };
+  recentDays: number;
+  quietDays: number;
+};
+
+export async function fetchFollowingStats(): Promise<FollowingStats> {
+  return json<FollowingStats>(await fetch("/api/following/stats"));
+}
+
+/** A whole percentage of `part` in `whole`, or null when there is nothing to divide. */
+export function sharePercent(part: number, whole: number): number | null {
+  return whole > 0 ? Math.round((part / whole) * 100) : null;
+}

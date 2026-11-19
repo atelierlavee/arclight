@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrivedAgo, suggestionReasons, type SuggestionFigures } from "./followingApi";
+import { arrivedAgo, sharePercent, suggestionReasons, type SuggestionFigures } from "./followingApi";
 
 const figures = (overrides: Partial<SuggestionFigures> = {}): SuggestionFigures => ({
   secondsWatched: 0,
@@ -37,5 +37,13 @@ describe("arrivedAgo", () => {
     expect(arrivedAgo("2026-11-14T12:00:00Z", now)).toBe("5 days ago");
     expect(arrivedAgo("2026-10-20T12:00:00Z", now)).toBe("4 weeks ago");
     expect(arrivedAgo("2026-05-19T12:00:00Z", now)).toBe("6 months ago");
+  });
+});
+
+describe("sharePercent", () => {
+  it("rounds to a whole percent, and has nothing to say about nothing", () => {
+    expect(sharePercent(1, 3)).toBe(33);
+    expect(sharePercent(600, 1200)).toBe(50);
+    expect(sharePercent(0, 0)).toBeNull();
   });
 });

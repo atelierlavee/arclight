@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { studios } from "../db/schema.js";
+import { profilePerformerState, profiles, studios, watchLog } from "../db/schema.js";
 import { resetDatabase, signIn, signInOtherProfile, testApp } from "../test/harness.js";
 import { linkPerformer, makeItem, makeLibrary, makePerformer, makeStudio } from "../test/fixtures.js";
 
@@ -136,5 +136,49 @@ describe("following", () => {
     const guest = await signInOtherProfile();
     const theirs = (await call("GET", "/api/following/suggestions", undefined, guest.cookie)).json();
     expect(theirs.performers).toEqual([]);
+  });
+});
+
+describe("following stats", () => {
+  const hoursAgo = (hours: number) => {
+    const date = new Date(Date.now() - hours * 3600 * 1000);
+    date.setUTCMinutes(0, 0, 0);
+    return date;
+  };
+
+  it("measures the share, ranks this month, and finds who has gone quiet", async () => {
+    const [{ id: profile }] = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.isOwner, true));
+    const alice = await makePerformer("Alice");
+    const quiet = await makePerformer("Quiet");
+    const fresh = await makePerformer("Fresh");
+    const aliceVideo = await makeItem(libraryId, { title: "Alice's" });
+    const quietVideo = await makeItem(libraryId, { title: "Quiet's" });
+    const other = await makeItem(libraryId, { title: "Unfollowed" });
+    await linkPerformer(aliceVideo, alice);
+    await linkPerformer(quietVideo, quiet);
+
+    for (const id of [alice, quiet, fresh]) {
+      await call("PUT", `/api/performers/${id}/follow`, { follow: true });
+    }
+    // Quiet was followed long ago and last watched long ago.
+    await db
+      .update(profilePerformerState)
+      .set({ followedAt: new Date("2025-01-01") })
+      .where(eq(profilePerformerState.performerId, quiet));
+
+    await db.insert(watchLog).values([
+      { profileId: profile, mediaItemId: aliceVideo, hour: hoursAgo(5), seconds: 600 },
+      { profileId: profile, mediaItemId: other, hour: hoursAgo(5), seconds: 600 },
+      { profileId: profile, mediaItemId: quietVideo, hour: new Date("2025-02-01T10:00:00Z"), seconds: 1200 },
+    ]);
+
+    const body = (await call("GET", "/api/following/stats")).json();
+    expect(body.following).toEqual({ performers: 3, studios: 0 });
+    expect(body.share).toEqual({ total: 2400, followed: 1800, recentTotal: 1200, recentFollowed: 600 });
+    expect(body.top.performers).toEqual([
+      expect.objectContaining({ id: alice, name: "Alice", seconds: 600 }),
+    ]);
+    // Fresh was only just followed, so it is not quiet yet.
+    expect(body.quiet.performers.map((p: { name: string }) => p.name)).toEqual(["Quiet"]);
   });
 });

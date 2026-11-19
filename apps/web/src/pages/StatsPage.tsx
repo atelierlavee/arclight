@@ -27,6 +27,8 @@ import { libraryReach, totalSeconds } from "./stats/statsData";
 import { Trophies } from "./stats/Trophies";
 import { useHeadline } from "./stats/useHeadline";
 import { YourYear } from "./stats/YourYear";
+import { Following } from "./stats/Following";
+import { fetchFollowingStats } from "@/lib/followingApi";
 import { qk } from "@/lib/queryKeys";
 
 /**
@@ -91,6 +93,14 @@ function StatsStory({
   const hasTally = (data.oLog?.length ?? 0) > 0;
   // Shared with the app-wide unlock watcher, which keeps it current.
   const { data: record } = useQuery({ queryKey: qk.achievements, queryFn: fetchAchievements, staleTime: Infinity });
+  const { data: followingStats } = useQuery({ queryKey: qk.following.stats, queryFn: fetchFollowingStats });
+  // Only for someone who follows anyone and has watched something: otherwise
+  // every figure in it would be a dash.
+  const hasFollowing =
+    !!followingStats &&
+    followingStats.following.performers + followingStats.following.studios > 0 &&
+    followingStats.share.total > 0;
+  const followingNumber = (hasHistory ? 6 : 3) + (hasTally ? 1 : 0);
 
   // An unlock toast's "View" lands here with #trophies; the chapter only
   // exists once the data has, so the browser's own jump would miss it.
@@ -155,9 +165,15 @@ function StatsStory({
           </Chapter>
         )}
 
+        {hasFollowing && (
+          <Chapter number={String(followingNumber).padStart(2, "0")} title="Following" kicker="Who you keep up with">
+            <Following stats={followingStats} />
+          </Chapter>
+        )}
+
         <Chapter
           id="trophies"
-          number={String((hasHistory ? 6 : 3) + (hasTally ? 1 : 0)).padStart(2, "0")}
+          number={String(followingNumber + (hasFollowing ? 1 : 0)).padStart(2, "0")}
           title="Trophies"
           kicker="Achievements"
         >
