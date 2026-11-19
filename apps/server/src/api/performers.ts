@@ -43,7 +43,14 @@ import {
   setPerformerFavorite,
   setPerformerNote,
 } from "../library/profileState.js";
-import { playbackJoin } from "./mediaItemQueries.js";
+import {
+  fetchRelated,
+  itemColumnsFor,
+  playbackColumns,
+  playbackJoin,
+  withPlayback,
+} from "./mediaItemQueries.js";
+import { ageOn } from "./performerDetails.js";
 /**
  * Resolves a name to a performer id, creating the row when it's new.
  * Mirrors the scanner's helper: conflict-tolerant insert then re-select, so
@@ -851,6 +858,57 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       return { performer: { ...updated, isFavorite: (await performerStateFor(profile, id)).isFavorite } };
     }
   );
+
+  /**
+   * Every video of theirs, oldest release first, each with how old they were
+   * then — the performer page's career timeline. Undated videos come last.
+   * Not paged: one performer's videos are a few hundred at most, and the
+   * timeline needs all of them to draw its years.
+   */
+  app.get<{ Params: { id: string } }>("/api/performers/:id/career", async (request, reply) => {
+    const profile = profileId(request);
+    const id = Number(request.params.id);
+    const [performer] = Number.isInteger(id)
+      ? await db
+          .select({ id: performers.id, birthdate: performers.birthdate })
+          .from(performers)
+          .where(eq(performers.id, id))
+      : [];
+    if (!performer) {
+      reply.code(404);
+      return { error: "Not found" };
+    }
+
+    const rows = await db
+      .select({ ...itemColumnsFor(profile), ...playbackColumns })
+      .from(mediaItems)
+      .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
+      .leftJoin(studios, eq(studios.id, mediaItems.studioId))
+      .leftJoin(playbackStates, playbackJoin(profile))
+      .where(
+        and(
+          visibleItems(profile),
+          eq(mediaItemTypes.name, "video"),
+          inArray(
+            mediaItems.id,
+            db
+              .select({ id: mediaItemPerformers.mediaItemId })
+              .from(mediaItemPerformers)
+              .where(eq(mediaItemPerformers.performerId, id)),
+          ),
+        ),
+      )
+      .orderBy(sql`${mediaItems.releaseDate} asc nulls last`, mediaItems.id);
+
+    const related = await fetchRelated(rows.map((row) => row.id));
+    return {
+      birthdate: performer.birthdate,
+      items: rows.map((row) => ({
+        ...withPlayback(row, related),
+        ageAtRelease: ageOn(performer.birthdate, row.releaseDate),
+      })),
+    };
+  });
 
   /**
    * Sets this profile's private note on a performer; null or "" clears it.

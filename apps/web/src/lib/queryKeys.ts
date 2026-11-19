@@ -133,6 +133,11 @@ export const qk = {
     all: ["performer"] as const,
     detail: (id: Id) => ["performer", id] as const,
   },
+  /** A performer's videos by release year, for the career timeline. */
+  performerCareer: {
+    all: ["performer-career"] as const,
+    detail: (id: Id) => ["performer-career", id] as const,
+  },
   performerVideos: {
     all: ["performer-videos"] as const,
     list: (performer: unknown, params: unknown, sort: unknown) =>

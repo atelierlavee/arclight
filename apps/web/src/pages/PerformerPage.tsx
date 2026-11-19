@@ -10,6 +10,7 @@ import { AlbumRow } from "@/components/AlbumRow";
 import { PerformerCoPerformers } from "@/components/PerformerCoPerformers";
 import { PerformerStats } from "@/components/PerformerStats";
 import { PerformerVideos } from "@/components/PerformerVideos";
+import { PerformerCareer } from "@/components/PerformerCareer";
 import { PerformerBanner } from "@/components/PerformerBanner";
 import { PerformerFacts } from "@/components/PerformerFacts";
 import { NoteEditor } from "@/components/NoteEditor";
@@ -386,6 +387,8 @@ export function PerformerPage() {
           <PerformerCoPerformers performers={performer.coPerformers} />
 
           <AlbumRow performer={performer.name} />
+
+          <PerformerCareer performerId={performer.id} onSelect={openItem} />
 
           <PerformerVideos performer={performer} onSelect={openItem} />
         </div>

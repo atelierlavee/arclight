@@ -57,6 +57,7 @@ export function invalidateItemEverywhere(queryClient: QueryClient, id?: number):
     qk.heroItems,
     qk.relatedItems.all,
     qk.performerVideos.all,
+    qk.performerCareer.all,
     qk.performerInProgress.all,
     qk.searchSuggestions.all,
     qk.libraryBrowse.all,

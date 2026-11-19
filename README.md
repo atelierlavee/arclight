@@ -41,6 +41,9 @@ you tick what to keep.
   more others ("Beach" under "Outdoor" and "Vacation"), and a studio under a
   network you create. Browsing, filtering and smart collections by a tag or
   studio include everything under it
+- **Draws a performer's career**: *Career* on their page lays their videos
+  out by release year, with their age each year, the gaps between, and a
+  one-line summary — first and last year, ages, busiest year
 - **Profiles performers**: birthdate (and their age in each video),
   gender, country, height, measurements, hair and eyes, tattoos, piercings and
   career years — typed in by you, or filled in from StashDB, all optional
