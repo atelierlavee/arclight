@@ -66,6 +66,8 @@ you tick what to keep.
 - **Keeps a Watch Later list** per profile: save a video from its tile menu
   or the player, find it in the homepage row or the browse filter, and it
   drops off by itself once you've watched it
+- **Takes private notes** on any video or performer — visible only to the
+  profile that wrote them, and searchable from that profile's search
 - **Has profiles**: one sign-in, then a *Who's watching?* picker. Each
   profile can have a PIN and keeps its own watch history and stats,
   favourites, ratings, bookmarks, vault, privacy password and appearance. The

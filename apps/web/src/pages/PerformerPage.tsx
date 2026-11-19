@@ -12,6 +12,7 @@ import { PerformerStats } from "@/components/PerformerStats";
 import { PerformerVideos } from "@/components/PerformerVideos";
 import { PerformerBanner } from "@/components/PerformerBanner";
 import { PerformerFacts } from "@/components/PerformerFacts";
+import { NoteEditor } from "@/components/NoteEditor";
 import { PerformerImageMenu } from "@/components/PerformerImageMenu";
 import { PerformerImagePicker } from "@/components/PerformerImagePicker";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -25,6 +26,7 @@ import {
   savePortraitFraming,
   setPerformerArchived,
   setPerformerFavorite,
+  setPerformerNote,
 } from "@/lib/performerApi";
 import { useToast } from "@/lib/toast";
 import { qk } from "@/lib/queryKeys";
@@ -334,6 +336,15 @@ export function PerformerPage() {
       {performer && (
         <div className="px-4 pt-6 md:px-6">
           <PerformerFacts performer={performer} />
+          <div className="mt-4 max-w-2xl">
+            <NoteEditor
+              note={performer.note}
+              onSave={async (note) => {
+                await setPerformerNote(performer.id, note);
+                invalidatePerformer(queryClient, performer.id);
+              }}
+            />
+          </div>
         </div>
       )}
 

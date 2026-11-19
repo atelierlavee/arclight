@@ -35,7 +35,13 @@ import { normalizeName } from "../scanner/performerNames.js";
 import { parsePerformerDetails, type PerformerDetailsBody } from "./performerDetails.js";
 
 import { profileId } from "../auth/profileContext.js";
-import { itemRating, performerIsFavorite, setPerformerFavorite } from "../library/profileState.js";
+import {
+  itemRating,
+  parseNote,
+  performerIsFavorite,
+  setPerformerFavorite,
+  setPerformerNote,
+} from "../library/profileState.js";
 import { playbackJoin } from "./mediaItemQueries.js";
 /**
  * Resolves a name to a performer id, creating the row when it's new.
@@ -86,12 +92,15 @@ function dedupeNames(names: string[]): string[] {
 }
 
 /** One performer's favourite flag for one profile. */
-async function isFavoritePerformer(profile: number, performerId: number): Promise<boolean> {
+async function performerStateFor(
+  profile: number,
+  performerId: number,
+): Promise<{ isFavorite: boolean; note: string | null }> {
   const [row] = await db
-    .select({ isFavorite: profilePerformerState.isFavorite })
+    .select({ isFavorite: profilePerformerState.isFavorite, note: profilePerformerState.note })
     .from(profilePerformerState)
     .where(and(eq(profilePerformerState.profileId, profile), eq(profilePerformerState.performerId, performerId)));
-  return row?.isFavorite ?? false;
+  return { isFavorite: row?.isFavorite ?? false, note: row?.note ?? null };
 }
 
 export async function performerRoutes(app: FastifyInstance): Promise<void> {
@@ -486,12 +495,15 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       .orderBy(desc(mediaItems.id))
       .limit(2);
 
+    const personal = await performerStateFor(profile, performer.id);
     return {
       id: performer.id,
       name: performer.name,
       hasImage: performer.imageFile !== null,
       hasBanner: performer.bannerFile !== null,
-      isFavorite: (await isFavoritePerformer(profile, performer.id)),
+      isFavorite: personal.isFavorite,
+      // This profile's private note, never another's.
+      note: personal.note,
       archivedAt: performer.archivedAt,
       // Detail only, deliberately: a bio is prose, and the performers grid
       // renders every performer as a card that would carry text nothing shows.
@@ -824,8 +836,36 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       const [updated] = await db.select().from(performers).where(eq(performers.id, id));
       // Answered with this profile's favourite folded in, under the name the
       // column used to have.
-      return { performer: { ...updated, isFavorite: await isFavoritePerformer(profile, id) } };
+      return { performer: { ...updated, isFavorite: (await performerStateFor(profile, id)).isFavorite } };
     }
+  );
+
+  /**
+   * Sets this profile's private note on a performer; null or "" clears it.
+   * Its own route rather than a PATCH field, because PATCH is owner-only for
+   * everything but the favourite and a note is every profile's to write.
+   */
+  app.put<{ Params: { id: string }; Body: { note: string | null } }>(
+    "/api/performers/:id/note",
+    async (request, reply) => {
+      const id = Number(request.params.id);
+      const parsed = parseNote((request.body as { note?: unknown } | undefined)?.note);
+      if (!parsed.ok) {
+        reply.code(400);
+        return { error: parsed.error };
+      }
+      if (!Number.isInteger(id)) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const [existing] = await db.select({ id: performers.id }).from(performers).where(eq(performers.id, id));
+      if (!existing) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      await setPerformerNote(profileId(request), id, parsed.note);
+      return { ok: true, note: parsed.note };
+    },
   );
 
   app.delete<{ Params: { id: string } }>("/api/performers/:id", async (request, reply) => {

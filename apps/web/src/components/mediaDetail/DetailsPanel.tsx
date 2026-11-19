@@ -12,9 +12,12 @@ import { FramingEditor, type FramingValue } from "../FramingEditor";
 import { StarRating } from "../StarRating";
 import { BookmarkList } from "../BookmarkList";
 import { SeriesAssignment } from "../SeriesAssignment";
+import { NoteEditor } from "../NoteEditor";
 import type { Bookmark } from "@/lib/bookmarkApi";
 import type { Category } from "@/lib/categoryApi";
-import { thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
+import { setItemNote, thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
+import { useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/queryKeys";
 import { cardChrome, TILE_SHAPES } from "@/lib/layout";
 import { useAppearance } from "@/lib/appearance";
 import { cn, formatDuration } from "@/lib/utils";
@@ -94,6 +97,7 @@ export function DetailsPanel({
 }) {
   const { density, heroHeight } = useAppearance();
   const isOwner = useIsOwner();
+  const queryClient = useQueryClient();
   return (
     <div className="grid gap-6 p-4 sm:grid-cols-[1.6fr_1fr] sm:p-6">
       <div className="space-y-3">
@@ -212,6 +216,22 @@ export function DetailsPanel({
               Bookmarks{bookmarks.length > 0 && ` · ${bookmarks.length}`}
             </FieldLabel>
             <BookmarkList itemId={item.id} bookmarks={bookmarks} onJump={onJumpToBookmark} />
+          </div>
+        )}
+
+        {item.itemType !== "folder" && (
+          <div className="space-y-1.5 pt-1">
+            <FieldLabel accent={accent}>Note</FieldLabel>
+            <NoteEditor
+              note={item.note ?? null}
+              onSave={async (note) => {
+                await setItemNote(item.id, note);
+                // The detail carries the note; lists are refreshed because
+                // search reads notes too.
+                await queryClient.invalidateQueries({ queryKey: qk.mediaItem.detail(item.id) });
+                void queryClient.invalidateQueries({ queryKey: qk.mediaItems.all });
+              }}
+            />
           </div>
         )}
 

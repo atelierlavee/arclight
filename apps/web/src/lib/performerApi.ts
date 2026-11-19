@@ -77,6 +77,8 @@ export type PerformerFacts = {
 };
 
 export type PerformerDetail = PerformerSummary & PerformerFacts & {
+  /** The current profile's private note, or null. */
+  note: string | null;
   studios: StudioGroup[];
   years: YearGroup[];
   watch: { watched: number; inProgress: number; unwatched: number };
@@ -433,6 +435,16 @@ export async function savePortraitFraming(
     body: JSON.stringify(framing),
   });
   if (!res.ok) throw new Error(`Failed to save portrait framing: ${res.status}`);
+}
+
+/** Sets the current profile's private note on a performer; null clears it. */
+export async function setPerformerNote(id: number, note: string | null): Promise<void> {
+  const res = await fetch(`/api/performers/${id}/note`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+  });
+  if (!res.ok) throw new Error(`Failed to save the note: ${res.status}`);
 }
 
 export async function setPerformerFavorite(id: number, isFavorite: boolean): Promise<void> {

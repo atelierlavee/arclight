@@ -593,6 +593,9 @@ export const profileItemState = pgTable(
     // Cleared when the video is marked watched: the list is a to-do, and a
     // finished item on it is just clutter.
     watchLaterAt: timestamp("watch_later_at"),
+    // A private note about the item, this profile's alone. Null when there
+    // is none; an empty note is stored as null, never as "".
+    note: text("note"),
   },
   (table) => [
     primaryKey({ columns: [table.profileId, table.mediaItemId] }),
@@ -636,6 +639,8 @@ export const profilePerformerState = pgTable(
       .notNull()
       .references(() => performers.id, { onDelete: "cascade" }),
     isFavorite: boolean("is_favorite").notNull().default(false),
+    // A private note about the performer, as on profile_item_state.
+    note: text("note"),
   },
   (table) => [primaryKey({ columns: [table.profileId, table.performerId] })],
 );

@@ -94,6 +94,7 @@ export async function setItemState(
     rating?: number | null;
     hiddenAt?: Date | null;
     watchLaterAt?: Date | null;
+    note?: string | null;
   },
 ): Promise<void> {
   if (Object.keys(patch).length === 0) return;
@@ -117,6 +118,47 @@ export async function setPerformerFavorite(
     .onConflictDoUpdate({
       target: [profilePerformerState.profileId, profilePerformerState.performerId],
       set: { isFavorite },
+    });
+}
+
+/** The longest note kept, in characters. Generous: it is a notepad, not a tweet. */
+export const NOTE_MAX_LENGTH = 10_000;
+
+/**
+ * Reads a note from a request body: a string (trimmed, empty becomes null)
+ * or null. Anything else, or a note past the limit, is an error message.
+ */
+export function parseNote(value: unknown): { ok: true; note: string | null } | { ok: false; error: string } {
+  if (value === null) return { ok: true, note: null };
+  if (typeof value !== "string") return { ok: false, error: "note must be a string or null" };
+  const trimmed = value.trim();
+  if (trimmed.length > NOTE_MAX_LENGTH) {
+    return { ok: false, error: `note must be at most ${NOTE_MAX_LENGTH} characters` };
+  }
+  return { ok: true, note: trimmed || null };
+}
+
+/** This profile's note on an item, or null. */
+export function itemNote(profileId: number, item: ItemRef): SQL<string | null> {
+  return sql<string | null>`(select pis.note from profile_item_state pis where pis.profile_id = ${profileId} and pis.media_item_id = ${item})`;
+}
+
+/** As a search condition: this profile's note on the item contains the pattern. */
+export function itemNoteMatches(profileId: number, item: ItemRef, pattern: string): SQL {
+  return sql`exists (select 1 from profile_item_state pis where pis.profile_id = ${profileId} and pis.media_item_id = ${item} and pis.note ilike ${pattern})`;
+}
+
+export async function setPerformerNote(
+  profileId: number,
+  performerId: number,
+  note: string | null,
+): Promise<void> {
+  await db
+    .insert(profilePerformerState)
+    .values({ profileId, performerId, note })
+    .onConflictDoUpdate({
+      target: [profilePerformerState.profileId, profilePerformerState.performerId],
+      set: { note },
     });
 }
 

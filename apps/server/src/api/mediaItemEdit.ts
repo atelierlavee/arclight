@@ -3,7 +3,7 @@ import { type FastifyInstance } from "fastify";
 import { logActivity } from "../activity/log.js";
 import { isVaultUnlocked, vaultPinConfigured } from "../auth/vaultUnlock.js";
 import { profileId, unlockKey } from "../auth/profileContext.js";
-import { setItemState } from "../library/profileState.js";
+import { parseNote, setItemState } from "../library/profileState.js";
 import { hiddenGate } from "../library/visibility.js";
 import { db } from "../db/client.js";
 import { mediaItems, series } from "../db/schema.js";
@@ -403,6 +403,36 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       const watchLaterAt = watchLater ? new Date() : null;
       await setItemState(profileId(request), id, { watchLaterAt });
       return { ok: true, watchLater, watchLaterAt };
+    },
+  );
+
+  /**
+   * Sets this profile's private note on an item; null or "" clears it.
+   * Never logged: a note is the most personal thing a profile writes.
+   */
+  app.put<{ Params: { id: string }; Body: { note: string | null } }>(
+    "/api/media-items/:id/note",
+    async (request, reply) => {
+      const id = parseId(request.params.id);
+      if (id === null) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      const parsed = parseNote((request.body as { note?: unknown } | undefined)?.note);
+      if (!parsed.ok) {
+        reply.code(400);
+        return { error: parsed.error };
+      }
+      const [item] = await db
+        .select({ id: mediaItems.id })
+        .from(mediaItems)
+        .where(and(eq(mediaItems.id, id), hiddenGate(request)));
+      if (!item) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      await setItemState(profileId(request), id, { note: parsed.note });
+      return { ok: true, note: parsed.note };
     },
   );
 

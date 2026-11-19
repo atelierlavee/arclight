@@ -23,6 +23,7 @@ import {
 } from "./mediaItemQueries.js";
 
 import { profileId } from "../auth/profileContext.js";
+import { itemNote } from "../library/profileState.js";
 export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/api/media-items/:id", async (request, reply) => {
     const profile = profileId(request);
@@ -35,6 +36,8 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
         // stays here rather than on every listing query.
         fileModifiedAt: mediaFiles.mtime,
         fileSizeBytes: mediaFiles.sizeBytes,
+        // Prose, so detail only, like the file facts above.
+        note: itemNote(profile, mediaItems.id),
       })
       .from(mediaItems)
       .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))

@@ -71,6 +71,8 @@ export type MediaItemDetail = {
   oCount: number;
   /** When the current profile saved it to Watch Later, or null. */
   watchLaterAt: string | null;
+  /** Detail responses only — the current profile's private note, or null. */
+  note?: string | null;
   /** Detail responses only — the source file's own dates and size. */
   fileModifiedAt?: string | null;
   fileSizeBytes?: number | null;
@@ -259,6 +261,16 @@ export async function setWatchLater(id: number, watchLater: boolean): Promise<vo
     body: JSON.stringify({ watchLater }),
   });
   if (!res.ok) throw new Error(`Failed to update Watch Later: ${res.status}`);
+}
+
+/** Sets the current profile's private note on an item; null clears it. */
+export async function setItemNote(id: number, note: string | null): Promise<void> {
+  const res = await fetch(`/api/media-items/${id}/note`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+  });
+  if (!res.ok) throw new Error(`Failed to save the note: ${res.status}`);
 }
 
 /** Marks an item organised, or takes the mark back. Owner only. */

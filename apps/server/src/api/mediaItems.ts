@@ -44,7 +44,12 @@ import {
 } from "./mediaItemQueries.js";
 
 import { profileId } from "../auth/profileContext.js";
-import { itemFavoriteFilter, itemRating, itemWatchLaterFilter } from "../library/profileState.js";
+import {
+  itemFavoriteFilter,
+  itemNoteMatches,
+  itemRating,
+  itemWatchLaterFilter,
+} from "../library/profileState.js";
 export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
   app.get<{
     Querystring: {
@@ -177,6 +182,8 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
           ilike(studios.name, pattern),
           inArray(mediaItems.id, performerMatches),
           inArray(mediaItems.id, tagMatches),
+          // Your own notes, never another profile's.
+          itemNoteMatches(profile, mediaItems.id, pattern),
         ];
         // A bare four-digit word is almost certainly a year, so let it match
         // the release date too — "2019 caprice" then works as you'd expect.
