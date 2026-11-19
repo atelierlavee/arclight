@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { mediaItems, performers, profileItemState, profilePerformerState } from "../db/schema.js";
 import { profileId } from "../auth/profileContext.js";
 import { hiddenGate, visibleItemsSql } from "../library/visibility.js";
+import { itemNotHidden } from "../library/profileState.js";
 
 /** Best first. */
 export const TIERS = ["S", "A", "B", "C", "D"] as const;
@@ -162,7 +163,7 @@ export async function tierRoutes(app: FastifyInstance): Promise<void> {
             and(
               eq(profileItemState.profileId, profile),
               isNotNull(profileItemState.tier),
-              sql`${profileItemState.hiddenAt} is null`,
+              itemNotHidden(profile, profileItemState.mediaItemId),
               listed.length ? notInArray(profileItemState.mediaItemId, listed) : undefined,
             ),
           );
