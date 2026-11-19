@@ -18,6 +18,7 @@ import { normalizeName } from "../scanner/performerNames.js";
 import { serialized } from "../auth/serialize.js";
 import { profileId } from "../auth/profileContext.js";
 import { performerIsFavorite } from "../library/profileState.js";
+import { studioFollowedAt } from "../library/following.js";
 import { isId, playbackJoin } from "./mediaItemQueries.js";
 /**
  * Studios: who released a scene, derived from the filename's leading
@@ -251,6 +252,8 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
       })),
       representativeItemId: recentItems[0]?.id ?? null,
       bannerItemId: recentItems[1]?.id ?? recentItems[0]?.id ?? null,
+      // This profile's, like everything personal.
+      followedAt: await studioFollowedAt(profile, studio.id),
     };
   });
 

@@ -641,8 +641,30 @@ export const profilePerformerState = pgTable(
     isFavorite: boolean("is_favorite").notNull().default(false),
     // A private note about the performer, as on profile_item_state.
     note: text("note"),
+    // Following since then, or null. Followed performers feed the "New from
+    // who you follow" row and the Following filter.
+    followedAt: timestamp("followed_at"),
   },
   (table) => [primaryKey({ columns: [table.profileId, table.performerId] })],
+);
+
+/**
+ * One profile's relationship with one studio. Only following so far; a row
+ * exists once the profile has followed it. Following a network takes in
+ * every site under it.
+ */
+export const profileStudioState = pgTable(
+  "profile_studio_state",
+  {
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    studioId: integer("studio_id")
+      .notNull()
+      .references(() => studios.id, { onDelete: "cascade" }),
+    followedAt: timestamp("followed_at"),
+  },
+  (table) => [primaryKey({ columns: [table.profileId, table.studioId] })],
 );
 
 /**

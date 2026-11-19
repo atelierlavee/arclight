@@ -100,6 +100,7 @@ describe("filtersFromSearch", () => {
       watched: false,
       favorite: true,
       watchLater: true,
+      following: true,
       minDuration: 600,
       maxDuration: 1800,
       resolution: "hd",

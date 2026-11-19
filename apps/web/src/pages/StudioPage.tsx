@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FollowButton } from "@/components/FollowButton";
 import { getRouteApi } from "@tanstack/react-router";
 import { Building2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -7,7 +8,7 @@ import { AlbumRow } from "@/components/AlbumRow";
 import { MediaGrid } from "@/components/MediaGrid";
 import { PerformerCoPerformers } from "@/components/PerformerCoPerformers";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
-import { fetchStudio, type StudioDetail } from "@/lib/studioApi";
+import { fetchStudio, setStudioFollowed, type StudioDetail } from "@/lib/studioApi";
 import { PlaySurface } from "@/components/PlaySurface";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { StudioNetwork } from "@/components/StudioNetwork";
@@ -83,6 +84,7 @@ export function StudioPage() {
     queryKey: qk.studio.detail(id),
     queryFn: () => fetchStudio(id),
   });
+  const queryClient = useQueryClient();
 
   if (isError) {
     return (
@@ -125,9 +127,22 @@ export function StudioPage() {
             <Building2 className="size-6 text-white/80 sm:size-7 md:size-9" />
           </div>
           <div className="min-w-0 flex-1 space-y-1.5 pb-1">
-            <h1 className="sensitive truncate text-xl font-bold tracking-tight text-white drop-shadow sm:text-3xl md:text-4xl">
-              {studio?.name ?? " "}
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="sensitive truncate text-xl font-bold tracking-tight text-white drop-shadow sm:text-3xl md:text-4xl">
+                {studio?.name ?? " "}
+              </h1>
+              {studio && (
+                <FollowButton
+                  tone="overlay"
+                  followed={studio.followedAt !== null}
+                  name={studio.name}
+                  onToggle={async (next) => {
+                    await setStudioFollowed(studio.id, next);
+                    await queryClient.invalidateQueries({ queryKey: qk.studio.detail(studio.id) });
+                  }}
+                />
+              )}
+            </div>
             {studio && <StudioStats studio={studio} />}
             {studio && (
               <PlaySurface

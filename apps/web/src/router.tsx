@@ -69,6 +69,7 @@ const browseRoute = createRoute({
     organised?: string;
     favorite?: string;
     watchLater?: string;
+    following?: string;
     minDuration?: number;
     maxDuration?: number;
     resolution?: string;
@@ -96,6 +97,7 @@ const browseRoute = createRoute({
       typeof search.organised === "string" ? search.organised : undefined,
     favorite: typeof search.favorite === "string" ? search.favorite : undefined,
     watchLater: typeof search.watchLater === "string" ? search.watchLater : undefined,
+    following: typeof search.following === "string" ? search.following : undefined,
     minDuration:
       search.minDuration != null ? Number(search.minDuration) : undefined,
     maxDuration:

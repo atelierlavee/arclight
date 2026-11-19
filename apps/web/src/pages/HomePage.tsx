@@ -116,6 +116,11 @@ export function HomePage() {
     queryFn: () =>
       fetchJson<{ items: MediaCardItem[] }>("/api/media-items?watchLater=true&sort=watchLater"),
   });
+  const { data: followingNew, isLoading: followingLoading } = useQuery({
+    queryKey: qk.mediaItems.following,
+    queryFn: () =>
+      fetchJson<{ items: MediaCardItem[] }>("/api/media-items?following=true&watched=false"),
+  });
   const { data: recentlyWatched, isLoading: recentlyWatchedLoading } = useQuery({
     queryKey: qk.mediaItems.recentlyWatched,
     queryFn: () =>
@@ -287,6 +292,19 @@ export function HomePage() {
                       seeMore={{ to: "/browse", search: { watchLater: "true", sort: "watchLater" } }}
                       items={withoutFolders(watchLater?.items ?? []).slice(0, ROW_TILE_LIMIT)}
                       loading={watchLaterLoading}
+                      onSelectItem={(id) => openItem(id, false)}
+                      onPlayItem={(id) => openItem(id, true)}
+                      onOpenFolder={noopOpenFolder}
+                    />
+                  );
+                case "following":
+                  return (
+                    <MediaRow
+                      key={key}
+                      title="New from who you follow"
+                      seeMore={{ to: "/browse", search: { following: "true", watched: "false" } }}
+                      items={withoutFolders(followingNew?.items ?? []).slice(0, ROW_TILE_LIMIT)}
+                      loading={followingLoading}
                       onSelectItem={(id) => openItem(id, false)}
                       onPlayItem={(id) => openItem(id, true)}
                       onOpenFolder={noopOpenFolder}

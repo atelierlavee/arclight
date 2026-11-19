@@ -44,6 +44,8 @@ export type StudioDetail = {
   performers: StudioPerformer[];
   representativeItemId: number | null;
   bannerItemId: number | null;
+  /** When the current profile followed it, or null. */
+  followedAt: string | null;
 };
 
 export async function fetchStudios(): Promise<{ studios: StudioSummary[] }> {
@@ -72,6 +74,15 @@ async function send(url: string, method: string, body: unknown): Promise<Respons
 }
 
 /** Makes a studio by hand — in practice a network to put sites under. */
+export async function setStudioFollowed(id: number, follow: boolean): Promise<void> {
+  const res = await fetch(`/api/studios/${id}/follow`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ follow }),
+  });
+  if (!res.ok) throw new Error(`Failed to update following: ${res.status}`);
+}
+
 export async function createStudio(name: string): Promise<StudioRef> {
   const res = await send("/api/studios", "POST", { name });
   return (await res.json()).studio;

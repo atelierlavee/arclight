@@ -37,6 +37,7 @@ export const HOME_ROWS = [
   { key: "tasteTwins", label: "You might like" },
   { key: "continue", label: "Continue watching" },
   { key: "watchLater", label: "Watch later" },
+  { key: "following", label: "New from who you follow" },
   { key: "favourites", label: "Favourites" },
   { key: "performers", label: "Performers" },
   { key: "studios", label: "Studios" },

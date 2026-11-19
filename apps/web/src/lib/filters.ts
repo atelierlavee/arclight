@@ -24,6 +24,8 @@ export type Filters = {
   favorite?: boolean;
   /** On the current profile's Watch Later list. */
   watchLater?: boolean;
+  /** From a performer or studio the current profile follows. */
+  following?: boolean;
   /** Seconds. */
   minDuration?: number;
   maxDuration?: number;
@@ -167,6 +169,11 @@ export function activeFilterChips(filters: Filters): FilterChip[] {
       label: "Watch Later",
       without: { ...filters, watchLater: undefined },
     });
+  if (filters.following)
+    chips.push({
+      label: "Following",
+      without: { ...filters, following: undefined },
+    });
   if (filters.minRating !== undefined)
     chips.push({
       label: filters.minRating === 5 ? "5 stars" : `${filters.minRating}+ stars`,
@@ -240,6 +247,7 @@ export function filterParams(filters: Filters): URLSearchParams {
     params.set("organised", String(filters.organised));
   if (filters.favorite) params.set("favorite", "true");
   if (filters.watchLater) params.set("watchLater", "true");
+  if (filters.following) params.set("following", "true");
   if (filters.minDuration !== undefined)
     params.set("minDuration", String(filters.minDuration));
   if (filters.maxDuration !== undefined)
@@ -309,6 +317,8 @@ export function filtersFromSearch(search: Record<string, unknown>): Filters {
     // means everywhere else in this type.
     watchLater:
       search.watchLater === "true" || search.watchLater === true ? true : undefined,
+    following:
+      search.following === "true" || search.following === true ? true : undefined,
     minDuration: readNumber(search.minDuration),
     maxDuration: readNumber(search.maxDuration),
     resolution:
@@ -340,6 +350,7 @@ export function filtersToSearch(filters: Filters): Record<string, unknown> {
       filters.organised === undefined ? undefined : String(filters.organised),
     favorite: filters.favorite ? "true" : undefined,
     watchLater: filters.watchLater ? "true" : undefined,
+    following: filters.following ? "true" : undefined,
     minDuration: filters.minDuration,
     maxDuration: filters.maxDuration,
     resolution: filters.resolution,

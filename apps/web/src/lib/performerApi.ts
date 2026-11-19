@@ -79,6 +79,8 @@ export type PerformerFacts = {
 export type PerformerDetail = PerformerSummary & PerformerFacts & {
   /** The current profile's private note, or null. */
   note: string | null;
+  /** When the current profile followed them, or null. */
+  followedAt: string | null;
   studios: StudioGroup[];
   years: YearGroup[];
   watch: { watched: number; inProgress: number; unwatched: number };
@@ -435,6 +437,15 @@ export async function savePortraitFraming(
     body: JSON.stringify(framing),
   });
   if (!res.ok) throw new Error(`Failed to save portrait framing: ${res.status}`);
+}
+
+export async function setPerformerFollowed(id: number, follow: boolean): Promise<void> {
+  const res = await fetch(`/api/performers/${id}/follow`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ follow }),
+  });
+  if (!res.ok) throw new Error(`Failed to update following: ${res.status}`);
 }
 
 /** Sets the current profile's private note on a performer; null clears it. */

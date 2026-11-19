@@ -57,6 +57,7 @@ export const qk = {
     recent: ["media-items", "recent"] as const,
     favorites: ["media-items", "favorites"] as const,
     watchLater: ["media-items", "watch-later"] as const,
+    following: ["media-items", "following"] as const,
     recentlyWatched: ["media-items", "recently-watched"] as const,
     mostPlayed: ["media-items", "most-played"] as const,
     unwatched: ["media-items", "unwatched"] as const,
@@ -79,6 +80,8 @@ export const qk = {
   },
   collections: ["collections"] as const,
   continueWatching: ["continue-watching"] as const,
+  /** The bell's count of new videos from who this profile follows. */
+  followingSummary: ["following-summary"] as const,
   heroItems: ["hero-items"] as const,
   onThisDay: ["on-this-day"] as const,
   forgottenGems: ["forgotten-gems"] as const,

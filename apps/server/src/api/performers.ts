@@ -95,12 +95,20 @@ function dedupeNames(names: string[]): string[] {
 async function performerStateFor(
   profile: number,
   performerId: number,
-): Promise<{ isFavorite: boolean; note: string | null }> {
+): Promise<{ isFavorite: boolean; note: string | null; followedAt: Date | null }> {
   const [row] = await db
-    .select({ isFavorite: profilePerformerState.isFavorite, note: profilePerformerState.note })
+    .select({
+      isFavorite: profilePerformerState.isFavorite,
+      note: profilePerformerState.note,
+      followedAt: profilePerformerState.followedAt,
+    })
     .from(profilePerformerState)
     .where(and(eq(profilePerformerState.profileId, profile), eq(profilePerformerState.performerId, performerId)));
-  return { isFavorite: row?.isFavorite ?? false, note: row?.note ?? null };
+  return {
+    isFavorite: row?.isFavorite ?? false,
+    note: row?.note ?? null,
+    followedAt: row?.followedAt ?? null,
+  };
 }
 
 export async function performerRoutes(app: FastifyInstance): Promise<void> {
@@ -504,6 +512,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       isFavorite: personal.isFavorite,
       // This profile's private note, never another's.
       note: personal.note,
+      followedAt: personal.followedAt,
       archivedAt: performer.archivedAt,
       // Detail only, deliberately: a bio is prose, and the performers grid
       // renders every performer as a card that would carry text nothing shows.

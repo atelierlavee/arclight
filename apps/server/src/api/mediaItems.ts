@@ -26,6 +26,7 @@ import {
   tags,
 } from "../db/schema.js";
 import { visibleItems } from "../library/visibility.js";
+import { itemFromFollowed } from "../library/following.js";
 import {
   escapeLike,
   fetchPerformersByItemIds,
@@ -59,6 +60,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       performer?: string;
       favorite?: string;
       watchLater?: string;
+      following?: string;
       kind?: string;
       studio?: string;
       parentId?: string;
@@ -91,6 +93,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       performer,
       favorite,
       watchLater,
+      following,
       studio,
       kind,
       parentId,
@@ -273,6 +276,12 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
     if (watchLaterOnly) {
       conditions.push(itemWatchLaterFilter(profile, mediaItems.id));
     }
+    // From a performer or studio this profile follows (and a followed
+    // network's sites).
+    const followingOnly = following === "true";
+    if (followingOnly) {
+      conditions.push(itemFromFollowed(profile, mediaItems.id, mediaItems.studioId));
+    }
 
     /**
      * The composable half of §7.
@@ -391,6 +400,7 @@ export async function mediaItemRoutes(app: FastifyInstance): Promise<void> {
       Boolean(search) ||
       favoritesOnly ||
       watchLaterOnly ||
+      followingOnly ||
       Boolean(studio) ||
       Boolean(kind) ||
       filterYear !== null ||

@@ -210,6 +210,17 @@ export function FilterMenu({
                 >
                   Watch Later
                 </Choice>
+                <Choice
+                  active={filters.following === true}
+                  onClick={() =>
+                    onChange({
+                      ...filters,
+                      following: filters.following ? undefined : true,
+                    })
+                  }
+                >
+                  Following
+                </Choice>
               </Group>
 
               {/* Marking things organised is the owner's, so the working list

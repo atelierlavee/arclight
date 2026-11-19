@@ -69,6 +69,10 @@ you tick what to keep.
 - **Keeps a Watch Later list** per profile: save a video from its tile menu
   or the player, find it in the homepage row or the browse filter, and it
   drops off by itself once you've watched it
+- **Follows performers and studios**: the Follow button on their page
+  (per profile) feeds a *New from who you follow* home row, a *Following*
+  browse filter and the notification bell. Following a network takes in all
+  its sites
 - **Takes private notes** on any video or performer — visible only to the
   profile that wrote them, and searchable from that profile's search
 - **Has profiles**: one sign-in, then a *Who's watching?* picker. Each

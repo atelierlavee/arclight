@@ -1,6 +1,7 @@
 import { pkey } from "@/lib/profileStorage";
 import {
   Bell,
+  UserCheck,
   CheckCircle2,
   Copy,
   FileWarning,
@@ -10,7 +11,17 @@ import {
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLibraryStats } from "@/lib/statsApi";
+import { qk } from "@/lib/queryKeys";
+
+type FollowingSummary = { newCount: number; newestAt: string | null; days: number };
+
+async function fetchFollowingSummary(): Promise<FollowingSummary> {
+  const res = await fetch("/api/following/summary");
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  return res.json();
+}
 
 const DISMISSED_KEY = "dismissed-notifications";
 
@@ -41,8 +52,31 @@ export function NotificationCenter() {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(readDismissed);
   const { data } = useLibraryStats();
+  const { data: following } = useQuery({
+    queryKey: qk.followingSummary,
+    queryFn: fetchFollowingSummary,
+    // New arrivals come from scans and approvals elsewhere; a few minutes
+    // late on the bell is fine.
+    staleTime: 5 * 60 * 1000,
+  });
 
-  const notifications = data
+  // Keyed on the newest arrival, so a dismissed notice comes back when there
+  // is something newer — not when the count merely drops.
+  const followingNotifications =
+    following && following.newCount > 0
+      ? [
+          {
+            id: `following:${following.newestAt}`,
+            label: `${following.newCount} new video${following.newCount === 1 ? "" : "s"} from who you follow`,
+            icon: UserCheck,
+            href: "/browse" as const,
+            search: { following: "true", watched: "false" },
+            tone: "text-sky-400",
+          },
+        ]
+      : [];
+
+  const libraryNotifications = data
     ? [
         ...(data.lastScan?.status === "failed"
           ? [
@@ -86,6 +120,14 @@ export function NotificationCenter() {
           : []),
       ]
     : [];
+  const notifications: {
+    id: string;
+    label: string;
+    icon: typeof Bell;
+    href: "/settings" | "/browse";
+    search?: Record<string, string>;
+    tone?: string;
+  }[] = [...followingNotifications, ...libraryNotifications];
   const visibleNotifications = notifications.filter(
     (notification) => !dismissed.has(notification.id),
   );
@@ -148,11 +190,11 @@ export function NotificationCenter() {
                   <Link
                     key={notification.id}
                     to={notification.href}
-                    search={{ tab: "library" }}
+                    search={notification.search ?? { tab: "library" }}
                     onClick={() => setOpen(false)}
                     className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-accent"
                   >
-                    <Icon className="size-4 shrink-0 text-amber-500" />
+                    <Icon className={`size-4 shrink-0 ${notification.tone ?? "text-amber-500"}`} />
                     <span className="min-w-0 flex-1">{notification.label}</span>
                   </Link>
                 );
