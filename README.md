@@ -87,6 +87,10 @@ you tick what to keep.
 - **Lays a video out as a contact sheet** (`G`, or the grid button): 20,
   50 or every frame of the seek-bar preview in a grid, with the most-replayed
   stretch and your bookmarks marked. Click a frame to play from there
+- **Plays up to four at once** — *Multi-view* in the sidebar, or select two
+  to four tiles and choose it from the selection bar. Every picture plays,
+  one is heard: its speaker button or `1`–`4` moves the sound. Nothing
+  watched there counts towards history or stats
 - **Leans back**: *Lean back* beside Play All and Shuffle (on performer,
   studio, album, series, collection and filtered browse pages) shuffles the
   set into the queue and plays it hands-free in cinema mode — whole videos,

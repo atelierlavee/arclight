@@ -80,6 +80,8 @@ export const qk = {
   },
   collections: ["collections"] as const,
   continueWatching: ["continue-watching"] as const,
+  /** The multi-view page's "add a video" search. */
+  multiviewSearch: (q: string) => ["multiview-search", q] as const,
   /** The bell's count of new videos from who this profile follows. */
   followingSummary: ["following-summary"] as const,
   heroItems: ["hero-items"] as const,

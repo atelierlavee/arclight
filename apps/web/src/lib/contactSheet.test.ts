@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { pickFrames } from "./ContactSheet";
-import type { ScrubSprite } from "@/lib/bookmarkApi";
+import { pickFrames } from "./contactSheet";
+import type { ScrubSprite } from "./bookmarkApi";
 
 const sprite = (count: number, interval = 10): ScrubSprite => ({
   url: "/x.jpg",

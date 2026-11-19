@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SLIDESHOW_SPEEDS, nextSlideshowSpeed } from "./PhotoLightbox";
+import { SLIDESHOW_SPEEDS, nextSlideshowSpeed } from "./slideshow";
 
 describe("nextSlideshowSpeed", () => {
   it("steps through the speeds and wraps round", () => {

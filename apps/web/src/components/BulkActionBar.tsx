@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, Eye, EyeOff, Heart, HeartOff, Star, Tag, User, X } from "lucide-react";
+import { Building2, Check, Eye, EyeOff, Grid2x2, Heart, HeartOff, Star, Tag, User, X } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useToast } from "@/lib/toast";
 import { summariseBulk, type BulkResult } from "@/lib/bulkSummary";
 import { invalidateItemEverywhere } from "@/lib/invalidate";
@@ -230,6 +231,17 @@ export function BulkActionBar({
 
       <span aria-hidden className="mx-1 h-4 w-px bg-border" />
 
+      {/* Two to four: one is just the player, more than four too small to watch. */}
+      {selectedIds.length >= 2 && selectedIds.length <= 4 && (
+        <Link
+          to="/multiview"
+          search={{ ids: selectedIds.join(",") }}
+          className={actionButtonClass}
+          title="Watch the selected videos side by side"
+        >
+          <Grid2x2 className="size-3.5" /> Multi-view
+        </Link>
+      )}
       <button
         type="button"
         disabled={isPending}

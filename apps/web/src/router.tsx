@@ -10,6 +10,7 @@ import { AlbumPage } from "@/pages/AlbumPage";
 import { AlbumsPage } from "@/pages/AlbumsPage";
 import { BrowsePage } from "@/pages/BrowsePage";
 import { HelpPage } from "@/pages/HelpPage";
+import { MultiViewPage } from "./pages/MultiViewPage";
 import { HomePage } from "@/pages/HomePage";
 import { InboxPage } from "@/pages/InboxPage";
 import { VaultPage } from "@/pages/VaultPage";
@@ -233,6 +234,21 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+// Several videos at once. The ids are in the URL so a set can be reopened.
+const multiviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/multiview",
+  validateSearch: (search: Record<string, unknown>): { ids?: string } => ({
+    ids:
+      typeof search.ids === "string"
+        ? search.ids
+        : typeof search.ids === "number"
+          ? String(search.ids)
+          : undefined,
+  }),
+  component: MultiViewPage,
+});
+
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/account",
@@ -258,6 +274,7 @@ const routeTree = rootRoute.addChildren([
   helpRoute,
   settingsRoute,
   accountRoute,
+  multiviewRoute,
 ]);
 
 export const router = createRouter({

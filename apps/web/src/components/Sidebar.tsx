@@ -23,6 +23,7 @@ import {
   Trash2,
   Users,
   X,
+  Grid2x2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreateCollectionModal } from "./CreateCollectionModal";
@@ -339,6 +340,15 @@ export function Sidebar({
         >
           <Tv className="size-4 shrink-0" />
           {!collapsed && "Series"}
+        </Link>
+        <Link
+          to="/multiview"
+          className={navItemClass}
+          title={collapsed ? "Multi-view" : undefined}
+          activeProps={{ className: "bg-accent text-foreground font-medium" }}
+        >
+          <Grid2x2 className="size-4 shrink-0" />
+          {!collapsed && "Multi-view"}
         </Link>
         {isOwner && <InboxLink collapsed={collapsed} navItemClass={navItemClass} />}
         <Link
