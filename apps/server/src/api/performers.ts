@@ -35,6 +35,7 @@ import { normalizeName } from "../scanner/performerNames.js";
 import { parsePerformerDetails, type PerformerDetailsBody } from "./performerDetails.js";
 
 import { profileId } from "../auth/profileContext.js";
+import { performerIsFollowed } from "../library/following.js";
 import {
   itemRating,
   parseNote,
@@ -129,6 +130,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         id: performers.id,
         name: performers.name,
         isFavorite: performerIsFavorite(profile, performers.id),
+        isFollowed: performerIsFollowed(profile, performers.id),
         archivedAt: performers.archivedAt,
         hasImage: sql<boolean>`(${performers.imageFile} is not null)`,
         hasBanner: sql<boolean>`(${performers.bannerFile} is not null)`,
@@ -162,6 +164,7 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         performers.id,
         performers.name,
         performerIsFavorite(profile, performers.id),
+        performerIsFollowed(profile, performers.id),
         performers.imageFile,
         performers.bannerFile
       )

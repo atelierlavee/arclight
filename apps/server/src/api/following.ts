@@ -4,7 +4,7 @@ import { db } from "../db/client.js";
 import { mediaItemTypes, mediaItems, performers, playbackStates, studios } from "../db/schema.js";
 import { profileId } from "../auth/profileContext.js";
 import { itemFromFollowed, setPerformerFollowed, setStudioFollowed } from "../library/following.js";
-import { visibleItems } from "../library/visibility.js";
+import { visibleItems, visibleItemsSql } from "../library/visibility.js";
 import { parseId, playbackJoin } from "./mediaItemQueries.js";
 
 /** How far back "new from who you follow" looks, in days. */
@@ -57,6 +57,167 @@ export async function followingRoutes(app: FastifyInstance): Promise<void> {
       return { ok: true, followedAt };
     },
   );
+
+  /**
+   * Everyone and every studio this profile follows, with what they have in
+   * the library: videos in all, unwatched ones that arrived in the last
+   * week, and when the latest arrived. Latest first, so who has something
+   * new leads. A studio's figures include every site under it.
+   */
+  app.get("/api/following", async (request) => {
+    const profile = profileId(request);
+    const visible = visibleItemsSql("mi", profile);
+    const isVideo = sql`mi.item_type_id in (select id from media_item_types where name = 'video')`;
+    const isNew = sql`mi.created_at >= now() - make_interval(days => ${FOLLOWING_NEW_DAYS})
+      and not exists (
+        select 1 from playback_states ps
+        where ps.media_item_id = mi.id and ps.profile_id = ${profile} and ps.completed_at is not null
+      )`;
+
+    const performerRows = await db.execute<{
+      id: number;
+      name: string;
+      hasImage: boolean;
+      hasBanner: boolean;
+      followedAt: string;
+      videoCount: number;
+      newCount: number;
+      latestAt: string | null;
+      representativeItemId: number | null;
+    }>(sql`
+      select p.id, p.name, (p.image_file is not null) as "hasImage", (p.banner_file is not null) as "hasBanner",
+        pps.followed_at as "followedAt",
+        count(mi.id)::int as "videoCount",
+        (count(mi.id) filter (where ${isNew}))::int as "newCount",
+        max(mi.created_at) as "latestAt",
+        max(mi.id) as "representativeItemId"
+      from profile_performer_state pps
+      join performers p on p.id = pps.performer_id
+      left join media_item_performers mip on mip.performer_id = p.id
+      left join media_items mi on mi.id = mip.media_item_id and ${visible} and ${isVideo}
+      where pps.profile_id = ${profile} and pps.followed_at is not null
+      group by p.id, pps.followed_at
+      order by max(mi.created_at) desc nulls last, lower(p.name)
+    `);
+
+    const studioRows = await db.execute<{
+      id: number;
+      name: string;
+      followedAt: string;
+      videoCount: number;
+      newCount: number;
+      latestAt: string | null;
+      representativeItemId: number | null;
+    }>(sql`
+      select s.id, s.name, pss.followed_at as "followedAt",
+        count(mi.id)::int as "videoCount",
+        (count(mi.id) filter (where ${isNew}))::int as "newCount",
+        max(mi.created_at) as "latestAt",
+        max(mi.id) as "representativeItemId"
+      from profile_studio_state pss
+      join studios s on s.id = pss.studio_id
+      left join lateral (
+        with recursive under(id) as (
+          select s.id
+          union
+          select c.id from studios c join under u on c.parent_id = u.id
+        )
+        select id from under
+      ) site on true
+      left join media_items mi on mi.studio_id = site.id and ${visible} and ${isVideo}
+      where pss.profile_id = ${profile} and pss.followed_at is not null
+      group by s.id, pss.followed_at
+      order by max(mi.created_at) desc nulls last, lower(s.name)
+    `);
+
+    return { performers: performerRows.rows, studios: studioRows.rows, days: FOLLOWING_NEW_DAYS };
+  });
+
+  /**
+   * Who this profile might want to follow: performers and studios it already
+   * spends time on but does not follow. Scored from its own history only —
+   * hours watched, plays, counts, favourited videos, stars — so it says
+   * nothing another profile could not see for itself.
+   *
+   * Each suggestion carries the figures behind it, so the page can say why
+   * ("6 hours watched · 4 favourites") rather than just "recommended".
+   */
+  app.get("/api/following/suggestions", async (request) => {
+    const profile = profileId(request);
+    const mine = sql`
+      select mi.id, mi.studio_id,
+        coalesce(w.seconds, 0) as secs,
+        coalesce(ps.play_count, 0) as plays,
+        pis.rating,
+        coalesce(pis.o_count, 0) as o,
+        coalesce(pis.is_favorite, false) as fav
+      from media_items mi
+      left join (
+        select media_item_id, sum(seconds) as seconds
+        from watch_log where profile_id = ${profile} group by media_item_id
+      ) w on w.media_item_id = mi.id
+      left join playback_states ps on ps.media_item_id = mi.id and ps.profile_id = ${profile}
+      left join profile_item_state pis on pis.media_item_id = mi.id and pis.profile_id = ${profile}
+      where ${visibleItemsSql("mi", profile)}
+        and mi.item_type_id in (select id from media_item_types where name = 'video')
+    `;
+    // Hours count double, a count triple: those are the strongest signals of
+    // actually liking something. A star rating adds its average once.
+    const figures = sql`
+      sum(m.secs)::int as "secondsWatched",
+      sum(m.plays)::int as "plays",
+      sum(m.o)::int as "oCount",
+      (count(*) filter (where m.fav))::int as "favouriteVideos",
+      round(avg(m.rating)::numeric, 1)::float as "averageRating",
+      count(*)::int as "videoCount",
+      max(m.id) as "representativeItemId"
+    `;
+    const score = sql`(sum(m.secs) / 3600.0 * 2 + sum(m.plays) + sum(m.o) * 3
+      + (count(*) filter (where m.fav)) * 2 + coalesce(avg(m.rating), 0))`;
+    const engaged = sql`(sum(m.secs) + sum(m.plays) + sum(m.o) + (count(*) filter (where m.fav))) > 0`;
+
+    const performerRows = await db.execute(sql`
+      with mine as (${mine})
+      select p.id, p.name, (p.image_file is not null) as "hasImage", (p.banner_file is not null) as "hasBanner",
+        coalesce(bool_or(pps_fav.is_favorite), false) as "isFavorite",
+        ${figures}
+      from mine m
+      join media_item_performers mip on mip.media_item_id = m.id
+      join performers p on p.id = mip.performer_id
+      left join profile_performer_state pps_fav
+        on pps_fav.performer_id = p.id and pps_fav.profile_id = ${profile}
+      where p.archived_at is null
+        and not exists (
+          select 1 from profile_performer_state pps
+          where pps.profile_id = ${profile} and pps.performer_id = p.id and pps.followed_at is not null
+        )
+      group by p.id
+      having ${engaged}
+      order by ${score} + case when coalesce(bool_or(pps_fav.is_favorite), false) then 5 else 0 end desc, lower(p.name)
+      limit 8
+    `);
+
+    // A studio already covered by a followed network is not a suggestion.
+    const studioRows = await db.execute(sql`
+      with recursive covered(id) as (
+        select pss.studio_id from profile_studio_state pss
+        where pss.profile_id = ${profile} and pss.followed_at is not null
+        union
+        select c.id from studios c join covered u on c.parent_id = u.id
+      ),
+      mine as (${mine})
+      select s.id, s.name, ${figures}
+      from mine m
+      join studios s on s.id = m.studio_id
+      where s.id not in (select id from covered)
+      group by s.id
+      having ${engaged}
+      order by ${score} desc, lower(s.name)
+      limit 6
+    `);
+
+    return { performers: performerRows.rows, studios: studioRows.rows };
+  });
 
   /**
    * Unwatched videos from who this profile follows that reached the library

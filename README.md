@@ -72,7 +72,10 @@ you tick what to keep.
 - **Follows performers and studios**: the Follow button on their page
   (per profile) feeds a *New from who you follow* home row, a *Following*
   browse filter and the notification bell. Following a network takes in all
-  its sites
+  its sites. The *Following* page lists everyone you follow with
+  what's new from each, and suggests who else to follow from your own watch
+  time, plays, counts, favourites and stars. The Performers and Studios pages
+  put followed ones in a section of their own, with a *Following only* toggle
 - **Takes private notes** on any video or performer — visible only to the
   profile that wrote them, and searchable from that profile's search
 - **Has profiles**: one sign-in, then a *Who's watching?* picker. Each

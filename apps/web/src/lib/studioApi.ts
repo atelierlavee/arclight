@@ -7,6 +7,8 @@ export type StudioSummary = {
   parentId: number | null;
   /** Including every site under it: a network's card shows the network. */
   videoCount: number;
+  /** Followed by the current profile. */
+  isFollowed?: boolean;
   representativeItemId: number | null;
   /**
    * A few recent frames, newest first, for callers that would rather show a

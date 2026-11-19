@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Plus, UserCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { EditDialog } from "@/components/EditDialog";
 import { EDIT_INPUT } from "@/lib/editForm";
 import { useIsOwner } from "@/lib/profile";
@@ -16,6 +17,7 @@ import { qk } from "@/lib/queryKeys";
 export function StudiosPage() {
   const [letter, setLetter] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [followingOnly, setFollowingOnly] = useState(false);
   const isOwner = useIsOwner();
   const [, refreshPins] = useState(0);
   useEffect(() => {
@@ -49,12 +51,13 @@ export function StudiosPage() {
         return letter === "#" ? !/^[A-Z]$/.test(initial) : initial === letter;
       })
     : orderedStudios;
-  const visibleWithVideos = visibleStudios.filter(
-    (studio) => studio.videoCount > 0,
-  );
-  const visibleEmpty = visibleStudios.filter(
-    (studio) => studio.videoCount === 0,
-  );
+  // Followed studios get their own section at the top, so they are left out
+  // of the two below rather than appearing twice.
+  const visibleFollowed = visibleStudios.filter((studio) => studio.isFollowed);
+  const followedCount = studios.filter((studio) => studio.isFollowed).length;
+  const rest = followingOnly ? [] : visibleStudios.filter((studio) => !studio.isFollowed);
+  const visibleWithVideos = rest.filter((studio) => studio.videoCount > 0);
+  const visibleEmpty = rest.filter((studio) => studio.videoCount === 0);
 
   return (
     <PageScope name="studios">
@@ -73,6 +76,22 @@ export function StudiosPage() {
               onChange={setLetter}
               available={studios.map((studio) => studio.name)}
             />
+            <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFollowingOnly((value) => !value)}
+              aria-pressed={followingOnly}
+              disabled={followedCount === 0 && !followingOnly}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors disabled:opacity-40",
+                followingOnly
+                  ? "bg-white text-black hover:bg-white/90"
+                  : "border border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <UserCheck className="size-3.5" />
+              Following only
+            </button>
             {/* The only studio made by hand: a site arrives with its files,
                 but nothing on disk ever names the network above it. */}
             {isOwner && (
@@ -85,6 +104,7 @@ export function StudiosPage() {
                 New network
               </button>
             )}
+            </div>
           </div>
           {isLoading && (
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
@@ -99,6 +119,20 @@ export function StudiosPage() {
               No studios yet. They're picked up from a filename's leading [Studio]
               tag, or from the folder above your videos, when you scan.
             </p>
+          )}
+
+          {visibleFollowed.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+                <UserCheck className="size-3.5 text-sky-400" />
+                Following
+              </h2>
+              <div className="stagger grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                {visibleFollowed.map((studio) => (
+                  <StudioCard key={studio.id} studio={studio} />
+                ))}
+              </div>
+            </section>
           )}
 
           {visibleWithVideos.length > 0 && (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
-import { Archive, ChevronRight, Heart, LayoutGrid, Share2 } from "lucide-react";
+import { Archive, ChevronRight, Heart, LayoutGrid, Share2, UserCheck } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import {
   PerformerCard,
@@ -120,6 +120,7 @@ export function PerformersPage() {
   // Folded away by default: archiving is for getting someone out of the
   // way, so the section shouldn't greet you on every visit.
   const [showArchived, setShowArchived] = useState(false);
+  const [followingOnly, setFollowingOnly] = useState(false);
   const [, refreshPins] = useState(0);
 
   useEffect(() => {
@@ -171,11 +172,16 @@ export function PerformersPage() {
   };
   const visiblePerformers = performers.filter(matchesLetter);
   const visibleArchived = archived.filter(matchesLetter);
-  const visibleFavorites = visiblePerformers.filter((p) => p.isFavorite);
-  const visibleWithVideos = visiblePerformers.filter(
+  // Followed first, then favourites: each section leaves out the ones above
+  // it, so nobody appears twice. "Following only" hides everything else.
+  const visibleFollowed = visiblePerformers.filter((p) => p.isFollowed);
+  const followedCount = performers.filter((p) => p.isFollowed).length;
+  const rest = followingOnly ? [] : visiblePerformers.filter((p) => !p.isFollowed);
+  const visibleFavorites = rest.filter((p) => p.isFavorite);
+  const visibleWithVideos = rest.filter(
     (p) => !p.isFavorite && p.videoCount > 0,
   );
-  const visibleEmpty = visiblePerformers.filter(
+  const visibleEmpty = rest.filter(
     (p) => !p.isFavorite && p.videoCount === 0,
   );
 
@@ -207,16 +213,47 @@ export function PerformersPage() {
           </div>
         ) : (
         <div className="space-y-8 px-4 py-6 md:px-6 md:py-8">
-          <AlphabetIndex
-            value={letter}
-            onChange={setLetter}
-            available={performers.map((performer) => performer.name)}
-          />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <AlphabetIndex
+              value={letter}
+              onChange={setLetter}
+              available={performers.map((performer) => performer.name)}
+            />
+            <button
+              type="button"
+              onClick={() => setFollowingOnly((value) => !value)}
+              aria-pressed={followingOnly}
+              disabled={followedCount === 0 && !followingOnly}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-colors disabled:opacity-40",
+                followingOnly
+                  ? "bg-white text-black hover:bg-white/90"
+                  : "border border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <UserCheck className="size-3.5" />
+              Following only
+            </button>
+          </div>
           {visiblePerformers.length === 0 && archived.length === 0 && (
             <p className="text-sm text-muted-foreground">
               No performers yet. They're created automatically from your folder
               names when you scan.
             </p>
+          )}
+
+          {visibleFollowed.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight">
+                <UserCheck className="size-3.5 text-sky-400" />
+                Following
+              </h2>
+              <PerformerList
+                performers={visibleFollowed}
+                onOpen={openPerformer}
+                layout={layout}
+              />
+            </section>
           )}
 
           {visibleFavorites.length > 0 && (
@@ -258,7 +295,7 @@ export function PerformersPage() {
             </section>
           )}
 
-          {visibleArchived.length > 0 && (
+          {visibleArchived.length > 0 && !followingOnly && (
             <section className="space-y-3">
               <button
                 type="button"

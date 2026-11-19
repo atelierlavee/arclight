@@ -1,4 +1,4 @@
-import { and, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { and, eq, isNotNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { profilePerformerState, profileStudioState } from "../db/schema.js";
 
@@ -33,6 +33,22 @@ export function itemFromFollowed(profileId: number, item: SQLWrapper, studioId: 
       select id from under
     )
   )`;
+}
+
+/** True when this profile follows the performer, as a select column. */
+export function performerIsFollowed(profileId: number, performer: SQLWrapper): SQL<boolean> {
+  return sql<boolean>`exists (select 1 from profile_performer_state pps where pps.profile_id = ${profileId} and pps.performer_id = ${performer} and pps.followed_at is not null)`.mapWith(
+    Boolean,
+  );
+}
+
+/** The ids of the studios this profile follows directly. */
+export async function followedStudioIds(profileId: number): Promise<Set<number>> {
+  const rows = await db
+    .select({ id: profileStudioState.studioId })
+    .from(profileStudioState)
+    .where(and(eq(profileStudioState.profileId, profileId), isNotNull(profileStudioState.followedAt)));
+  return new Set(rows.map((row) => row.id));
 }
 
 export async function setPerformerFollowed(profileId: number, performerId: number, followed: boolean) {

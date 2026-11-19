@@ -19,7 +19,7 @@ beforeEach(async () => {
   ({ libraryId } = await makeLibrary());
 });
 
-const call = (method: "GET" | "PUT", url: string, payload?: unknown, as = cookie) =>
+const call = (method: "GET" | "PUT" | "POST", url: string, payload?: unknown, as = cookie) =>
   app.inject({ method, url, payload: payload as object, headers: { cookie: as } });
 const following = async (as = cookie) =>
   (await call("GET", "/api/media-items?following=true", undefined, as))
@@ -86,5 +86,55 @@ describe("following", () => {
     expect((await call("PUT", `/api/performers/${alice}/follow`, { follow: "yes" })).statusCode).toBe(400);
     expect((await call("PUT", "/api/performers/999999/follow", { follow: true })).statusCode).toBe(404);
     expect((await call("PUT", "/api/studios/999999/follow", { follow: true })).statusCode).toBe(404);
+  });
+
+  it("lists who is followed with their counts, a network's sites included", async () => {
+    const alice = await makePerformer("Alice");
+    const network = await makeStudio("Network");
+    const site = await makeStudio("Site");
+    await db.update(studios).set({ parentId: network }).where(eq(studios.id, site));
+    const fresh = await makeItem(libraryId, { title: "Fresh", studioId: site });
+    await makeItem(libraryId, { title: "Old", studioId: site, createdAt: new Date("2020-01-01") });
+    await linkPerformer(fresh, alice);
+    await call("PUT", `/api/performers/${alice}/follow`, { follow: true });
+    await call("PUT", `/api/studios/${network}/follow`, { follow: true });
+
+    const body = (await call("GET", "/api/following")).json();
+    expect(body.performers).toHaveLength(1);
+    expect(body.performers[0]).toMatchObject({ id: alice, name: "Alice", videoCount: 1, newCount: 1 });
+    expect(body.studios).toHaveLength(1);
+    expect(body.studios[0]).toMatchObject({ id: network, videoCount: 2, newCount: 1 });
+
+    const performerList = (await call("GET", "/api/performers")).json().performers;
+    expect(performerList.find((p: { id: number }) => p.id === alice).isFollowed).toBe(true);
+    const studioList = (await call("GET", "/api/studios")).json().studios;
+    expect(studioList.find((s: { id: number }) => s.id === network).isFollowed).toBe(true);
+  });
+
+  it("suggests who this profile watches but does not follow, with the reasons", async () => {
+    const watched = await makePerformer("Watched");
+    const ignored = await makePerformer("Ignored");
+    const studio = await makeStudio("Studio");
+    const a = await makeItem(libraryId, { title: "A", studioId: studio });
+    const b = await makeItem(libraryId, { title: "B" });
+    await linkPerformer(a, watched);
+    await linkPerformer(b, ignored);
+    await call("PUT", `/api/media-items/${a}/watched`, { watched: true });
+    await call("POST", `/api/media-items/${a}/o`);
+
+    let body = (await call("GET", "/api/following/suggestions")).json();
+    expect(body.performers.map((p: { name: string }) => p.name)).toEqual(["Watched"]);
+    expect(body.performers[0]).toMatchObject({ plays: 1, oCount: 1 });
+    expect(body.studios.map((s: { name: string }) => s.name)).toEqual(["Studio"]);
+
+    await call("PUT", `/api/performers/${watched}/follow`, { follow: true });
+    await call("PUT", `/api/studios/${studio}/follow`, { follow: true });
+    body = (await call("GET", "/api/following/suggestions")).json();
+    expect(body.performers).toEqual([]);
+    expect(body.studios).toEqual([]);
+
+    const guest = await signInOtherProfile();
+    const theirs = (await call("GET", "/api/following/suggestions", undefined, guest.cookie)).json();
+    expect(theirs.performers).toEqual([]);
   });
 });

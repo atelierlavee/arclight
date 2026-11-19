@@ -11,6 +11,7 @@ import { AlbumsPage } from "@/pages/AlbumsPage";
 import { BrowsePage } from "@/pages/BrowsePage";
 import { HelpPage } from "@/pages/HelpPage";
 import { MultiViewPage } from "./pages/MultiViewPage";
+import { FollowingPage } from "./pages/FollowingPage";
 import { HomePage } from "@/pages/HomePage";
 import { InboxPage } from "@/pages/InboxPage";
 import { VaultPage } from "@/pages/VaultPage";
@@ -234,6 +235,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const followingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/following",
+  component: FollowingPage,
+});
+
 // Several videos at once. The ids are in the URL so a set can be reopened.
 const multiviewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -275,6 +282,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   accountRoute,
   multiviewRoute,
+  followingRoute,
 ]);
 
 export const router = createRouter({

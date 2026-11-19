@@ -7,6 +7,8 @@ export type PerformerSummary = {
   hasBanner: boolean;
   /** Pins them to the top of the performers page. */
   isFavorite: boolean;
+  /** Followed by the current profile: their own section, above favourites. */
+  isFollowed?: boolean;
   /** When they were archived, as an ISO string; null while active. Only the
    *  performers page asks for archived ones, so elsewhere this is always null. */
   archivedAt?: string | null;

@@ -35,6 +35,9 @@ export function FollowButton({
       await onToggle(!followed);
       void queryClient.invalidateQueries({ queryKey: qk.mediaItems.all });
       void queryClient.invalidateQueries({ queryKey: qk.followingSummary });
+      void queryClient.invalidateQueries({ queryKey: qk.following.all });
+      void queryClient.invalidateQueries({ queryKey: qk.performers.all });
+      void queryClient.invalidateQueries({ queryKey: qk.studios.all });
       toast({
         title: followed ? `Unfollowed ${name}` : `Following ${name}`,
         description: followed ? undefined : "Their new videos will show on your home page.",

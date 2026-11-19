@@ -18,7 +18,7 @@ import { normalizeName } from "../scanner/performerNames.js";
 import { serialized } from "../auth/serialize.js";
 import { profileId } from "../auth/profileContext.js";
 import { performerIsFavorite } from "../library/profileState.js";
-import { studioFollowedAt } from "../library/following.js";
+import { followedStudioIds, studioFollowedAt } from "../library/following.js";
 import { isId, playbackJoin } from "./mediaItemQueries.js";
 /**
  * Studios: who released a scene, derived from the filename's leading
@@ -94,7 +94,9 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
       // Plain name ordering is ASCII, which sorts "Vixen" before "blacked".
       .orderBy(sql`lower(${studios.name})`);
 
-    return { studios: rollUpNetworks(rows, await db.select({ id: studios.id, parentId: studios.parentId }).from(studios)) };
+    const followed = await followedStudioIds(profile);
+    const rolled = rollUpNetworks(rows, await db.select({ id: studios.id, parentId: studios.parentId }).from(studios));
+    return { studios: rolled.map((studio) => ({ ...studio, isFollowed: followed.has(studio.id) })) };
   });
 
   /**
