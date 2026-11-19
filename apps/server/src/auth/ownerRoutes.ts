@@ -125,6 +125,7 @@ export const PROFILE_ROUTES: Readonly<Record<string, string>> = {
   "PUT /api/performers/:id/note": "per-profile private note",
   "PUT /api/performers/:id/follow": "per-profile following",
   "PUT /api/studios/:id/follow": "per-profile following",
+  "PUT /api/tiers/:kind": "per-profile tier list",
   "DELETE /api/continue-watching": "per-profile history",
   "POST /api/media-items/:id/bookmarks": "per-profile bookmarks",
   "PATCH /api/bookmarks/:id": "per-profile bookmarks",

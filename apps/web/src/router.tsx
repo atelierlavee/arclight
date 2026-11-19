@@ -13,6 +13,7 @@ import { HelpPage } from "@/pages/HelpPage";
 import { MultiViewPage } from "./pages/MultiViewPage";
 import { FollowingPage } from "./pages/FollowingPage";
 import { DiaryPage } from "./pages/DiaryPage";
+import { TiersPage } from "./pages/TiersPage";
 import { HomePage } from "@/pages/HomePage";
 import { InboxPage } from "@/pages/InboxPage";
 import { VaultPage } from "@/pages/VaultPage";
@@ -255,6 +256,12 @@ const diaryRoute = createRoute({
   component: DiaryPage,
 });
 
+const tiersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tiers",
+  component: TiersPage,
+});
+
 // Several videos at once. The ids are in the URL so a set can be reopened.
 const multiviewRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -298,6 +305,7 @@ const routeTree = rootRoute.addChildren([
   multiviewRoute,
   followingRoute,
   diaryRoute,
+  tiersRoute,
 ]);
 
 export const router = createRouter({

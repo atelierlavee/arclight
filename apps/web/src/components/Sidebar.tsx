@@ -26,6 +26,7 @@ import {
   Grid2x2,
   UserCheck,
   BookOpen,
+  ListOrdered,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreateCollectionModal } from "./CreateCollectionModal";
@@ -615,6 +616,15 @@ export function Sidebar({
         >
           <BookOpen className="size-4 shrink-0" />
           {!collapsed && "Diary"}
+        </Link>
+        <Link
+          to="/tiers"
+          className={cn(navItemClass, "mb-1")}
+          title={collapsed ? "Tier list" : undefined}
+          activeProps={{ className: "bg-accent text-foreground font-medium" }}
+        >
+          <ListOrdered className="size-4 shrink-0" />
+          {!collapsed && "Tier list"}
         </Link>
         <Link
           to="/settings"

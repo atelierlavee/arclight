@@ -404,6 +404,7 @@ function parameterisedGets(s: Seeded): Record<string, string | null> {
     "/api/performers/:id": `/api/performers/${s.performerId}`,
     "/api/performers/:id/image": `/api/performers/${s.performerId}/image`,
     "/api/performers/:id/career": `/api/performers/${s.performerId}/career`,
+    "/api/tiers/:kind": "/api/tiers/video",
     "/api/studios/:id": `/api/studios/${s.studioId}`,
     "/api/series/:id": `/api/series/${s.seriesId}`,
     "/api/albums/:id": `/api/albums/${s.albumId}`,

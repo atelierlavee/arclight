@@ -79,6 +79,9 @@ you tick what to keep.
   what's new from each, and suggests who else to follow from your own watch
   time, plays, counts, favourites and stars. The Performers and Studios pages
   put followed ones in a section of their own, with a *Following only* toggle
+- **Keeps a tier list** per profile — *Tier list* in the sidebar: drag
+  performers or videos into S, A, B, C and D (or tap a tile, then a row, on
+  a phone). Saved as you go
 - **Takes private notes** on any video or performer — visible only to the
   profile that wrote them, and searchable from that profile's search
 - **Has profiles**: one sign-in, then a *Who's watching?* picker. Each

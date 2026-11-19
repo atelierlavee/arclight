@@ -596,6 +596,10 @@ export const profileItemState = pgTable(
     // A private note about the item, this profile's alone. Null when there
     // is none; an empty note is stored as null, never as "".
     note: text("note"),
+    // This profile's tier list: "S" to "D", or null when unranked, and the
+    // place within the tier. See api/tiers.ts.
+    tier: text("tier"),
+    tierPosition: integer("tier_position"),
   },
   (table) => [
     primaryKey({ columns: [table.profileId, table.mediaItemId] }),
@@ -644,6 +648,9 @@ export const profilePerformerState = pgTable(
     // Following since then, or null. Followed performers feed the "New from
     // who you follow" row and the Following filter.
     followedAt: timestamp("followed_at"),
+    // The tier list, as on profile_item_state.
+    tier: text("tier"),
+    tierPosition: integer("tier_position"),
   },
   (table) => [primaryKey({ columns: [table.profileId, table.performerId] })],
 );

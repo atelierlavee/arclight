@@ -31,6 +31,7 @@ import { statsRoutes } from "./api/stats.js";
 import { seriesRoutes } from "./api/series.js";
 import { studioRoutes } from "./api/studios.js";
 import { followingRoutes } from "./api/following.js";
+import { tierRoutes } from "./api/tiers.js";
 import { performerRoutes } from "./api/performers.js";
 import { tagRoutes } from "./api/tags.js";
 import { webauthnRoutes } from "./api/webauthn.js";
@@ -226,6 +227,7 @@ export async function buildApp({
   await app.register(webauthnRoutes);
   await app.register(studioRoutes);
   await app.register(followingRoutes);
+  await app.register(tierRoutes);
   await app.register(collectionRoutes);
   await app.register(folderRoutes);
   await app.register(playbackRoutes);

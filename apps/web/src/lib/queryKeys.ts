@@ -80,6 +80,10 @@ export const qk = {
   },
   collections: ["collections"] as const,
   continueWatching: ["continue-watching"] as const,
+  /** A tier list board, per kind ("performer" or "video"). */
+  tiers: (kind: string) => ["tiers", kind] as const,
+  /** The tier list's library search for videos to add to the pool. */
+  tierSearch: (q: string) => ["tier-search", q] as const,
   /** The multi-view page's "add a video" search. */
   multiviewSearch: (q: string) => ["multiview-search", q] as const,
   /** The Following page: who is followed, and who might be. */
