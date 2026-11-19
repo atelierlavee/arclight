@@ -3,6 +3,7 @@ import {
   Eye,
   EyeOff,
   Heart,
+  LayoutGrid,
   ListPlus,
   Play,
   RotateCcw,
@@ -27,6 +28,7 @@ export function PreviewOverlay({
   onToggleFavorite,
   onToggleWatched,
   onToggleWatchLater,
+  onOpenContactSheet,
   onQueue,
   onSetHallOfFamePin,
   onToggleMuted,
@@ -40,6 +42,7 @@ export function PreviewOverlay({
   onToggleFavorite: (next: boolean) => void;
   onToggleWatched: (next: boolean) => void;
   onToggleWatchLater: (next: boolean) => void;
+  onOpenContactSheet: () => void;
   onQueue: (next: boolean) => void;
   onSetHallOfFamePin: (id: number) => void;
   onToggleMuted: () => void;
@@ -150,6 +153,15 @@ export function PreviewOverlay({
                   item.watchLaterAt && "text-sky-400",
                 )}
               />
+            </button>
+            <button
+              type="button"
+              onClick={onOpenContactSheet}
+              aria-label="Contact sheet"
+              title="Contact sheet (g)"
+              className="flex size-8 shrink-0 items-center justify-center rounded-full border border-white/40 backdrop-blur-sm transition-colors hover:border-white sm:size-10"
+            >
+              <LayoutGrid className="size-4 sm:size-5" />
             </button>
             <button
               type="button"

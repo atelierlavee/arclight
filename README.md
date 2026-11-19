@@ -77,6 +77,9 @@ you tick what to keep.
   PIN or a passkey. Leaving the vault page locks it again
 - **Locks on open**: once a privacy password or passkey is set, opening the
   app asks for it before showing anything
+- **Lays a video out as a contact sheet** (`G`, or the grid button): 20,
+  50 or every frame of the seek-bar preview in a grid, with the most-replayed
+  stretch and your bookmarks marked. Click a frame to play from there
 - **Remembers the best part**: the seek bar shows a heatmap of the parts you
   replay most, and a button jumps straight to the hottest one
 - **Maps who works with whom** — Performers → Network draws a graph linking
@@ -633,6 +636,7 @@ start from.
 | `B` | Bookmark the current moment |
 | `O` | Count one on the video that's playing |
 | `S` | Subtitles: off, then each track in turn |
+| `G` | Contact sheet: the video as a grid of frames |
 | `Esc` | Close the innermost thing that's open |
 
 The full list, including search and editing, is at `/help` in the app. Single-

@@ -6,6 +6,7 @@ import {
   Droplets,
   FastForward,
   Gauge,
+  LayoutGrid,
   Lightbulb,
   Maximize,
   MonitorPlay,
@@ -48,6 +49,7 @@ export function PlayerControls({
   subtitleLabel,
   hasSubtitles,
   onCycleSubtitles,
+  onOpenContactSheet,
   onCast,
   onTogglePictureInPicture,
   onToggleAmbient,
@@ -82,6 +84,7 @@ export function PlayerControls({
   /** Whether the video has any subtitle files beside it. */
   hasSubtitles: boolean;
   onCycleSubtitles: () => void;
+  onOpenContactSheet: () => void;
   onCast: () => void;
   onTogglePictureInPicture: () => void;
   onToggleAmbient: () => void;
@@ -201,6 +204,15 @@ export function PlayerControls({
       >
         <Droplets className="size-4" />
         {oCount > 0 && <span className="tabular-nums">{oCount}</span>}
+      </button>
+      <button
+        type="button"
+        onClick={onOpenContactSheet}
+        aria-label="Contact sheet"
+        title="Contact sheet (g)"
+        className="flex size-9 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm transition-colors hover:bg-black/80"
+      >
+        <LayoutGrid className="size-4" />
       </button>
       {/* Only when there is a file beside the video to show. */}
       {hasSubtitles && (

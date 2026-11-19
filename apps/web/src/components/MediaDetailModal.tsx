@@ -23,6 +23,7 @@ import { UpNextCard } from "./mediaDetail/UpNextCard";
 import { MIN_RESUMABLE_SECONDS } from "./mediaDetail/playerUtils";
 import { useCastStream } from "./mediaDetail/useCastStream";
 import { useToggleWatchLater } from "@/lib/watchLater";
+import { ContactSheet } from "./ContactSheet";
 import { useItemActions } from "./mediaDetail/useItemActions";
 import { useMiniPlayerFrame } from "./mediaDetail/useMiniPlayerFrame";
 import { usePlaybackProgress } from "./mediaDetail/usePlaybackProgress";
@@ -116,6 +117,7 @@ export function MediaDetailModal({
     });
 
   const toggleWatchLater = useToggleWatchLater();
+  const [contactSheetOpen, setContactSheetOpen] = useState(false);
 
   const { showPlayerControls, revealPlayerControls, scheduleHideControls } =
     usePlayerControlsVisibility(mode);
@@ -187,6 +189,7 @@ export function MediaDetailModal({
     setEditing(false);
     playback.setMuted(true);
     setReframing(false);
+    setContactSheetOpen(false);
     playback.setSeeked(false);
     playback.setCurrentTime(0);
     setCastSrc(null);
@@ -241,6 +244,7 @@ export function MediaDetailModal({
     countO,
     cycleSubtitles: subtitles.cycle,
     jumpToBestPart,
+    toggleContactSheet: () => setContactSheetOpen((open) => !open),
   });
 
   const canResume =
@@ -393,6 +397,7 @@ export function MediaDetailModal({
                 onStartPlaying={startPlaying}
                 onToggleFavorite={toggleFavorite}
                 onToggleWatched={(next) => toggleWatched.mutate(next)}
+                onOpenContactSheet={() => setContactSheetOpen(true)}
                 onToggleWatchLater={(next) => {
                   if (item) void toggleWatchLater(item, next);
                 }}
@@ -435,6 +440,7 @@ export function MediaDetailModal({
                 subtitleLabel={subtitles.label}
                 hasSubtitles={subtitleTracks.length > 0}
                 onCycleSubtitles={subtitles.cycle}
+                onOpenContactSheet={() => setContactSheetOpen(true)}
                 onCast={startCasting}
                 onTogglePictureInPicture={() => void screenModes.togglePictureInPicture()}
                 onToggleAmbient={toggleAmbient}
@@ -533,6 +539,20 @@ export function MediaDetailModal({
           )}
         </div>
       </div>
+      {contactSheetOpen && item?.itemType === "video" && !mini && (
+        <ContactSheet
+          itemId={item.id}
+          title={item.title}
+          durationSeconds={item.durationSeconds}
+          bookmarks={bookmarks}
+          heatmapBuckets={heatmapBuckets}
+          onPick={(seconds) => {
+            setContactSheetOpen(false);
+            jumpTo(seconds);
+          }}
+          onClose={() => setContactSheetOpen(false)}
+        />
+      )}
     </Portal>
   );
 }

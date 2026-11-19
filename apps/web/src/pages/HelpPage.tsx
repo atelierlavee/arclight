@@ -129,6 +129,10 @@ export function HelpPage() {
           <Row keys={["O"]}>
             Count one on the video that's playing. A toast offers an undo.
           </Row>
+          <Row keys={["G"]}>
+            Contact sheet — the whole video as a grid of frames. Click one to
+            play from there; G or Esc closes it.
+          </Row>
           <Row keys={["Esc"]}>Close the video. Your position is saved.</Row>
         </Group>
 

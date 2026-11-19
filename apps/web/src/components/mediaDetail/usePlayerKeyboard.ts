@@ -22,6 +22,7 @@ export type PlayerKeyboardOptions = {
   countO: () => void;
   cycleSubtitles: () => void;
   jumpToBestPart: () => void;
+  toggleContactSheet: () => void;
   seekTo: (seconds: number) => void;
 };
 
@@ -53,6 +54,7 @@ export function usePlayerKeyboard(options: PlayerKeyboardOptions) {
       countO,
       cycleSubtitles,
       jumpToBestPart,
+      toggleContactSheet,
       seekTo,
     } = options;
     keyHandler.current = (e: KeyboardEvent) => {
@@ -75,6 +77,15 @@ export function usePlayerKeyboard(options: PlayerKeyboardOptions) {
         if (!mini && !cinema && isVideo) {
           e.preventDefault();
           setQueueChoice(!queueOpen);
+        }
+        return;
+      }
+
+      // Like the queue: worth having from the preview, before anything plays.
+      if (e.key === "g" || e.key === "G") {
+        if (!mini && isVideo) {
+          e.preventDefault();
+          toggleContactSheet();
         }
         return;
       }
