@@ -25,6 +25,7 @@ export function useVideoPlayback({
   autoPlay,
   resume,
   itemId,
+  resolveStart,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   item: MediaItemDetail | undefined;
@@ -35,6 +36,8 @@ export function useVideoPlayback({
   resume: boolean;
   /** The item the modal was asked to show, which autoPlay and resume apply to. */
   itemId: number;
+  /** Lets lean-back mode move an autoplay's start to the clip it plays. */
+  resolveStart?: (item: MediaItemDetail, requested: number) => number;
 }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [seeked, setSeeked] = useState(false);
@@ -133,11 +136,11 @@ export function useVideoPlayback({
       !autoPlayTriggered.current
     ) {
       autoPlayTriggered.current = true;
-      startPlaying(
+      const requested =
         resume && item.lastPositionSeconds > MIN_RESUMABLE_SECONDS
           ? item.lastPositionSeconds
-          : 0,
-      );
+          : 0;
+      startPlaying(resolveStart ? resolveStart(item, requested) : requested);
     }
     // startPlaying is rebuilt every render; only these inputs should run it.
     // eslint-disable-next-line react-hooks/exhaustive-deps

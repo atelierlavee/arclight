@@ -14,6 +14,7 @@ import { PerformerBanner } from "@/components/PerformerBanner";
 import { PerformerFacts } from "@/components/PerformerFacts";
 import { NoteEditor } from "@/components/NoteEditor";
 import { FollowButton } from "@/components/FollowButton";
+import { PlaySurface } from "@/components/PlaySurface";
 import { PerformerImageMenu } from "@/components/PerformerImageMenu";
 import { PerformerImagePicker } from "@/components/PerformerImagePicker";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -279,6 +280,20 @@ export function PerformerPage() {
                   Restore
                 </button>}
               </div>
+            )}
+            {performer && (
+              <PlaySurface
+                source={{
+                  type: "library",
+                  performer: performer.name,
+                  tag: null,
+                  studio: null,
+                  kind: null,
+                  q: null,
+                  parentId: null,
+                }}
+                label="Performer playback"
+              />
             )}
             {/* Gated on `reframing` rather than rendering an empty wrapper on
                 every other view — that wrapper still counted as a flex child

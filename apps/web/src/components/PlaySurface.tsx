@@ -1,5 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
-import { Dices, Play, RotateCcw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Armchair, ChevronDown, Dices, Play, RotateCcw } from "lucide-react";
+import { filterParams } from "@/lib/filters";
+import { LEAN_BACK_LENGTHS, endLeanBack, startLeanBack } from "@/lib/leanBack";
+import { fetchHeatmap } from "./mediaDetail/useLeanBack";
 import { useQueue, type QueueItem } from "@/lib/queue";
 import type { MediaCardItem } from "./MediaCard";
 import type { GridSource } from "./MediaGrid";
@@ -32,7 +36,10 @@ async function fetchPage(source: GridSource, page: number): Promise<Response> {
     return response.json();
   }
 
-  const params = new URLSearchParams({ page: String(page), sort: "newest" });
+  // The browse page's filters too, so playing a filtered view plays what it shows.
+  const params = source.filters ? filterParams(source.filters) : new URLSearchParams();
+  params.set("page", String(page));
+  params.set("sort", "newest");
   if (source.tag) params.set("tag", source.tag);
   if (source.performer) params.set("performer", source.performer);
   if (source.studio) params.set("studio", source.studio);
@@ -54,6 +61,19 @@ export function PlaySurface({
   label?: string;
 }) {
   const { add, clear } = useQueue();
+  const queryClient = useQueryClient();
+  const [leanBackMenu, setLeanBackMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Click away closes the length menu.
+  useEffect(() => {
+    if (!leanBackMenu) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setLeanBackMenu(false);
+    }
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [leanBackMenu]);
   const { data, isLoading } = useQuery({
     queryKey: qk.playSurface.list(source, directItems?.map((item) => item.id)),
     queryFn: async () => {
@@ -94,9 +114,35 @@ export function PlaySurface({
 
   function play(items: PageItem[]) {
     if (!items[0]) return;
+    // An ordinary Play All is not a lean-back session, even if one was running.
+    endLeanBack();
     clear();
     items.slice(1).forEach((item) => add(toQueueItem(item)));
     window.dispatchEvent(new CustomEvent(PLAY_EVENT, { detail: items[0].id }));
+  }
+
+  /**
+   * Shuffles everything here into the queue and plays it hands-free — see
+   * lib/leanBack.ts. For clips, the first video's heatmap is fetched first
+   * so even it starts at its best part.
+   */
+  async function leanBack(clipSeconds: number | null) {
+    setLeanBackMenu(false);
+    const shuffled = shuffle(videos);
+    if (!shuffled[0]) return;
+    if (clipSeconds) {
+      await queryClient
+        .prefetchQuery({
+          queryKey: qk.heatmap(shuffled[0].id),
+          queryFn: () => fetchHeatmap(shuffled[0].id),
+          staleTime: 60_000,
+        })
+        .catch(() => {});
+    }
+    clear();
+    shuffled.slice(1).forEach((item) => add(toQueueItem(item)));
+    startLeanBack({ clipSeconds });
+    window.dispatchEvent(new CustomEvent(PLAY_EVENT, { detail: shuffled[0].id }));
   }
 
   function resume() {
@@ -121,12 +167,44 @@ export function PlaySurface({
       </button>
       <button
         type="button"
-        onClick={() => play([...videos].sort(() => Math.random() - 0.5))}
+        onClick={() => play(shuffle(videos))}
         disabled={isLoading || videos.length === 0}
         className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-40"
       >
         <Dices className="size-4" /> Shuffle
       </button>
+      <div ref={menuRef} className="relative">
+        <button
+          type="button"
+          onClick={() => setLeanBackMenu((open) => !open)}
+          disabled={isLoading || videos.length === 0}
+          aria-expanded={leanBackMenu}
+          aria-haspopup="menu"
+          title="Shuffle and play hands-free in cinema mode"
+          className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm transition-colors hover:bg-accent disabled:opacity-40"
+        >
+          <Armchair className="size-4" /> Lean back
+          <ChevronDown className="size-3.5 opacity-60" />
+        </button>
+        {leanBackMenu && (
+          <div
+            role="menu"
+            className="animate-soft-pop absolute left-0 top-full z-40 mt-1 w-44 overflow-hidden rounded-md border border-border bg-card py-1 shadow-xl"
+          >
+            {LEAN_BACK_LENGTHS.map((length) => (
+              <button
+                key={length.label}
+                type="button"
+                role="menuitem"
+                onClick={() => void leanBack(length.clipSeconds)}
+                className="block w-full px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+              >
+                {length.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {resumeItem && (
         <button
           type="button"
@@ -138,4 +216,14 @@ export function PlaySurface({
       )}
     </div>
   );
+}
+
+/** A fair shuffle (Fisher–Yates); sorting by a random key is not one. */
+function shuffle<T>(items: T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }

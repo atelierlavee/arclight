@@ -395,6 +395,12 @@ export function BrowsePage() {
             label="Collection playback"
           />
         )}
+        {/* A tag, a search or a filtered view is a set worth playing through;
+            the bare library, folder by folder, is not. */}
+        {collectionId == null &&
+          (tag || q || performer || studio || hasActiveFilters(filters)) && (
+            <PlaySurface source={source} label="Playback" />
+          )}
         <MediaGrid
           source={source}
           // The URL wins when it names a sort — a shared or bookmarked link

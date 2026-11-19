@@ -24,6 +24,9 @@ import { MIN_RESUMABLE_SECONDS } from "./mediaDetail/playerUtils";
 import { useCastStream } from "./mediaDetail/useCastStream";
 import { useToggleWatchLater } from "@/lib/watchLater";
 import { ContactSheet } from "./ContactSheet";
+import { useLeanBackDriver, useLeanBackStart } from "./mediaDetail/useLeanBack";
+import { LeanBackBar } from "./mediaDetail/LeanBackBar";
+import { endLeanBack } from "@/lib/leanBack";
 import { useItemActions } from "./mediaDetail/useItemActions";
 import { useMiniPlayerFrame } from "./mediaDetail/useMiniPlayerFrame";
 import { usePlaybackProgress } from "./mediaDetail/usePlaybackProgress";
@@ -118,6 +121,9 @@ export function MediaDetailModal({
 
   const toggleWatchLater = useToggleWatchLater();
   const [contactSheetOpen, setContactSheetOpen] = useState(false);
+  const leanBack = useLeanBackStart();
+  // Closing the player is how a lean-back session ends.
+  useEffect(() => () => endLeanBack(), []);
 
   const { showPlayerControls, revealPlayerControls, scheduleHideControls } =
     usePlayerControlsVisibility(mode);
@@ -130,6 +136,7 @@ export function MediaDetailModal({
     autoPlay,
     resume,
     itemId,
+    resolveStart: leanBack.resolveStart,
   });
   const { skipSeconds, startPosition, seekTo, startPlaying } = playback;
   const subtitleTracks = useSubtitleTracks(viewingId, isVideo && mode === "playing");
@@ -223,12 +230,27 @@ export function MediaDetailModal({
     mini,
     cinema,
     currentTime: playback.currentTime,
-    autoplayNext,
+    // A lean-back session always moves on, whatever the setting says.
+    autoplayNext: autoplayNext || leanBack.session !== null,
     markWatched: () => toggleWatched.mutate(true),
     showItem,
-    startPlaying,
+    startPlaying: (position) =>
+      startPlaying(item ? leanBack.resolveStart(item, position) : position),
   });
   const { queueBeside, nextQueuedItem } = queue;
+  const leanBackDriver = useLeanBackDriver({
+    session: leanBack.session,
+    clipEnd: leanBack.clipEnd,
+    item,
+    mode,
+    mini,
+    cinema,
+    setCinema,
+    currentTime: playback.currentTime,
+    nextQueuedId: nextQueuedItem?.id,
+    playNextQueued: queue.playNextQueued,
+    videoRef,
+  });
 
   usePlayerKeyboard({
     ...playback,
@@ -348,7 +370,11 @@ export function MediaDetailModal({
               onSeeked={() => playback.setSeeked(true)}
               onTimeUpdate={progress.handleTimeUpdate}
               onPause={progress.handlePause}
-              onEnded={queue.handleEnded}
+              onEnded={() => {
+                queue.handleEnded();
+                // The last video of a session: nothing left to move on to.
+                if (leanBack.session && !nextQueuedItem) endLeanBack();
+              }}
               onVolumeChange={playback.handleVolumeChange}
             />
 
@@ -376,8 +402,18 @@ export function MediaDetailModal({
               </>
             )}
 
-            {queue.showUpNext && nextQueuedItem && (
+            {queue.showUpNext && nextQueuedItem && !leanBack.session && (
               <UpNextCard item={nextQueuedItem} onPlayNext={queue.playNextQueued} />
+            )}
+
+            {leanBack.session && mode === "playing" && !mini && (
+              <LeanBackBar
+                session={leanBack.session}
+                remaining={queue.queueItems.filter((queued) => queued.id !== item?.id).length}
+                visible={showPlayerControls}
+                onSkip={leanBackDriver.advance}
+                onStop={endLeanBack}
+              />
             )}
 
             {/* Gradient + overlaid title/actions, hidden once real playback

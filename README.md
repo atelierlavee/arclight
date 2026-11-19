@@ -87,6 +87,10 @@ you tick what to keep.
 - **Lays a video out as a contact sheet** (`G`, or the grid button): 20,
   50 or every frame of the seek-bar preview in a grid, with the most-replayed
   stretch and your bookmarks marked. Click a frame to play from there
+- **Leans back**: *Lean back* beside Play All and Shuffle (on performer,
+  studio, album, series, collection and filtered browse pages) shuffles the
+  set into the queue and plays it hands-free in cinema mode — whole videos,
+  or 5- or 2-minute clips that start at each video's most replayed part
 - **Remembers the best part**: the seek bar shows a heatmap of the parts you
   replay most, and a button jumps straight to the hottest one
 - **Maps who works with whom** — Performers → Network draws a graph linking
