@@ -34,6 +34,9 @@ you tick what to keep.
 - **Groups** by performer, studio, album and series, each with its own
   browsable page. An album's cover is drawn as a small stack of its photos,
   which fans out on hover
+- **Plays albums as a slideshow**: an album's Slideshow button starts it
+  fullscreen; 3, 5, 8 or 15 seconds a photo (remembered per profile), with a
+  timer bar along the bottom
 - **Families of tags and networks of studios**: a tag can sit under one or
   more others ("Beach" under "Outdoor" and "Vacation"), and a studio under a
   network you create. Browsing, filtering and smart collections by a tag or

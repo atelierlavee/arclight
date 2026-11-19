@@ -140,7 +140,10 @@ export function HelpPage() {
           <Row keys={["←", "→"]}>Previous or next photo.</Row>
           <Row keys={["+", "-"]}>Zoom in or out. The scroll wheel does it too.</Row>
           <Row keys={["0"]}>Back to fitting the screen.</Row>
-          <Row keys={["Space"]}>Start or stop the slideshow.</Row>
+          <Row keys={["Space"]}>
+            Start or stop the slideshow. The button beside it sets the seconds per
+            photo; an album's Slideshow button starts it fullscreen.
+          </Row>
           <Row keys={["F"]}>Fullscreen.</Row>
           <Row keys={["T"]}>Show or hide the thumbnail strip.</Row>
           <Row keys={["Esc"]}>

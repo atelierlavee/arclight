@@ -22,11 +22,32 @@ import {
 } from "@/lib/zoom";
 import { Portal } from "./Portal";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { pkey } from "@/lib/profileStorage";
 
 export type LightboxPhoto = { id: number; title: string };
 
-/** How long each photo holds during a slideshow. */
-const SLIDESHOW_MS = 4000;
+/** How long each photo can hold during a slideshow, in seconds; the button steps through them. */
+export const SLIDESHOW_SPEEDS = [3, 5, 8, 15] as const;
+const DEFAULT_SLIDESHOW_SECONDS = 5;
+const SPEED_KEY = "slideshow-seconds";
+
+/** The remembered speed, per profile; the default when unset or unreadable. */
+function readSlideshowSeconds(): number {
+  try {
+    const stored = Number(localStorage.getItem(pkey(SPEED_KEY)));
+    return (SLIDESHOW_SPEEDS as readonly number[]).includes(stored)
+      ? stored
+      : DEFAULT_SLIDESHOW_SECONDS;
+  } catch {
+    return DEFAULT_SLIDESHOW_SECONDS;
+  }
+}
+
+/** The speed after `current`, wrapping round. */
+export function nextSlideshowSpeed(current: number): number {
+  const at = (SLIDESHOW_SPEEDS as readonly number[]).indexOf(current);
+  return SLIDESHOW_SPEEDS[(at + 1) % SLIDESHOW_SPEEDS.length];
+}
 
 /**
  * Full-screen photo viewer, shared by the in-video gallery strip and the
@@ -47,6 +68,7 @@ export function PhotoLightbox({
   onIndexChange,
   onClose,
   onReachEnd,
+  startSlideshow = false,
 }: {
   photos: LightboxPhoto[];
   index: number;
@@ -58,9 +80,12 @@ export function PhotoLightbox({
    * first page happened to contain.
    */
   onReachEnd?: () => void;
+  /** Open already playing the slideshow, fullscreen — the album page's Slideshow button. */
+  startSlideshow?: boolean;
 }) {
   const [zoom, setZoom] = useState<ZoomState>(ZOOM_RESET);
-  const [slideshow, setSlideshow] = useState(false);
+  const [slideshow, setSlideshow] = useState(startSlideshow);
+  const [slideshowSeconds, setSlideshowSeconds] = useState(readSlideshowSeconds);
   const [fullscreen, setFullscreen] = useState(false);
   const [showStrip, setShowStrip] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -133,9 +158,27 @@ export function PhotoLightbox({
   // rather than whatever was left of the previous one.
   useEffect(() => {
     if (!slideshow || photos.length < 2) return;
-    const timer = setTimeout(() => step(1), SLIDESHOW_MS);
+    const timer = setTimeout(() => step(1), slideshowSeconds * 1000);
     return () => clearTimeout(timer);
-  }, [slideshow, index, photos.length, step]);
+  }, [slideshow, slideshowSeconds, index, photos.length, step]);
+
+  function cycleSlideshowSpeed() {
+    const next = nextSlideshowSpeed(slideshowSeconds);
+    setSlideshowSeconds(next);
+    try {
+      localStorage.setItem(pkey(SPEED_KEY), String(next));
+    } catch {
+      // Remembering the speed is a convenience; the show still runs.
+    }
+  }
+
+  // Started from the album page: go fullscreen straight away. The click
+  // that opened the viewer is the user gesture the browser asks for.
+  useEffect(() => {
+    if (startSlideshow) void toggleFullscreen();
+    // Once, on opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Zooming in stops the slideshow. Advancing away from a detail you just
   // magnified is the viewer overriding a deliberate action with a timer.
@@ -270,6 +313,18 @@ export function PhotoLightbox({
           className="max-h-full max-w-full rounded object-contain"
         />
 
+        {/* How long until the next photo. Keyed on the photo and the speed so
+            the bar restarts with the timer it shows. */}
+        {slideshow && photos.length > 1 && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-white/10">
+            <div
+              key={`${index}-${slideshowSeconds}`}
+              className="h-full origin-left bg-white/70"
+              style={{ animation: `slideshow-progress ${slideshowSeconds}s linear forwards` }}
+            />
+          </div>
+        )}
+
         {neighbours.map((neighbour) => (
           <link
             key={neighbour.id}
@@ -325,6 +380,17 @@ export function PhotoLightbox({
               ) : (
                 <Play className="size-4" />
               )}
+            </button>
+          )}
+          {photos.length > 1 && (
+            <button
+              type="button"
+              onClick={cycleSlideshowSpeed}
+              aria-label={`Slideshow speed: ${slideshowSeconds} seconds a photo`}
+              title="Seconds per photo — click to change"
+              className={cn(buttonClass, "w-auto px-2.5 text-xs tabular-nums")}
+            >
+              {slideshowSeconds}s
             </button>
           )}
           <button

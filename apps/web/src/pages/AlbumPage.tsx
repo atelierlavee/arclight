@@ -5,7 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { Crop, Star } from "lucide-react";
+import { Crop, Presentation, Star } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { FramingEditor, type FramingValue } from "@/components/FramingEditor";
@@ -24,6 +24,8 @@ export function AlbumPage() {
   const { albumId } = routeApi.useParams();
   const id = Number(albumId);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  // Set when the viewer was opened by the Slideshow button rather than a photo.
+  const [slideshowOpen, setSlideshowOpen] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -158,6 +160,19 @@ export function AlbumPage() {
                 ]}
                 label="Album playback"
               />
+            )}
+            {photos.length > 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSlideshowOpen(true);
+                  setOpenIndex(0);
+                }}
+                className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm transition-colors hover:bg-accent"
+              >
+                <Presentation className="size-4" />
+                Slideshow
+              </button>
             )}
             {coverPhoto && !reframing && isOwner && (
               <button
@@ -298,8 +313,12 @@ export function AlbumPage() {
           photos={photos}
           index={openIndex}
           onIndexChange={setOpenIndex}
-          onClose={() => setOpenIndex(null)}
+          onClose={() => {
+            setOpenIndex(null);
+            setSlideshowOpen(false);
+          }}
           onReachEnd={loadMore}
+          startSlideshow={slideshowOpen}
         />
       )}
     </AppShell>

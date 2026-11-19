@@ -129,6 +129,16 @@
   }
 }
 
+/* The photo viewer's slideshow timer: a bar that fills over one photo's hold. */
+@keyframes slideshow-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
