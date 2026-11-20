@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -20,6 +20,9 @@ import { suggestedFilename } from "@/lib/suggestedFilename";
 import { StashDbSceneDialog } from "@/components/StashDbSceneDialog";
 import { ClampedText } from "@/components/ClampedText";
 import { OwnerOnlyPage } from "@/components/OwnerOnly";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
+
+const inboxRouteApi = getRouteApi("/inbox");
 
 type InboxPerformer = { id: number; name: string };
 type InboxTag = { id: number; name: string };
@@ -211,6 +214,8 @@ export function InboxPage() {
 
 function InboxPageContent() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { item: wanted } = inboxRouteApi.useSearch();
   const [index, setIndex] = useState(0);
   const [page, setPage] = useState(1);
   const activeThumb = useRef<HTMLButtonElement | null>(null);
@@ -233,9 +238,54 @@ function InboxPageContent() {
     },
   });
 
-  const items = data?.items ?? [];
-  const item = items[index] ?? null;
+  const items = useMemo(() => data?.items ?? [], [data]);
   const total = items.length;
+
+  // The URL names the video being reviewed. When it is on this page it is
+  // the selection; when it isn't, the server says which page it is on.
+  const wantedIndex = wanted === undefined ? -1 : items.findIndex((entry) => entry.id === wanted);
+  const located = useQuery({
+    queryKey: qk.inbox.locate(wanted ?? 0),
+    queryFn: async () => {
+      const res = await fetch(`/api/inbox/locate?id=${wanted}`);
+      if (!res.ok) throw new Error("Not waiting in the inbox");
+      return res.json() as Promise<{ page: number }>;
+    },
+    enabled: wanted !== undefined && data !== undefined && wantedIndex === -1,
+    retry: false,
+  });
+  // Moved to that page once per video asked for — during render, not in an
+  // effect, so the wrong page never paints first.
+  const [jumpedFor, setJumpedFor] = useState<number | null>(null);
+  if (located.data && located.data.page !== page && jumpedFor !== wanted) {
+    setJumpedFor(wanted ?? null);
+    setPage(located.data.page);
+  }
+  const current = wantedIndex >= 0 ? wantedIndex : index;
+  const item = items[current] ?? null;
+
+  /** Moves the selection, and the URL with it. */
+  const select = useCallback(
+    (next: number) => {
+      setIndex(next);
+      const target = items[next];
+      if (target) void navigate({ to: "/inbox", search: { item: target.id }, replace: true });
+    },
+    [items, navigate],
+  );
+
+  // Still finding the page of a video the URL asked for: leave the URL be.
+  // Once it is found — or turns out not to be waiting any more — whatever is
+  // selected is written back, so the URL always names what is on screen.
+  const settling =
+    wanted !== undefined &&
+    wantedIndex === -1 &&
+    !located.isError &&
+    !(located.data && located.data.page === page && data !== undefined);
+  useEffect(() => {
+    if (!item || settling || item.id === wanted) return;
+    void navigate({ to: "/inbox", search: { item: item.id }, replace: true });
+  }, [item, settling, wanted, navigate]);
 
   const triageMutation = useMutation({
     mutationFn: (ids: number[]) => triageItems(ids),
@@ -255,6 +305,7 @@ function InboxPageContent() {
       queryClient.invalidateQueries({ queryKey: qk.inboxCount });
       setIndex(0);
       setPage(1);
+      void navigate({ to: "/inbox", search: {}, replace: true });
     },
   });
 
@@ -264,12 +315,12 @@ function InboxPageContent() {
   const [lookingUp, setLookingUp] = useState(false);
 
   const goNext = useCallback(() => {
-    if (index < total - 1) setIndex((i) => i + 1);
-  }, [index, total]);
+    if (current < total - 1) select(current + 1);
+  }, [current, total, select]);
 
   const goPrev = useCallback(() => {
-    if (index > 0) setIndex((i) => i - 1);
-  }, [index]);
+    if (current > 0) select(current - 1);
+  }, [current, select]);
 
   const markDone = useCallback(() => {
     if (!item || triageMutation.isPending || triageAllMutation.isPending) return;
@@ -308,22 +359,28 @@ function InboxPageContent() {
 
   useEffect(() => {
     if (index >= total && total > 0) setIndex(total - 1);
+    if (wantedIndex >= 0 && wantedIndex !== index) setIndex(wantedIndex);
     if (data && total === 0 && page > 1) {
       setPage((current) => current - 1);
       setIndex(0);
     }
-  }, [total, index, data, page]);
+  }, [total, index, data, page, wantedIndex]);
 
   // Keep the selected frame in view as you move through the strip.
   useEffect(() => {
     activeThumb.current?.scrollIntoView?.({ inline: "center", block: "nearest", behavior: "smooth" });
-  }, [index, item?.id]);
+  }, [current, item?.id]);
 
   const busy = triageMutation.isPending || triageAllMutation.isPending;
   const actionError = triageMutation.error ?? triageAllMutation.error;
-  const changePage = (next: number) => { setPage(next); setIndex(0); };
+  const changePage = (next: number) => {
+    setPage(next);
+    setIndex(0);
+    // The new page's first video takes over the URL once it loads.
+    void navigate({ to: "/inbox", search: {}, replace: true });
+  };
   const remaining = countData?.count ?? total;
-  const progress = total > 0 ? ((index + 1) / total) * 100 : 0;
+  const progress = total > 0 ? ((current + 1) / total) * 100 : 0;
 
   return (
     <AppShell title="Inbox">
@@ -375,7 +432,7 @@ function InboxPageContent() {
 
         {!isLoading && item && (
           <div className="min-w-0 space-y-5">
-            <div className="h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Position in queue" aria-valuemin={1} aria-valuemax={total} aria-valuenow={index + 1}>
+            <div className="h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Position in queue" aria-valuemin={1} aria-valuemax={total} aria-valuenow={current + 1}>
               <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
             </div>
 
@@ -383,13 +440,13 @@ function InboxPageContent() {
               <div className="relative">
                 <InboxThumbnail key={`${item.id}-${item.thumbnailFile}`} item={item} />
                 <span className="absolute right-3 top-3 rounded-md bg-black/75 px-2 py-1 text-xs tabular-nums text-white backdrop-blur-sm">
-                  {index + 1} / {total}
+                  {current + 1} / {total}
                 </span>
-                <button type="button" onClick={goPrev} disabled={index === 0 || busy} aria-label="Previous item" title="Previous item (←)"
+                <button type="button" onClick={goPrev} disabled={current === 0 || busy} aria-label="Previous item" title="Previous item (←)"
                   className="absolute left-3 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-0">
                   <ChevronLeft className="size-5" />
                 </button>
-                <button type="button" onClick={goNext} disabled={index >= total - 1 || busy} aria-label="Next item" title="Next item (→)"
+                <button type="button" onClick={goNext} disabled={current >= total - 1 || busy} aria-label="Next item" title="Next item (→)"
                   className="absolute right-3 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-0">
                   <ChevronRight className="size-5" />
                 </button>
@@ -418,7 +475,7 @@ function InboxPageContent() {
 
             <div className="sticky bottom-0 -mx-4 border-t border-border bg-background/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
               <div className="flex items-center justify-between gap-3">
-                <button type="button" aria-label="Skip for now" onClick={goNext} disabled={index >= total - 1 || busy} className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30">
+                <button type="button" aria-label="Skip for now" onClick={goNext} disabled={current >= total - 1 || busy} className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30">
                   <SkipForward className="size-4" />Skip for now <Kbd>S</Kbd>
                 </button>
                 <div className="flex items-center gap-2">
@@ -454,7 +511,7 @@ function InboxPageContent() {
                   const current = entry.id === item.id;
                   return (
                     <button key={entry.id} type="button" ref={current ? activeThumb : undefined}
-                      onClick={() => setIndex(entryIndex)} disabled={busy} title={entry.title}
+                      onClick={() => select(entryIndex)} disabled={busy} title={entry.title}
                       aria-label={`Review ${entry.title}`}
                       aria-current={current ? "true" : undefined}
                       className={`w-32 shrink-0 rounded-md p-1 transition disabled:opacity-50 ${current ? "bg-accent ring-2 ring-primary" : "opacity-70 hover:bg-muted hover:opacity-100"}`}>

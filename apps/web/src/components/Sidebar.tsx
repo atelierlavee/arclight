@@ -27,6 +27,7 @@ import {
   UserCheck,
   BookOpen,
   ListOrdered,
+  Rss,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreateCollectionModal } from "./CreateCollectionModal";
@@ -343,6 +344,15 @@ export function Sidebar({
         >
           <Tv className="size-4 shrink-0" />
           {!collapsed && "Series"}
+        </Link>
+        <Link
+          to="/feed"
+          className={navItemClass}
+          title={collapsed ? "Feed" : undefined}
+          activeProps={{ className: "bg-accent text-foreground font-medium" }}
+        >
+          <Rss className="size-4 shrink-0" />
+          {!collapsed && "Feed"}
         </Link>
         <Link
           to="/following"

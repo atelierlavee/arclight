@@ -16,6 +16,9 @@ import { isId, parsePage } from "./mediaItemQueries.js";
 
 import { profileId } from "../auth/profileContext.js";
 import { itemIsFavorite, itemRating } from "../library/profileState.js";
+/** Waiting videos per page of the inbox. */
+const INBOX_PAGE_SIZE = 50;
+
 /** Most ids one triage request acts on. */
 const MAX_TRIAGE = 500;
 
@@ -36,6 +39,48 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
     return { count: row?.count ?? 0 };
   });
 
+  /**
+   * Which page of the inbox a waiting video is on, so a link to one video
+   * can open the inbox right at it. Counted in the list's own order (newest
+   * first) and page size. 404 when it isn't waiting — approved since, gone,
+   * or in this profile's vault.
+   */
+  app.get<{ Querystring: { id?: string } }>("/api/inbox/locate", async (request, reply) => {
+    const profile = profileId(request);
+    const id = Number(request.query.id);
+    if (!isId(id)) {
+      reply.code(400);
+      return { error: "id must be a positive whole number" };
+    }
+    const videoTypeIds = db
+      .select({ id: mediaItemTypes.id })
+      .from(mediaItemTypes)
+      .where(eq(mediaItemTypes.name, "video"));
+    const waiting = and(
+      reachableItems(profile),
+      inArray(mediaItems.itemTypeId, videoTypeIds),
+      isNull(mediaItems.triagedAt),
+    );
+    const [target] = await db
+      .select({ createdAt: mediaItems.createdAt })
+      .from(mediaItems)
+      .where(and(waiting, eq(mediaItems.id, id)));
+    if (!target) {
+      reply.code(404);
+      return { error: "Not waiting in the inbox" };
+    }
+    const [ahead] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(mediaItems)
+      .where(
+        and(
+          waiting,
+          sql`(${mediaItems.createdAt}, ${mediaItems.id}) > (${target.createdAt}, ${id})`,
+        ),
+      );
+    return { page: Math.floor((ahead?.count ?? 0) / INBOX_PAGE_SIZE) + 1 };
+  });
+
   app.get<{ Querystring: { page?: string } }>("/api/inbox", async (request, reply) => {
     const profile = profileId(request);
     const page = parsePage(request.query.page);
@@ -43,7 +88,7 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
       reply.code(400);
       return { error: "page must be a positive whole number" };
     }
-    const pageSize = 50;
+    const pageSize = INBOX_PAGE_SIZE;
 
     const videoTypeIds = db
       .select({ id: mediaItemTypes.id })

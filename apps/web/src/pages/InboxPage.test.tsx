@@ -4,6 +4,34 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InboxPage } from "./InboxPage";
 
+// The URL's ?item=, as a tiny store: useSearch reads it, navigate writes it.
+const router = vi.hoisted(() => {
+  let search: { item?: number } = {};
+  const listeners = new Set<() => void>();
+  return {
+    get: () => search,
+    set: (next: { item?: number }) => {
+      search = next;
+      listeners.forEach((listener) => listener());
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+});
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const { useSyncExternalStore } = await import("react");
+  return {
+    ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+    getRouteApi: () => ({ useSearch: () => useSyncExternalStore(router.subscribe, router.get) }),
+    useNavigate: () => (options: { search: { item?: number } }) => {
+      router.set(options.search);
+      return Promise.resolve();
+    },
+  };
+});
+
 vi.mock("@/components/AppShell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -15,6 +43,7 @@ const clients: QueryClient[] = [];
 // afterEach unstubs every global, including the one test/setup.ts installs.
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  router.set({});
 });
 afterEach(() => {
   cleanup();
@@ -50,6 +79,7 @@ function renderInbox({ hasMore = false, failTriage = false, stashDb = false } = 
     }
     if (url === "/api/inbox/count") return Response.json({ count: items.length });
     if (url === "/api/inbox?page=2") return Response.json({ items: [item(3, "Third video")], page: 2, pageSize: 50, hasMore: false });
+    if (url === "/api/inbox/locate?id=3") return Response.json({ page: 2 });
     return Response.json({ items, page: 1, pageSize: 50, hasMore });
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -201,5 +231,26 @@ describe("inbox review workspace", () => {
       const patch = fetchMock.mock.calls.find(([url, init]) => url === "/api/media-items/1" && init?.method === "PATCH");
       expect(JSON.parse(patch![1]!.body as string)).toMatchObject({ releaseDate: "2018-12-25" });
     });
+  });
+
+  it("opens at the video the URL names", async () => {
+    router.set({ item: 2 });
+    renderInbox();
+    expect(await screen.findByRole("heading", { name: "Second video" })).toBeInTheDocument();
+  });
+
+  it("finds a named video on a later page", async () => {
+    router.set({ item: 3 });
+    renderInbox({ hasMore: true });
+    expect(await screen.findByRole("heading", { name: "Third video" })).toBeInTheDocument();
+    expect(router.get().item).toBe(3);
+  });
+
+  it("keeps the URL on the video being reviewed", async () => {
+    renderInbox();
+    await screen.findByRole("heading", { name: "First video" });
+    await waitFor(() => expect(router.get().item).toBe(1));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Skip for now" }));
+    expect(router.get().item).toBe(2);
   });
 });

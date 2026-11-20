@@ -1,11 +1,28 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
-import { mediaItemTypes, mediaItems, performers, playbackStates, studios } from "../db/schema.js";
+import {
+  mediaItemTypes,
+  mediaItems,
+  performers,
+  playbackStates,
+  profilePerformerState,
+  studios,
+} from "../db/schema.js";
 import { profileId } from "../auth/profileContext.js";
 import { itemFromFollowed, setPerformerFollowed, setStudioFollowed } from "../library/following.js";
-import { visibleItems, visibleItemsSql } from "../library/visibility.js";
-import { parseId, playbackJoin } from "./mediaItemQueries.js";
+import { awaitingApproval, reachableItems, visibleItems, visibleItemsSql } from "../library/visibility.js";
+import { itemNote } from "../library/profileState.js";
+import {
+  fetchRelated,
+  itemColumnsFor,
+  PAGE_SIZE,
+  parseId,
+  parsePage,
+  playbackColumns,
+  playbackJoin,
+  withPlayback,
+} from "./mediaItemQueries.js";
 
 /** How far back "new from who you follow" looks, in days. */
 export const FOLLOWING_NEW_DAYS = 7;
@@ -15,6 +32,15 @@ export const FOLLOWING_RECENT_DAYS = 30;
 
 /** Followed but not watched for this long, in days, counts as gone quiet. */
 export const FOLLOWING_QUIET_DAYS = 60;
+
+/** Trending tags look at what arrived this far back, in days. */
+export const FOLLOWING_TRENDING_DAYS = 30;
+
+/** How many waiting videos "Coming up" lists. */
+const UPCOMING_LIMIT = 12;
+
+/** How many trending tags to list. */
+const FOLLOWING_TRENDING_LIMIT = 10;
 
 /**
  * Following performers and studios, per profile.
@@ -345,6 +371,202 @@ export async function followingRoutes(app: FastifyInstance): Promise<void> {
       recentDays: FOLLOWING_RECENT_DAYS,
       quietDays: FOLLOWING_QUIET_DAYS,
     };
+  });
+
+  /**
+   * The feed: every video from who this profile follows, newest release
+   * first, a page at a time — with, for each, who it is here because of.
+   *
+   * The reasons are the followed performers in the video and the followed
+   * studio it falls under — the nearest one, so a site followed in its own
+   * right is named over the network it belongs to.
+   */
+  app.get<{
+    Querystring: { page?: string; unwatched?: string; performer?: string; studio?: string; order?: string };
+  }>(
+    "/api/following/feed",
+    async (request, reply) => {
+      const profile = profileId(request);
+      const page = parsePage(request.query.page);
+      if (page === null) {
+        reply.code(400);
+        return { error: "page must be a positive whole number" };
+      }
+      const unwatchedOnly = request.query.unwatched === "true";
+      // Narrowed to one performer, or one studio and every site under it.
+      const performer = request.query.performer === undefined ? undefined : parseId(request.query.performer);
+      const studio = request.query.studio === undefined ? undefined : parseId(request.query.studio);
+      if (performer === null || studio === null) {
+        reply.code(400);
+        return { error: "performer and studio must be ids" };
+      }
+      const byArrival = request.query.order === "added";
+
+      const rows = await db
+        .select({
+          ...itemColumnsFor(profile),
+          ...playbackColumns,
+          studioId: mediaItems.studioId,
+          note: itemNote(profile, mediaItems.id),
+        })
+        .from(mediaItems)
+        .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
+        .leftJoin(studios, eq(studios.id, mediaItems.studioId))
+        .leftJoin(playbackStates, playbackJoin(profile))
+        .where(
+          and(
+            visibleItems(profile),
+            eq(mediaItemTypes.name, "video"),
+            itemFromFollowed(profile, mediaItems.id, mediaItems.studioId),
+            unwatchedOnly ? isNull(playbackStates.completedAt) : undefined,
+            performer === undefined
+              ? undefined
+              : sql`exists (select 1 from media_item_performers mip
+                  where mip.media_item_id = ${mediaItems.id} and mip.performer_id = ${performer})`,
+            studio === undefined
+              ? undefined
+              : sql`${mediaItems.studioId} in (
+                  with recursive under(id) as (
+                    select ${studio}::int
+                    union
+                    select c.id from studios c join under u on c.parent_id = u.id
+                  )
+                  select id from under
+                )`,
+          ),
+        )
+        // Newest release first by default. Undated videos go last rather than
+        // first: an unknown date is not "the latest". Arrival breaks ties.
+        // order=added is plain newest arrival first.
+        .orderBy(
+          ...(byArrival
+            ? [desc(mediaItems.createdAt), desc(mediaItems.id)]
+            : [sql`${mediaItems.releaseDate} desc nulls last`, desc(mediaItems.createdAt), desc(mediaItems.id)]),
+        )
+        .limit(PAGE_SIZE + 1)
+        .offset((page - 1) * PAGE_SIZE);
+
+      const hasMore = rows.length > PAGE_SIZE;
+      const pageRows = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
+      const related = await fetchRelated(pageRows.map((row) => row.id));
+
+      // Followed performers, with what the feed needs to draw their avatar.
+      const followedPerformers = new Map(
+        (
+          await db
+            .select({
+              id: performers.id,
+              hasImage: sql<boolean>`(${performers.imageFile} is not null)`,
+              hasBanner: sql<boolean>`(${performers.bannerFile} is not null)`,
+            })
+            .from(profilePerformerState)
+            .innerJoin(performers, eq(performers.id, profilePerformerState.performerId))
+            .where(
+              and(eq(profilePerformerState.profileId, profile), sql`${profilePerformerState.followedAt} is not null`),
+            )
+        ).map((row) => [row.id, row]),
+      );
+
+      // For each studio on the page, the nearest followed studio at or above
+      // it. The depth guard stops a parent loop someone made by hand.
+      const studioIds = [...new Set(pageRows.map((row) => row.studioId).filter((id): id is number => id !== null))];
+      const followedStudioFor = new Map<number, { id: number; name: string }>();
+      if (studioIds.length > 0) {
+        const found = await db.execute<{ itemStudio: number; id: number; name: string }>(sql`
+          with recursive up(item_studio, id, parent_id, depth) as (
+            select s.id, s.id, s.parent_id, 0 from studios s
+            where s.id in (${sql.join(studioIds.map((id) => sql`${id}`), sql`, `)})
+            union all
+            select up.item_studio, p.id, p.parent_id, up.depth + 1
+            from up join studios p on p.id = up.parent_id
+            where up.depth < 20
+          )
+          select distinct on (up.item_studio) up.item_studio as "itemStudio", s.id, s.name
+          from up
+          join profile_studio_state pss
+            on pss.studio_id = up.id and pss.profile_id = ${profile} and pss.followed_at is not null
+          join studios s on s.id = up.id
+          order by up.item_studio, up.depth
+        `);
+        for (const row of found.rows) followedStudioFor.set(row.itemStudio, { id: row.id, name: row.name });
+      }
+
+      return {
+        items: pageRows.map((row) => {
+          const item = withPlayback(row, related);
+          return {
+            ...item,
+            because: {
+              performers: item.performers.flatMap(({ id, name }) => {
+                const followed = followedPerformers.get(id);
+                return followed
+                  ? [{ id, name, hasImage: followed.hasImage, hasBanner: followed.hasBanner }]
+                  : [];
+              }),
+              studio: row.studioId === null ? null : (followedStudioFor.get(row.studioId) ?? null),
+            },
+          };
+        }),
+        page,
+        hasMore,
+      };
+    },
+  );
+
+  /**
+   * The tags most used across what arrived recently from who this profile
+   * follows, for the feed's sidebar. When nothing arrived in that window the
+   * same count runs over all their videos instead, so the list says what
+   * they make rather than going blank — `recent` tells the page which.
+   */
+  app.get("/api/following/tags", async (request) => {
+    const profile = profileId(request);
+    const count = async (recentOnly: boolean) =>
+      (
+        await db.execute<{ id: number; name: string; count: number }>(sql`
+          select t.id, t.name, count(*)::int as count
+          from media_items mi
+          join media_item_tags mit on mit.media_item_id = mi.id
+          join tags t on t.id = mit.tag_id
+          where ${visibleItemsSql("mi", profile)}
+            and mi.item_type_id in (select id from media_item_types where name = 'video')
+            and ${itemFromFollowed(profile, sql`mi.id`, sql`mi.studio_id`)}
+            ${recentOnly ? sql`and mi.created_at >= now() - make_interval(days => ${FOLLOWING_TRENDING_DAYS})` : sql``}
+          group by t.id
+          order by count desc, lower(t.name)
+          limit ${FOLLOWING_TRENDING_LIMIT}
+        `)
+      ).rows;
+    const recent = await count(true);
+    if (recent.length > 0) return { tags: recent, recent: true, days: FOLLOWING_TRENDING_DAYS };
+    return { tags: await count(false), recent: false, days: FOLLOWING_TRENDING_DAYS };
+  });
+
+  /**
+   * Videos from who this profile follows still waiting in the inbox — what
+   * the feed will have once they are approved. The newest few, and how many
+   * there are in all. Vault items stay out, as they do from the inbox.
+   */
+  app.get("/api/following/upcoming", async (request) => {
+    const profile = profileId(request);
+    const where = and(
+      reachableItems(profile),
+      awaitingApproval(),
+      itemFromFollowed(profile, mediaItems.id, mediaItems.studioId),
+    );
+    const items = await db
+      .select({
+        id: mediaItems.id,
+        title: mediaItems.title,
+        thumbnailFile: mediaItems.thumbnailFile,
+        createdAt: mediaItems.createdAt,
+      })
+      .from(mediaItems)
+      .where(where)
+      .orderBy(desc(mediaItems.createdAt), desc(mediaItems.id))
+      .limit(UPCOMING_LIMIT);
+    const [counted] = await db.select({ count: sql<number>`count(*)::int` }).from(mediaItems).where(where);
+    return { items, count: counted?.count ?? 0 };
   });
 
   /**

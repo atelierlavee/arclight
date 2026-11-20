@@ -27,6 +27,7 @@ export const PROFILE_LOCAL_KEYS = [
   "recent-searches",
   "saved-searches",
   "dismissed-notifications",
+  "feed-last-seen",
 ] as const;
 
 /** Per-person keys in sessionStorage. */

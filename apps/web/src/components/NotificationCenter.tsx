@@ -69,8 +69,8 @@ export function NotificationCenter() {
             id: `following:${following.newestAt}`,
             label: `${following.newCount} new video${following.newCount === 1 ? "" : "s"} from who you follow`,
             icon: UserCheck,
-            href: "/browse" as const,
-            search: { following: "true", watched: "false" },
+            href: "/feed" as const,
+            search: { watched: "false" },
             tone: "text-sky-400",
           },
         ]
@@ -124,7 +124,7 @@ export function NotificationCenter() {
     id: string;
     label: string;
     icon: typeof Bell;
-    href: "/settings" | "/browse";
+    href: "/settings" | "/feed";
     search?: Record<string, string>;
     tone?: string;
   }[] = [...followingNotifications, ...libraryNotifications];

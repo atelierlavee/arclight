@@ -85,8 +85,8 @@ export function FollowingPage() {
       actions={
         totalNew > 0 ? (
           <Link
-            to="/browse"
-            search={{ following: "true", watched: "false" }}
+            to="/feed"
+            search={{ watched: "false" }}
             className="rounded-md bg-secondary px-3 py-1.5 text-sm transition-colors hover:bg-accent"
           >
             See what's new

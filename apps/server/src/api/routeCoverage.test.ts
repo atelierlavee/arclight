@@ -37,7 +37,9 @@ import {
   playbackHeatmap,
   playbackStates,
   profileItemState,
+  profilePerformerState,
   profileSettings,
+  profileStudioState,
   scanJobs,
   series,
   watchLog,
@@ -364,6 +366,10 @@ async function seedLibrary(): Promise<Seeded> {
       mediaItemId,
     })),
   );
+  // Followed, so the feed and the other following lists have the hidden
+  // items in reach and the sweep below actually tests them.
+  await db.insert(profilePerformerState).values({ profileId, performerId, followedAt: new Date() });
+  await db.insert(profileStudioState).values({ profileId, studioId, followedAt: new Date() });
   const [scan] = await db.insert(scanJobs).values({ status: "completed" }).returning();
 
   return {
@@ -473,7 +479,15 @@ describe.each(["owner", "guest"] as const)("a locked vault leaves no trace in an
     if (who === "guest") {
       const guest = await signInOtherProfile("Guest", "2468");
       const owner = await ownerProfileId();
-      for (const table of [profileItemState, playbackStates, watchLog, playbackHeatmap, bookmarks]) {
+      for (const table of [
+        profileItemState,
+        profilePerformerState,
+        profileStudioState,
+        playbackStates,
+        watchLog,
+        playbackHeatmap,
+        bookmarks,
+      ]) {
         await db.update(table).set({ profileId: guest.profileId }).where(eq(table.profileId, owner));
       }
       cookie = guest.cookie;
@@ -500,6 +514,8 @@ describe.each(["owner", "guest"] as const)("a locked vault leaves no trace in an
     expect(unclassified).toEqual([]);
   });
 
+  // Its own timeout: one request per GET route in the app, so it grows with
+  // every route added and sits near vitest's 5 s default.
   it("no GET mentions a hidden item", async () => {
     const known = parameterisedGets(seeded);
     const urls = [
@@ -521,7 +537,7 @@ describe.each(["owner", "guest"] as const)("a locked vault leaves no trace in an
     expect(leaks).toEqual([]);
     // Most of them answered for real — a sweep of 401s and 500s proves nothing.
     expect(ok).toBeGreaterThan(urls.length * 0.75);
-  });
+  }, 20_000);
 
   it("every by-id GET on a media item answers 404 for a hidden id", async () => {
     const byId = routes.filter(
@@ -554,6 +570,10 @@ describe.each(["owner", "guest"] as const)("a locked vault leaves no trace in an
     expect(vault.body).toContain(SENTINEL);
     expect(vault.body).toContain(String(HIDDEN_VIDEO_ID));
     expect((await get(`/api/media-items/${HIDDEN_VIDEO_ID}`)).statusCode).toBe(200);
+    // The follows seeded above reach the library, so the feed's clean answer
+    // in the sweep is the vault filter at work, not an empty feed.
+    const feed = (await get("/api/following/feed")).json() as { items: { id: number }[] };
+    expect(feed.items.map((item) => item.id)).toContain(seeded.visibleId);
   });
 });
 

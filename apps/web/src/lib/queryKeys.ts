@@ -58,6 +58,10 @@ export const qk = {
     favorites: ["media-items", "favorites"] as const,
     watchLater: ["media-items", "watch-later"] as const,
     following: ["media-items", "following"] as const,
+    // Under media-items so that watching, favouriting or (un)following —
+    // all of which invalidate media-items — refresh it too.
+    followingFeed: (filter: unknown) => ["media-items", "following-feed", filter] as const,
+    followingContinue: ["media-items", "following-continue"] as const,
     recentlyWatched: ["media-items", "recently-watched"] as const,
     mostPlayed: ["media-items", "most-played"] as const,
     unwatched: ["media-items", "unwatched"] as const,
@@ -92,6 +96,8 @@ export const qk = {
     list: ["following", "list"] as const,
     suggestions: ["following", "suggestions"] as const,
     stats: ["following", "stats"] as const,
+    tags: ["following", "tags"] as const,
+    upcoming: ["following", "upcoming"] as const,
   },
   /** The bell's count of new videos from who this profile follows. */
   followingSummary: ["following-summary"] as const,
@@ -211,6 +217,7 @@ export const qk = {
   inbox: {
     all: ["inbox"] as const,
     page: (page: number) => ["inbox", page] as const,
+    locate: (id: number) => ["inbox", "locate", id] as const,
   },
   inboxCount: ["inbox-count"] as const,
   activity: {

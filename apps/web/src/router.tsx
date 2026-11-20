@@ -13,6 +13,7 @@ import { HelpPage } from "@/pages/HelpPage";
 import { MultiViewPage } from "./pages/MultiViewPage";
 import { FollowingPage } from "./pages/FollowingPage";
 import { DiaryPage } from "./pages/DiaryPage";
+import { FeedPage } from "./pages/FeedPage";
 import { TiersPage } from "./pages/TiersPage";
 import { HomePage } from "@/pages/HomePage";
 import { InboxPage } from "@/pages/InboxPage";
@@ -201,9 +202,15 @@ const studioRoute = createRoute({
   component: StudioPage,
 });
 
+// The video being reviewed is in the URL, so a link can open the inbox right
+// at it and a reload stays on it.
 const inboxRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/inbox",
+  validateSearch: (search: Record<string, unknown>): { item?: number } => {
+    const n = Number(search.item);
+    return { item: Number.isInteger(n) && n > 0 ? n : undefined };
+  },
   component: InboxPage,
 });
 
@@ -241,6 +248,30 @@ const followingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/following",
   component: FollowingPage,
+});
+
+// Everything from who you follow, newest first. "watched=false" keeps only
+// the unwatched, the same parameter (and meaning) the browse page uses.
+const feedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/feed",
+  // performerId / studioId narrow it to one of who you follow; order=added
+  // sorts by arrival instead of release.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { watched?: "false"; order?: "added"; performerId?: number; studioId?: number } => {
+    const id = (value: unknown) => {
+      const n = Number(value);
+      return Number.isInteger(n) && n > 0 ? n : undefined;
+    };
+    return {
+      watched: search.watched === "false" ? "false" : undefined,
+      order: search.order === "added" ? "added" : undefined,
+      performerId: id(search.performerId),
+      studioId: id(search.studioId),
+    };
+  },
+  component: FeedPage,
 });
 
 // The watch log as a diary; the month is in the URL so back and forward
@@ -304,6 +335,7 @@ const routeTree = rootRoute.addChildren([
   accountRoute,
   multiviewRoute,
   followingRoute,
+  feedRoute,
   diaryRoute,
   tiersRoute,
 ]);

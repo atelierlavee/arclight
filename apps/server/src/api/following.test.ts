@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { profilePerformerState, profiles, studios, watchLog } from "../db/schema.js";
+import { mediaItemTags, profilePerformerState, profiles, studios, tags, watchLog } from "../db/schema.js";
 import { resetDatabase, signIn, signInOtherProfile, testApp } from "../test/harness.js";
 import { linkPerformer, makeItem, makeLibrary, makePerformer, makeStudio } from "../test/fixtures.js";
 
@@ -180,5 +180,167 @@ describe("following stats", () => {
     ]);
     // Fresh was only just followed, so it is not quiet yet.
     expect(body.quiet.performers.map((p: { name: string }) => p.name)).toEqual(["Quiet"]);
+  });
+});
+
+describe("following feed", () => {
+  type FeedItem = {
+    title: string;
+    watched: boolean;
+    because: { performers: { id: number; name: string }[]; studio: { id: number; name: string } | null };
+  };
+  const feed = async (query = "", as = cookie) => {
+    const res = await call("GET", `/api/following/feed${query}`, undefined, as);
+    expect(res.statusCode).toBe(200);
+    return res.json() as { items: FeedItem[]; hasMore: boolean; page: number };
+  };
+
+  it("lists followed videos newest release first, undated last, each with who it came from", async () => {
+    const alice = await makePerformer("Alice");
+    const network = await makeStudio("Network");
+    const site = await makeStudio("Site");
+    await db.update(studios).set({ parentId: network }).where(eq(studios.id, site));
+
+    // Arrival order is the reverse of release order, so the test tells them apart.
+    const both = await makeItem(libraryId, {
+      title: "Both",
+      studioId: site,
+      releaseDate: "2024-05-01",
+      createdAt: new Date("2026-01-01"),
+    });
+    await linkPerformer(both, alice);
+    const solo = await makeItem(libraryId, {
+      title: "Alice only",
+      releaseDate: "2020-01-01",
+      createdAt: new Date("2026-02-01"),
+    });
+    await linkPerformer(solo, alice);
+    // Undated, and the newest arrival of all: still last.
+    await makeItem(libraryId, { title: "Site only", studioId: site, createdAt: new Date("2026-03-01") });
+    await makeItem(libraryId, { title: "Unfollowed", studioId: await makeStudio("Other") });
+    const waiting = await makeItem(libraryId, { title: "Waiting", triagedAt: null });
+    await linkPerformer(waiting, alice);
+
+    await call("PUT", `/api/performers/${alice}/follow`, { follow: true });
+    await call("PUT", `/api/studios/${network}/follow`, { follow: true });
+
+    const { items, hasMore } = await feed();
+    expect(items.map((i) => i.title)).toEqual(["Both", "Alice only", "Site only"]);
+    expect(hasMore).toBe(false);
+    expect(items[0].because).toEqual({
+      performers: [{ id: alice, name: "Alice", hasImage: false, hasBanner: false }],
+      studio: { id: network, name: "Network" },
+    });
+    expect(items[1].because).toEqual({ performers: [{ id: alice, name: "Alice", hasImage: false, hasBanner: false }], studio: null });
+    expect(items[2].because).toEqual({ performers: [], studio: { id: network, name: "Network" } });
+
+    // A site followed in its own right is named over its network.
+    await call("PUT", `/api/studios/${site}/follow`, { follow: true });
+    expect((await feed()).items[2].because.studio).toEqual({ id: site, name: "Site" });
+  });
+
+  it("can leave out what has been watched", async () => {
+    const studio = await makeStudio("Studio");
+    const seen = await makeItem(libraryId, { title: "Seen", studioId: studio });
+    await makeItem(libraryId, { title: "Unseen", studioId: studio });
+    await call("PUT", `/api/studios/${studio}/follow`, { follow: true });
+    await call("PUT", `/api/media-items/${seen}/watched`, { watched: true });
+
+    expect((await feed()).items.map((i) => [i.title, i.watched]).sort()).toEqual([
+      ["Seen", true],
+      ["Unseen", false],
+    ]);
+    expect((await feed("?unwatched=true")).items.map((i) => i.title)).toEqual(["Unseen"]);
+  });
+
+  it("is per profile, and refuses a bad page", async () => {
+    const studio = await makeStudio("Studio");
+    await makeItem(libraryId, { title: "Theirs", studioId: studio });
+    const guest = await signInOtherProfile();
+    await call("PUT", `/api/studios/${studio}/follow`, { follow: true }, guest.cookie);
+    expect((await feed("", guest.cookie)).items.map((i) => i.title)).toEqual(["Theirs"]);
+    expect((await feed()).items).toEqual([]);
+    expect((await call("GET", "/api/following/feed?page=0")).statusCode).toBe(400);
+  });
+});
+
+describe("following trending tags", () => {
+  it("counts tags on recent videos from who is followed, falling back to all of them", async () => {
+    const studio = await makeStudio("Studio");
+    const tag = async (name: string) =>
+      (await db.insert(tags).values({ name }).returning({ id: tags.id }))[0].id;
+    const outdoor = await tag("Outdoor");
+    const pov = await tag("POV");
+    const elsewhere = await tag("Elsewhere");
+
+    const old = await makeItem(libraryId, { studioId: studio, createdAt: new Date("2020-01-01") });
+    await db.insert(mediaItemTags).values({ mediaItemId: old, tagId: pov });
+    const unfollowed = await makeItem(libraryId, { studioId: await makeStudio("Other") });
+    await db.insert(mediaItemTags).values({ mediaItemId: unfollowed, tagId: elsewhere });
+    await call("PUT", `/api/studios/${studio}/follow`, { follow: true });
+
+    // Nothing recent yet: all their videos count.
+    let body = (await call("GET", "/api/following/tags")).json();
+    expect(body.recent).toBe(false);
+    expect(body.tags).toEqual([{ id: pov, name: "POV", count: 1 }]);
+
+    for (let i = 0; i < 2; i++) {
+      const fresh = await makeItem(libraryId, { studioId: studio });
+      await db.insert(mediaItemTags).values({ mediaItemId: fresh, tagId: outdoor });
+    }
+    body = (await call("GET", "/api/following/tags")).json();
+    expect(body.recent).toBe(true);
+    expect(body.tags).toEqual([{ id: outdoor, name: "Outdoor", count: 2 }]);
+  });
+});
+
+describe("following feed extras", () => {
+  const titles = async (url: string) =>
+    ((await call("GET", url)).json().items as { title: string }[]).map((i) => i.title);
+
+  it("narrows to one performer or one studio's sites, and can order by arrival", async () => {
+    const alice = await makePerformer("Alice");
+    const network = await makeStudio("Network");
+    const site = await makeStudio("Site");
+    await db.update(studios).set({ parentId: network }).where(eq(studios.id, site));
+    const withAlice = await makeItem(libraryId, {
+      title: "With Alice",
+      releaseDate: "2024-01-01",
+      createdAt: new Date("2026-01-01"),
+    });
+    await linkPerformer(withAlice, alice);
+    await makeItem(libraryId, {
+      title: "On the site",
+      studioId: site,
+      releaseDate: "2020-01-01",
+      createdAt: new Date("2026-02-01"),
+    });
+    await call("PUT", `/api/performers/${alice}/follow`, { follow: true });
+    await call("PUT", `/api/studios/${network}/follow`, { follow: true });
+
+    expect(await titles(`/api/following/feed?performer=${alice}`)).toEqual(["With Alice"]);
+    expect(await titles(`/api/following/feed?studio=${network}`)).toEqual(["On the site"]);
+    expect(await titles("/api/following/feed")).toEqual(["With Alice", "On the site"]);
+    expect(await titles("/api/following/feed?order=added")).toEqual(["On the site", "With Alice"]);
+    expect((await call("GET", "/api/following/feed?performer=abc")).statusCode).toBe(400);
+  });
+
+  it("carries this profile's note", async () => {
+    const studio = await makeStudio("Studio");
+    const id = await makeItem(libraryId, { title: "Noted", studioId: studio });
+    await call("PUT", `/api/studios/${studio}/follow`, { follow: true });
+    await call("PUT", `/api/media-items/${id}/note`, { note: "Great one" });
+    expect((await call("GET", "/api/following/feed")).json().items[0].note).toBe("Great one");
+  });
+
+  it("lists what is still waiting in the inbox from who is followed", async () => {
+    const studio = await makeStudio("Studio");
+    await makeItem(libraryId, { title: "Waiting", studioId: studio, triagedAt: null });
+    await makeItem(libraryId, { title: "Approved", studioId: studio });
+    await makeItem(libraryId, { title: "Someone else's", triagedAt: null });
+    await call("PUT", `/api/studios/${studio}/follow`, { follow: true });
+    const body = (await call("GET", "/api/following/upcoming")).json();
+    expect(body.count).toBe(1);
+    expect(body.items.map((i: { title: string }) => i.title)).toEqual(["Waiting"]);
   });
 });

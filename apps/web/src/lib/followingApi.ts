@@ -1,3 +1,4 @@
+import type { MediaCardItem } from "@/components/MediaCard";
 import { setPerformerFollowed } from "./performerApi";
 import { setStudioFollowed } from "./studioApi";
 
@@ -49,6 +50,49 @@ export type Suggestions = { performers: SuggestedPerformer[]; studios: Suggested
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return res.json() as Promise<T>;
+}
+
+/** A video in the feed, and who it is there because of. */
+export type FeedItem = MediaCardItem & {
+  createdAt: string;
+  lastPositionSeconds: number;
+  /** This profile's private note on it, or null. */
+  note: string | null;
+  because: {
+    performers: { id: number; name: string; hasImage: boolean; hasBanner: boolean }[];
+    /** The nearest followed studio at or above the video's own. */
+    studio: { id: number; name: string } | null;
+  };
+};
+
+export type FeedPage = { items: FeedItem[]; page: number; hasMore: boolean };
+
+/** What the feed shows: all of it or the unwatched, from everyone or one performer or studio. */
+export type FeedFilter = {
+  unwatchedOnly: boolean;
+  /** "added" is newest arrival first; the default is newest release first. */
+  order: "released" | "added";
+  performerId?: number;
+  studioId?: number;
+};
+
+export async function fetchFeed(page: number, filter: FeedFilter): Promise<FeedPage> {
+  const params = new URLSearchParams({ page: String(page) });
+  if (filter.unwatchedOnly) params.set("unwatched", "true");
+  if (filter.order === "added") params.set("order", "added");
+  if (filter.performerId !== undefined) params.set("performer", String(filter.performerId));
+  if (filter.studioId !== undefined) params.set("studio", String(filter.studioId));
+  return json<FeedPage>(await fetch(`/api/following/feed?${params}`));
+}
+
+export type Upcoming = {
+  items: { id: number; title: string; thumbnailFile: string | null; createdAt: string }[];
+  count: number;
+};
+
+/** What is still waiting in the inbox from who you follow. */
+export async function fetchUpcoming(): Promise<Upcoming> {
+  return json<Upcoming>(await fetch("/api/following/upcoming"));
 }
 
 export async function fetchFollowing(): Promise<Following> {
@@ -129,4 +173,15 @@ export async function fetchFollowingStats(): Promise<FollowingStats> {
 /** A whole percentage of `part` in `whole`, or null when there is nothing to divide. */
 export function sharePercent(part: number, whole: number): number | null {
   return whole > 0 ? Math.round((part / whole) * 100) : null;
+}
+
+export type FollowingTags = {
+  tags: { id: number; name: string; count: number }[];
+  /** False when nothing arrived in `days` and the counts cover everything. */
+  recent: boolean;
+  days: number;
+};
+
+export async function fetchFollowingTags(): Promise<FollowingTags> {
+  return json<FollowingTags>(await fetch("/api/following/tags"));
 }

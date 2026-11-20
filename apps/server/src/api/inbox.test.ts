@@ -307,3 +307,20 @@ describe("heatmap recording via playback", () => {
     expect(items.find((i) => i.title === "No file")?.fileName).toBeNull();
   });
 });
+
+describe("GET /api/inbox/locate", () => {
+  it("locates a waiting video's page, and refuses one that isn't waiting", async () => {
+    const newer = await makeItem(libraryId, { triagedAt: null, createdAt: new Date("2026-02-01") });
+    const older = await makeItem(libraryId, { triagedAt: null, createdAt: new Date("2026-01-01") });
+    const approved = await makeItem(libraryId, { triagedAt: new Date() });
+    for (const id of [newer, older]) {
+      const res = await app.inject({ method: "GET", url: `/api/inbox/locate?id=${id}`, headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().page).toBe(1);
+    }
+    const res = await app.inject({ method: "GET", url: `/api/inbox/locate?id=${approved}`, headers: { cookie } });
+    expect(res.statusCode).toBe(404);
+    const bad = await app.inject({ method: "GET", url: "/api/inbox/locate?id=x", headers: { cookie } });
+    expect(bad.statusCode).toBe(400);
+  });
+});

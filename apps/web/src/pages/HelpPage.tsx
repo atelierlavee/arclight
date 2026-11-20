@@ -136,6 +136,12 @@ export function HelpPage() {
           <Row keys={["Esc"]}>Close the video. Your position is saved.</Row>
         </Group>
 
+        <Group title="In the feed">
+          <Row keys={["J", "K"]}>Next or previous post.</Row>
+          <Row keys={["L"]}>Favourite the post you're on. Double-clicking its video does the same.</Row>
+          <Row keys={["Enter"]}>Play the post you're on.</Row>
+        </Group>
+
         <Group title="Looking at photos">
           <Row keys={["←", "→"]}>Previous or next photo.</Row>
           <Row keys={["+", "-"]}>Zoom in or out. The scroll wheel does it too.</Row>
