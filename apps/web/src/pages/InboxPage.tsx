@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { AlertCircle, Check, CheckCheck, ChevronLeft, ChevronRight, Film, Inbox, LoaderCircle, RefreshCw, SkipForward, DatabaseZap, Copy } from "lucide-react";
+  AlertCircle,
+  Check,
+  CheckCheck,
+  ChevronLeft,
+  ChevronRight,
+  Film,
+  LoaderCircle,
+  RefreshCw,
+  SkipForward,
+  DatabaseZap,
+  Copy,
+} from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { PageBody } from "@/components/PageBody";
 import { PerformerEditor } from "@/components/PerformerEditor";
 import { TagEditor } from "@/components/TagEditor";
 import { thumbnailUrl, framingStyle } from "@/lib/mediaItemApi";
@@ -95,14 +104,22 @@ function InboxThumbnail({ item, compact = false }: { item: InboxItem; compact?: 
           <Film className={compact ? "size-5" : "size-10"} aria-label="No preview available" />
         </div>
       ) : (
-        <img src={thumbnailUrl(item)} alt={compact ? "" : item.title}
-          className="size-full object-cover" style={framingStyle(item)}
-          loading={compact ? "lazy" : "eager"} onError={() => setFailed(true)} />
+        <img
+          src={thumbnailUrl(item)}
+          alt={compact ? "" : item.title}
+          className="size-full object-cover"
+          style={framingStyle(item)}
+          loading={compact ? "lazy" : "eager"}
+          onError={() => setFailed(true)}
+        />
       )}
       {autoplay && !failed && (
         <video
           src={`/api/media-items/${item.id}/preview`}
-          autoPlay muted loop playsInline
+          autoPlay
+          muted
+          loop
+          playsInline
           onPlaying={() => setClipReady(true)}
           onError={() => setClipFailed(true)}
           style={{ opacity: clipReady ? 1 : 0, transition: "opacity 300ms ease-out" }}
@@ -120,13 +137,24 @@ function InboxThumbnail({ item, compact = false }: { item: InboxItem; compact?: 
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd aria-hidden="true" className="rounded border border-border bg-muted px-1.5 py-0.5 font-sans text-[10px] font-medium text-muted-foreground">
+    <kbd
+      aria-hidden="true"
+      className="rounded border border-border bg-muted px-1.5 py-0.5 font-sans text-[10px] font-medium text-muted-foreground"
+    >
       {children}
     </kbd>
   );
 }
 
-function Panel({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
+function Panel({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-lg border border-border bg-card/40 p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -172,18 +200,27 @@ function FilenameButton({ item }: { item: InboxItem }) {
 
   return (
     <div className="group relative">
-      <button type="button" onClick={() => void copy()}
+      <button
+        type="button"
+        onClick={() => void copy()}
         aria-label={suggestion ? `Copy filename: ${suggestion}` : "Copy filename"}
-        className="inline-flex size-11 items-center justify-center rounded-md border border-border hover:bg-accent">
+        className="inline-flex size-11 items-center justify-center rounded-md border border-border hover:bg-accent"
+      >
         {copied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4" />}
       </button>
-      <div role="tooltip"
-        className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-max max-w-[min(32rem,85vw)] rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-lg group-focus-within:block group-hover:block">
+      <div
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-max max-w-[min(32rem,85vw)] rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-lg group-focus-within:block group-hover:block"
+      >
         {suggestion ? (
           <>
             <code className="block break-all text-sm">{suggestion}</code>
             <span className="mt-1 block text-muted-foreground">
-              {copied ? "Copied" : suggestion === item.fileName ? "Already the current name · click to copy" : "Click to copy"}
+              {copied
+                ? "Copied"
+                : suggestion === item.fileName
+                  ? "Already the current name · click to copy"
+                  : "Click to copy"}
             </span>
           </>
         ) : (
@@ -290,9 +327,9 @@ function InboxPageContent() {
   const triageMutation = useMutation({
     mutationFn: (ids: number[]) => triageItems(ids),
     onSuccess: (_result, ids) => {
-      queryClient.setQueryData<InboxResponse>(qk.inbox.page(page), (current) => current
-        ? { ...current, items: current.items.filter((entry) => !ids.includes(entry.id)) }
-        : current);
+      queryClient.setQueryData<InboxResponse>(qk.inbox.page(page), (current) =>
+        current ? { ...current, items: current.items.filter((entry) => !ids.includes(entry.id)) } : current,
+      );
       queryClient.invalidateQueries({ queryKey: qk.inbox.all });
       queryClient.invalidateQueries({ queryKey: qk.inboxCount });
     },
@@ -329,8 +366,15 @@ function InboxPageContent() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey ||
-        (e.target instanceof Element && e.target.closest("input, textarea, select, button, a, [contenteditable], [role='dialog']"))) return;
+      if (
+        e.defaultPrevented ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        (e.target instanceof Element &&
+          e.target.closest("input, textarea, select, button, a, [contenteditable], [role='dialog']"))
+      )
+        return;
 
       switch (e.key) {
         case "ArrowRight":
@@ -383,26 +427,21 @@ function InboxPageContent() {
   const progress = total > 0 ? ((current + 1) / total) * 100 : 0;
 
   return (
-    <AppShell title="Inbox">
-      <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 lg:px-8">
-        <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <Inbox className="size-5 text-muted-foreground" />
-              <h2 className="text-xl font-semibold tracking-tight">Awaiting review</h2>
-              {!isLoading && !isError && (
-                <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">
-                  {remaining}
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">Tag each new item, then mark it done.</p>
-          </div>
+    <AppShell
+      title="Inbox"
+      subtitle={
+        isLoading || isError
+          ? "Tag each new item, then mark it done."
+          : `${remaining} awaiting review · Tag each new item, then mark it done.`
+      }
+      actions={
+        <>
           {total > 0 && (
             <button
               type="button"
               onClick={() => {
-                if (window.confirm(`Mark all ${remaining} inbox items as reviewed?`)) triageAllMutation.mutate();
+                if (window.confirm(`Mark all ${remaining} inbox items as reviewed?`))
+                  triageAllMutation.mutate();
               }}
               disabled={busy}
               className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
@@ -411,29 +450,59 @@ function InboxPageContent() {
               Mark all done
             </button>
           )}
-        </header>
-
+        </>
+      }
+    >
+      <PageBody width="wide">
         {isLoading && (
           <div role="status" aria-label="Loading inbox" className="space-y-4">
             <div className="aspect-video w-full animate-pulse rounded-lg bg-muted" />
-            <div className="flex gap-2">{[1, 2, 3, 4, 5].map((entry) => <div key={entry} className="h-16 w-28 animate-pulse rounded-md bg-muted" />)}</div>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((entry) => (
+                <div key={entry} className="h-16 w-28 animate-pulse rounded-md bg-muted" />
+              ))}
+            </div>
           </div>
         )}
 
-        {isError && <div role="alert" className="flex flex-col items-center gap-4 py-20 text-center">
-          <AlertCircle className="size-8 text-muted-foreground" />
-          <p>Could not load the inbox.</p>
-          <button type="button" onClick={() => void refetch()} className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm"><RefreshCw className="size-4" />Retry</button>
-        </div>}
+        {isError && (
+          <div role="alert" className="flex flex-col items-center gap-4 py-20 text-center">
+            <AlertCircle className="size-8 text-muted-foreground" />
+            <p>Could not load the inbox.</p>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm"
+            >
+              <RefreshCw className="size-4" />
+              Retry
+            </button>
+          </div>
+        )}
 
-        {actionError && <p role="alert" className="mb-4 flex items-center gap-2 text-sm text-destructive"><AlertCircle className="size-4 shrink-0" />{actionError.message}. Please try again.</p>}
+        {actionError && (
+          <p role="alert" className="mb-4 flex items-center gap-2 text-sm text-destructive">
+            <AlertCircle className="size-4 shrink-0" />
+            {actionError.message}. Please try again.
+          </p>
+        )}
 
         {!isLoading && !isError && total === 0 && <EmptyInbox />}
 
         {!isLoading && item && (
           <div className="min-w-0 space-y-5">
-            <div className="h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Position in queue" aria-valuemin={1} aria-valuemax={total} aria-valuenow={current + 1}>
-              <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
+            <div
+              className="h-1 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label="Position in queue"
+              aria-valuemin={1}
+              aria-valuemax={total}
+              aria-valuenow={current + 1}
+            >
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
+                style={{ width: `${progress}%` }}
+              />
             </div>
 
             <section className="min-w-0" aria-label="Selected item">
@@ -442,24 +511,41 @@ function InboxPageContent() {
                 <span className="absolute right-3 top-3 rounded-md bg-black/75 px-2 py-1 text-xs tabular-nums text-white backdrop-blur-sm">
                   {current + 1} / {total}
                 </span>
-                <button type="button" onClick={goPrev} disabled={current === 0 || busy} aria-label="Previous item" title="Previous item (←)"
-                  className="absolute left-3 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-0">
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  disabled={current === 0 || busy}
+                  aria-label="Previous item"
+                  title="Previous item (←)"
+                  className="absolute left-3 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-0"
+                >
                   <ChevronLeft className="size-5" />
                 </button>
-                <button type="button" onClick={goNext} disabled={current >= total - 1 || busy} aria-label="Next item" title="Next item (→)"
-                  className="absolute right-3 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-0">
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={current >= total - 1 || busy}
+                  aria-label="Next item"
+                  title="Next item (→)"
+                  className="absolute right-3 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-0"
+                >
                   <ChevronRight className="size-5" />
                 </button>
               </div>
 
               <div className="mt-4">
-                <h3 className="break-words text-2xl font-semibold leading-snug tracking-tight [overflow-wrap:anywhere]">{item.title}</h3>
+                <h3 className="break-words text-2xl font-semibold leading-snug tracking-tight [overflow-wrap:anywhere]">
+                  {item.title}
+                </h3>
                 <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
                   {item.studioName && <span className="break-words">{item.studioName}</span>}
                   {item.releaseDate && <time dateTime={item.releaseDate}>{item.releaseDate}</time>}
                 </div>
                 {item.description && (
-                  <ClampedText text={item.description} className="mt-3 text-sm leading-relaxed text-muted-foreground" />
+                  <ClampedText
+                    text={item.description}
+                    className="mt-3 text-sm leading-relaxed text-muted-foreground"
+                  />
                 )}
               </div>
 
@@ -475,22 +561,44 @@ function InboxPageContent() {
 
             <div className="sticky bottom-0 -mx-4 border-t border-border bg-background/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
               <div className="flex items-center justify-between gap-3">
-                <button type="button" aria-label="Skip for now" onClick={goNext} disabled={current >= total - 1 || busy} className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30">
-                  <SkipForward className="size-4" />Skip for now <Kbd>S</Kbd>
+                <button
+                  type="button"
+                  aria-label="Skip for now"
+                  onClick={goNext}
+                  disabled={current >= total - 1 || busy}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                >
+                  <SkipForward className="size-4" />
+                  Skip for now <Kbd>S</Kbd>
                 </button>
                 <div className="flex items-center gap-2">
-                {stashDb?.configured && item.itemType === "video" && (
-                  <button type="button" onClick={() => setLookingUp(true)} disabled={busy}
-                    title="Look up on StashDB" className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-4 text-sm hover:bg-accent disabled:opacity-50">
-                    <DatabaseZap className="size-4" />
-                    Sync details
+                  {stashDb?.configured && item.itemType === "video" && (
+                    <button
+                      type="button"
+                      onClick={() => setLookingUp(true)}
+                      disabled={busy}
+                      title="Look up on StashDB"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-4 text-sm hover:bg-accent disabled:opacity-50"
+                    >
+                      <DatabaseZap className="size-4" />
+                      Sync details
+                    </button>
+                  )}
+                  {item.itemType === "video" && <FilenameButton item={item} />}
+                  <button
+                    type="button"
+                    aria-label="Mark done"
+                    onClick={markDone}
+                    disabled={busy}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {triageMutation.isPending ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : (
+                      <Check className="size-4" />
+                    )}
+                    Mark done <Kbd>↵</Kbd>
                   </button>
-                )}
-                {item.itemType === "video" && <FilenameButton item={item} />}
-                <button type="button" aria-label="Mark done" onClick={markDone} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-                  {triageMutation.isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}
-                  Mark done <Kbd>↵</Kbd>
-                </button>
                 </div>
               </div>
             </div>
@@ -500,9 +608,27 @@ function InboxPageContent() {
                 <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Up next</h3>
                 {(page > 1 || data?.hasMore) && (
                   <div className="flex items-center gap-1">
-                    <button type="button" aria-label="Previous queue page" title="Previous queue page" disabled={page === 1 || busy} onClick={() => changePage(page - 1)} className="flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30"><ChevronLeft className="size-4" /></button>
+                    <button
+                      type="button"
+                      aria-label="Previous queue page"
+                      title="Previous queue page"
+                      disabled={page === 1 || busy}
+                      onClick={() => changePage(page - 1)}
+                      className="flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </button>
                     <span className="text-xs tabular-nums text-muted-foreground">Page {page}</span>
-                    <button type="button" aria-label="Next queue page" title="Next queue page" disabled={!data?.hasMore || busy} onClick={() => changePage(page + 1)} className="flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30"><ChevronRight className="size-4" /></button>
+                    <button
+                      type="button"
+                      aria-label="Next queue page"
+                      title="Next queue page"
+                      disabled={!data?.hasMore || busy}
+                      onClick={() => changePage(page + 1)}
+                      className="flex size-8 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30"
+                    >
+                      <ChevronRight className="size-4" />
+                    </button>
                   </div>
                 )}
               </div>
@@ -510,11 +636,17 @@ function InboxPageContent() {
                 {items.map((entry, entryIndex) => {
                   const current = entry.id === item.id;
                   return (
-                    <button key={entry.id} type="button" ref={current ? activeThumb : undefined}
-                      onClick={() => select(entryIndex)} disabled={busy} title={entry.title}
+                    <button
+                      key={entry.id}
+                      type="button"
+                      ref={current ? activeThumb : undefined}
+                      onClick={() => select(entryIndex)}
+                      disabled={busy}
+                      title={entry.title}
                       aria-label={`Review ${entry.title}`}
                       aria-current={current ? "true" : undefined}
-                      className={`w-32 shrink-0 rounded-md p-1 transition disabled:opacity-50 ${current ? "bg-accent ring-2 ring-primary" : "opacity-70 hover:bg-muted hover:opacity-100"}`}>
+                      className={`w-32 shrink-0 rounded-md p-1 transition disabled:opacity-50 ${current ? "bg-accent ring-2 ring-primary" : "opacity-70 hover:bg-muted hover:opacity-100"}`}
+                    >
                       <InboxThumbnail key={`${entry.id}-${entry.thumbnailFile}`} item={entry} compact />
                     </button>
                   );
@@ -523,7 +655,7 @@ function InboxPageContent() {
             </aside>
           </div>
         )}
-      </div>
+      </PageBody>
       {lookingUp && item && (
         <InboxStashDbDialog
           id={item.id}

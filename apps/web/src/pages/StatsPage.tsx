@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
+import { YouTabs } from "@/components/YouTabs";
 import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { fetchAuthStatus } from "@/lib/authApi";
 import {
@@ -44,7 +45,7 @@ import { qk } from "@/lib/queryKeys";
 export function StatsPage() {
   return (
     // No shell title: the opening is the title.
-    <AppShell>
+    <AppShell actions={<YouTabs />}>
       <StatsView />
     </AppShell>
   );

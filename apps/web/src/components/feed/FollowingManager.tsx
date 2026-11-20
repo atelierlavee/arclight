@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Building2, Sparkles, UserCheck, UserPlus } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
-import { PerformerAvatar } from "@/components/PerformerAvatar";
+import { Building2, Sparkles, UserCheck, UserPlus, X } from "lucide-react";
+import { PerformerAvatar } from "../PerformerAvatar";
+import { Portal } from "../Portal";
 import {
   arrivedAgo,
   fetchFollowing,
@@ -21,10 +21,67 @@ import { useToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 /**
+ * Who you follow, managed from the feed rather than a page of its own: a
+ * panel over the right of the feed, so following someone new and seeing
+ * their posts are the same place. Escape, the backdrop or the X closes it.
+ */
+export function ManageFollowingPanel({ onClose }: { onClose: () => void }) {
+  const { data: following } = useQuery({ queryKey: qk.following.list, queryFn: fetchFollowing });
+  const count = following ? following.performers.length + following.studios.length : null;
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-50 flex justify-end">
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          className="animate-fade-in absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        />
+        <aside
+          role="dialog"
+          aria-modal="true"
+          aria-label="Following"
+          className="relative flex h-full w-full max-w-md flex-col border-l border-border bg-background shadow-2xl"
+        >
+          <header className="flex items-center gap-3 border-b border-border px-5 py-4">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold tracking-tight">Following</h2>
+              {count !== null && count > 0 && (
+                <p className="text-xs text-muted-foreground">{count} followed</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <X className="size-5" />
+            </button>
+          </header>
+          <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-5">
+            <FollowingManager />
+          </div>
+        </aside>
+      </div>
+    </Portal>
+  );
+}
+
+/**
  * Everyone and every studio this profile follows, newest arrivals first,
  * and below them who it might want to follow next.
  */
-export function FollowingPage() {
+export function FollowingManager() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [pending, setPending] = useState<string | null>(null);
@@ -68,39 +125,18 @@ export function FollowingPage() {
 
   const performers = following?.performers ?? [];
   const studios = following?.studios ?? [];
-  const totalNew =
-    performers.reduce((sum, p) => sum + p.newCount, 0) + studios.reduce((sum, s) => sum + s.newCount, 0);
   const suggestedPerformers = suggestions?.performers ?? [];
   const suggestedStudios = suggestions?.studios ?? [];
   const nothingFollowed = !isLoading && performers.length === 0 && studios.length === 0;
 
   return (
-    <AppShell
-      title="Following"
-      subtitle={
-        following && !nothingFollowed
-          ? `${performers.length + studios.length} followed${totalNew ? ` · ${totalNew} new this week` : ""}`
-          : undefined
-      }
-      actions={
-        totalNew > 0 ? (
-          <Link
-            to="/feed"
-            search={{ watched: "false" }}
-            className="rounded-md bg-secondary px-3 py-1.5 text-sm transition-colors hover:bg-accent"
-          >
-            See what's new
-          </Link>
-        ) : undefined
-      }
-    >
-      <div className="space-y-10 px-4 py-6 md:px-6 md:py-8">
+      <div className="space-y-8">
         {nothingFollowed && (
           <div className="max-w-prose space-y-1 text-sm text-muted-foreground">
             <p>You aren't following anyone yet.</p>
             <p>
               Follow a performer or a studio from their page — or from the suggestions below — and
-              their new videos show up on your home page and in the bell.
+              their new videos show up here in the feed.
             </p>
           </div>
         )}
@@ -108,7 +144,7 @@ export function FollowingPage() {
         {performers.length > 0 && (
           <section className="space-y-3">
             <h2 className="text-sm font-semibold tracking-tight">Performers</h2>
-            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="grid gap-2">
               {performers.map((performer) => (
                 <FollowedRow
                   key={performer.id}
@@ -125,7 +161,7 @@ export function FollowingPage() {
         {studios.length > 0 && (
           <section className="space-y-3">
             <h2 className="text-sm font-semibold tracking-tight">Studios</h2>
-            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="grid gap-2">
               {studios.map((studio) => (
                 <FollowedRow
                   key={studio.id}
@@ -150,7 +186,7 @@ export function FollowingPage() {
                 From what you already watch, count and favourite — never anyone else's history.
               </p>
             </div>
-            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="grid gap-2">
               {suggestedPerformers.map((performer) => (
                 <SuggestionRow
                   key={`p${performer.id}`}
@@ -183,7 +219,6 @@ export function FollowingPage() {
           </section>
         )}
       </div>
-    </AppShell>
   );
 }
 

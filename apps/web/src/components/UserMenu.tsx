@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, LogOut, UserRound } from "lucide-react";
+import { ArrowLeftRight, Lock, LogOut, Settings, UserRound } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { fetchAuthStatus, logout, type AuthStatus } from "@/lib/authApi";
 import { useToast } from "@/lib/toast";
@@ -130,6 +130,26 @@ export function UserMenu() {
           >
             <UserRound className="size-4" />
             Profile
+          </Link>
+
+          {/* Out of the sidebar: places you go now and then, not every visit. */}
+          <Link
+            to="/vault"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Lock className="size-4" />
+            Vault
+          </Link>
+          <Link
+            to="/settings"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Settings className="size-4" />
+            Settings
           </Link>
 
           {profile && (

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AlbumStack } from "@/components/AlbumStack";
 import { AppShell } from "@/components/AppShell";
+import { PageBody } from "@/components/PageBody";
 import { PageScope } from "@/lib/appearance";
 import { fetchAlbums, type AlbumSummary } from "@/lib/albumApi";
 import { qk } from "@/lib/queryKeys";
@@ -62,7 +63,7 @@ export function AlbumsPage() {
   return (
     <PageScope name="albums">
       <AppShell title="Albums" subtitle="Photo sets that came with your videos.">
-        <div className="px-4 py-6 md:px-6">
+        <PageBody>
           {isLoading ? (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -80,7 +81,7 @@ export function AlbumsPage() {
               ))}
             </div>
           )}
-        </div>
+        </PageBody>
       </AppShell>
     </PageScope>
   );

@@ -8,44 +8,31 @@ import {
   Hash,
   Inbox,
   Loader2,
-  PlayCircle,
   Sparkles,
-  UserCheck,
   type LucideIcon,
 } from "lucide-react";
-import { PerformerAvatar } from "./PerformerAvatar";
 import {
-  arrivedAgo,
-  fetchFollowingStats,
   fetchFollowingTags,
   fetchSuggestions,
   fetchUpcoming,
-  sharePercent,
   suggestionReasons,
-  type FollowingStats,
   type Upcoming,
 } from "@/lib/followingApi";
-import { formatWatchTime } from "@/lib/insights";
 import { performerPortraitUrl } from "@/lib/performerApi";
 import { qk } from "@/lib/queryKeys";
-import { playItem } from "@/lib/appEvents";
+import { useFollowToggle } from "@/lib/useFollowToggle";
+import { PerformerAvatar } from "./PerformerAvatar";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { useIsOwner } from "@/lib/profile";
-import { useFollowToggle } from "@/lib/useFollowToggle";
 import { cn } from "@/lib/utils";
-import type { MediaCardItem } from "./MediaCard";
 
 /**
- * The feed's right-hand column: what you were in the middle of, who to
- * follow next, what is waiting in the inbox, how your following looks at a
- * glance, and the tags trending among who you follow. Wide screens only; the
- * feed itself is the page.
+ * The feed's right-hand column, kept to what only the feed has: what is
+ * who to follow next, what is waiting in the inbox from who you follow, and
+ * the tags trending among them. Continue watching is Home's and the numbers are
+ * Your stats'. Wide screens only; the feed itself is the page.
  */
 export function FeedSidebar() {
-  const { data: stats } = useQuery({
-    queryKey: qk.following.stats,
-    queryFn: fetchFollowingStats,
-  });
   const { data: trending } = useQuery({
     queryKey: qk.following.tags,
     queryFn: fetchFollowingTags,
@@ -53,10 +40,8 @@ export function FeedSidebar() {
 
   return (
     <div className="space-y-4">
-      <ContinueWatching />
       <Suggested />
       <ComingUp />
-      {stats ? <AtAGlance stats={stats} /> : <CardSkeleton />}
       {trending ? (
         trending.tags.length > 0 && (
           <Card title={trending.recent ? "Trending" : "Popular with who you follow"} icon={Hash}>
@@ -85,133 +70,6 @@ export function FeedSidebar() {
       ) : (
         <CardSkeleton />
       )}
-    </div>
-  );
-}
-
-function AtAGlance({ stats }: { stats: FollowingStats }) {
-  const followed = stats.following.performers + stats.following.studios;
-  const share = sharePercent(stats.share.recentFollowed, stats.share.recentTotal);
-  const top = [
-    ...stats.top.performers.map((row) => ({
-      ...row,
-      kind: "performer" as const,
-    })),
-    ...stats.top.studios.map((row) => ({ ...row, kind: "studio" as const })),
-  ]
-    .sort((a, b) => b.seconds - a.seconds)
-    .slice(0, 3);
-  const quiet = [
-    ...stats.quiet.performers.map((row) => ({
-      ...row,
-      kind: "performer" as const,
-    })),
-    ...stats.quiet.studios.map((row) => ({ ...row, kind: "studio" as const })),
-  ].slice(0, 3);
-
-  return (
-    <Card
-      title="Your following"
-      icon={UserCheck}
-      action={
-        <Link to="/stats" className="text-xs text-muted-foreground hover:text-foreground">
-          See stats
-        </Link>
-      }
-    >
-      <dl className="grid grid-cols-2 gap-3">
-        <div className="rounded-lg bg-secondary/60 px-3 py-2.5">
-          <dt className="text-xs text-muted-foreground">Following</dt>
-          <dd className="text-2xl font-semibold tabular-nums">{followed}</dd>
-        </div>
-        <div className="rounded-lg bg-secondary/60 px-3 py-2.5">
-          <dt className="text-xs text-muted-foreground">Of your watching</dt>
-          <dd className="text-2xl font-semibold tabular-nums">{share === null ? "—" : `${share}%`}</dd>
-        </div>
-      </dl>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
-        Share of watch time, last {stats.recentDays} days
-      </p>
-
-      {top.length > 0 && (
-        <Section title="Most watched this month">
-          {top.map((row) => (
-            <PersonRow key={`${row.kind}:${row.id}`} row={row} detail={formatWatchTime(row.seconds)} />
-          ))}
-        </Section>
-      )}
-
-      {quiet.length > 0 && (
-        <Section title="Gone quiet">
-          {quiet.map((row) => (
-            <PersonRow
-              key={`${row.kind}:${row.id}`}
-              row={row}
-              detail={row.lastWatchedAt ? `watched ${arrivedAgo(row.lastWatchedAt)}` : "never watched"}
-            />
-          ))}
-        </Section>
-      )}
-    </Card>
-  );
-}
-
-type Row = {
-  id: number;
-  name: string;
-  kind: "performer" | "studio";
-  hasImage?: boolean;
-  hasBanner?: boolean;
-};
-
-function PersonRow({ row, detail }: { row: Row; detail: string }) {
-  const avatar =
-    row.kind === "performer" ? (
-      <PerformerAvatar
-        name={row.name}
-        src={performerPortraitUrl({
-          id: row.id,
-          hasImage: Boolean(row.hasImage),
-          hasBanner: Boolean(row.hasBanner),
-          representativeItemId: null,
-        })}
-        className="sensitive size-8 shrink-0 rounded-full"
-      />
-    ) : (
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-        <Building2 className="size-3.5 text-muted-foreground" />
-      </span>
-    );
-  const body = (
-    <>
-      {avatar}
-      <span className="min-w-0 flex-1">
-        <span className="sensitive block truncate text-sm font-medium">{row.name}</span>
-        <span className="block truncate text-xs text-muted-foreground">{detail}</span>
-      </span>
-    </>
-  );
-  const className = "flex items-center gap-2.5 rounded-md px-1.5 py-1.5 transition-colors hover:bg-accent";
-  return (
-    <li>
-      {row.kind === "performer" ? (
-        <Link to="/performer/$performerId" params={{ performerId: String(row.id) }} className={className}>
-          {body}
-        </Link>
-      ) : (
-        <Link to="/studio/$studioId" params={{ studioId: String(row.id) }} className={className}>
-          {body}
-        </Link>
-      )}
-    </li>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mt-4">
-      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
-      <ul className="-mx-1.5">{children}</ul>
     </div>
   );
 }
@@ -298,7 +156,7 @@ function Suggested() {
       title="Suggested for you"
       icon={Sparkles}
       action={
-        <Link to="/following" className="text-xs text-muted-foreground hover:text-foreground">
+        <Link to="/feed" search={{ manage: true }} className="text-xs text-muted-foreground hover:text-foreground">
           See all
         </Link>
       }
@@ -348,68 +206,6 @@ function Suggested() {
                 className="flex h-8 w-[72px] shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
               >
                 {pending === key ? <Loader2 className="size-3.5 animate-spin" /> : "Follow"}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
-}
-
-/** How many part-watched videos "Continue watching" lists. */
-const CONTINUE_SHOWN = 3;
-
-/**
- * Videos from who you follow that you started and didn't finish, most
- * recently watched first, each resuming where you left off.
- */
-function ContinueWatching() {
-  const { data } = useQuery({
-    queryKey: qk.mediaItems.followingContinue,
-    queryFn: async () => {
-      const res = await fetch("/api/media-items?following=true&progress=in-progress&sort=watched");
-      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-      return ((await res.json()) as { items: MediaCardItem[] }).items.slice(0, CONTINUE_SHOWN);
-    },
-  });
-  if (!data || data.length === 0) return null;
-  return (
-    <Card title="Continue watching" icon={PlayCircle}>
-      <ul className="-mx-1.5 space-y-1">
-        {data.map((item) => {
-          const progress =
-            item.durationSeconds && item.lastPositionSeconds
-              ? Math.min(1, item.lastPositionSeconds / item.durationSeconds)
-              : 0;
-          return (
-            <li key={item.id}>
-              <button
-                type="button"
-                onClick={() => playItem(item.id, { resume: true })}
-                className="flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-accent"
-              >
-                <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded bg-black">
-                  <img
-                    src={thumbnailUrl(item)}
-                    alt=""
-                    loading="lazy"
-                    className="sensitive size-full object-cover"
-                  />
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-white/25">
-                    <span className="block h-full bg-red-500" style={{ width: `${progress * 100}%` }} />
-                  </span>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="sensitive line-clamp-2 text-sm font-medium leading-snug">
-                    {item.title}
-                  </span>
-                  {item.performers && item.performers.length > 0 && (
-                    <span className="sensitive block truncate text-xs text-muted-foreground">
-                      {item.performers.map((p) => p.name).join(", ")}
-                    </span>
-                  )}
-                </span>
               </button>
             </li>
           );

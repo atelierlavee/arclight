@@ -1,7 +1,8 @@
 import { pkey } from "@/lib/profileStorage";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Clapperboard, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useOwnPasskeys } from "@/lib/profile";
 import { fetchPrivacyStatus } from "@/lib/privacyApi";
 import { PrivacyUnlockForm } from "./PrivacyUnlockForm";
@@ -67,10 +68,7 @@ export function AppOpenGate({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background px-4 md:px-6">
       <div className="w-full max-w-sm space-y-5">
-        <div className="flex items-center gap-2">
-          <Clapperboard className="size-6" />
-          <span className="text-xl font-bold tracking-tight">Arc Light</span>
-        </div>
+        <BrandLogo size="md" />
         <div className="space-y-1">
           <h1 className="text-lg font-semibold">Unlock Arc Light</h1>
           <p className="text-sm text-muted-foreground">

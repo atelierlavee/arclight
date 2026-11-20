@@ -7,6 +7,7 @@ import { EditDialog } from "@/components/EditDialog";
 import { EDIT_INPUT } from "@/lib/editForm";
 import { useIsOwner } from "@/lib/profile";
 import { AppShell } from "@/components/AppShell";
+import { PageBody } from "@/components/PageBody";
 import { PageScope } from "@/lib/appearance";
 import { StudioCard } from "@/components/StudioCard";
 import { createStudio, fetchStudios } from "@/lib/studioApi";
@@ -69,7 +70,7 @@ export function StudiosPage() {
             : undefined
         }
       >
-        <div className="space-y-8 px-4 py-6 md:px-6">
+        <PageBody className="space-y-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <AlphabetIndex
               value={letter}
@@ -159,7 +160,7 @@ export function StudiosPage() {
               </div>
             </section>
           )}
-        </div>
+        </PageBody>
         {creating && <NewNetworkDialog onClose={() => setCreating(false)} />}
       </AppShell>
     </PageScope>

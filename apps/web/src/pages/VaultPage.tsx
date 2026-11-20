@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { Eye, Fingerprint, Lock, LockOpen } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { PageBody } from "@/components/PageBody";
 import { settingsInputClass } from "@/components/SettingsSection";
 import { openDetails } from "@/lib/appEvents";
 import { hideItem, framingStyle, thumbnailUrl } from "@/lib/mediaItemApi";
@@ -305,8 +306,8 @@ export function VaultPage() {
   }, [queryClient]);
 
   return (
-    <AppShell title="Vault">
-      <div className="mx-auto w-full max-w-5xl px-4 py-6">
+    <AppShell title="Vault" subtitle="Videos kept out of every other page. Unlocks with your password or PIN.">
+      <PageBody width="wide">
         {isLoading || !data ? (
           <div className="flex justify-center py-24">
             <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
@@ -344,7 +345,7 @@ export function VaultPage() {
         ) : (
           <Unlocked count={data.count} />
         )}
-      </div>
+      </PageBody>
     </AppShell>
   );
 }

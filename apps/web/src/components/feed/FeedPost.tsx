@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Building2, CheckCircle2, Clock, Heart, MoreHorizontal, Play, Star } from "lucide-react";
+import { Building2, CheckCircle2, Clock, Heart, MoreHorizontal, Play } from "lucide-react";
 import { PerformerAvatar } from "../PerformerAvatar";
+import { PreviewClip } from "../PreviewClip";
 import { useCardShortcuts } from "@/lib/cardShortcuts";
 import { joinNames } from "@/lib/feed";
 import type { FeedItem } from "@/lib/followingApi";
-import { setItemNote, setWatchLater, thumbnailUrl, updateItem } from "@/lib/mediaItemApi";
+import { setItemNote, setWatchLater, thumbnailUrl } from "@/lib/mediaItemApi";
 import { performerPortraitUrl } from "@/lib/performerApi";
 import { qk } from "@/lib/queryKeys";
 import { useToast } from "@/lib/toast";
@@ -67,7 +68,6 @@ export function FeedPost({
   const [favourite, setFavourite] = useOptimistic(Boolean(item.isFavorite));
   const [later, setLater] = useOptimistic(item.watchLaterAt != null);
   const [seen, setSeen] = useOptimistic(Boolean(item.watched));
-  const [rating, setRating] = useOptimistic(item.rating ?? null);
 
   // How much of the video is on screen, for the feed to pick the one to play.
   const article = useRef<HTMLElement>(null);
@@ -145,24 +145,6 @@ export function FeedPost({
       setLater(!next);
       toast({
         title: "That didn't work",
-        description: error instanceof Error ? error.message : undefined,
-        variant: "error",
-      });
-    }
-  }
-
-  async function rate(stars: number) {
-    // The star already set clears it, as everywhere else stars are given.
-    const next = rating === stars ? null : stars;
-    const was = rating;
-    setRating(next);
-    try {
-      await updateItem(item.id, { rating: next });
-      void queryClient.invalidateQueries({ queryKey: qk.mediaItems.all });
-    } catch (error) {
-      setRating(was);
-      toast({
-        title: "Couldn't save the rating",
         description: error instanceof Error ? error.message : undefined,
         variant: "error",
       });
@@ -320,7 +302,6 @@ export function FeedPost({
         >
           <CheckCircle2 className={cn("size-6", seen && "text-emerald-400")} />
         </ActionButton>
-        <Stars rating={rating} onRate={(stars) => void rate(stars)} />
       </div>
 
       {/* Caption */}
@@ -363,34 +344,6 @@ function ActionButton({
     >
       {children}
     </button>
-  );
-}
-
-/** Five stars at the end of the action bar; hovering shows what a click would set. */
-function Stars({ rating, onRate }: { rating: number | null; onRate: (stars: number) => void }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const shown = hover ?? rating ?? 0;
-  return (
-    <div className="ml-auto mr-1.5 flex items-center" onMouseLeave={() => setHover(null)}>
-      {[1, 2, 3, 4, 5].map((stars) => (
-        <button
-          key={stars}
-          type="button"
-          onClick={() => onRate(stars)}
-          onMouseEnter={() => setHover(stars)}
-          aria-label={rating === stars ? "Clear rating" : `Rate ${stars} star${stars === 1 ? "" : "s"}`}
-          title={rating === stars ? "Clear rating" : `${stars} star${stars === 1 ? "" : "s"}`}
-          className="p-0.5 transition-transform active:scale-90"
-        >
-          <Star
-            className={cn(
-              "size-5 transition-colors",
-              stars <= shown ? "fill-amber-400 text-amber-400" : "text-muted-foreground/60",
-            )}
-          />
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -484,28 +437,6 @@ function Note({ itemId, note }: { itemId: number; note: string | null }) {
     >
       Add a note…
     </button>
-  );
-}
-
-/**
- * The preview clip over the poster: muted, looping, and faded in only once
- * it is actually playing, so the still never blinks to black while it loads.
- */
-function PreviewClip({ itemId }: { itemId: number }) {
-  const [ready, setReady] = useState(false);
-  return (
-    <video
-      src={`/api/media-items/${itemId}/preview`}
-      muted
-      loop
-      autoPlay
-      playsInline
-      onPlaying={() => setReady(true)}
-      className={cn(
-        "sensitive absolute inset-0 size-full object-cover transition-opacity duration-300",
-        ready ? "opacity-100" : "opacity-0",
-      )}
-    />
   );
 }
 

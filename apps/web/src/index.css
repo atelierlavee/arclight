@@ -633,3 +633,55 @@ video.custom-seek::-webkit-media-controls-timeline {
 .animate-heart-burst {
   animation: heart-burst 0.9s ease-out forwards;
 }
+
+/* The home page's tag strip: the list is rendered twice, so sliding by half
+   its width lands exactly where it started and the loop has no seam. */
+/* Film grain over the home page's opening shot: fractal noise, barely
+   there, shifting a few times a second like a projected print. */
+.film-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.09;
+  mix-blend-mode: overlay;
+  animation: grain 0.8s steps(4) infinite;
+}
+@keyframes grain {
+  0% { background-position: 0 0; }
+  25% { background-position: -40px 20px; }
+  50% { background-position: 30px -30px; }
+  75% { background-position: -20px -40px; }
+  100% { background-position: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-grain { animation: none; }
+}
+
+/* The home page's opening shot: a slow push-in on the still, once. */
+@keyframes ken-burns {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); }
+}
+.animate-ken-burns {
+  animation: ken-burns 30s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-ken-burns { animation: none; }
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee var(--marquee-duration, 60s) linear infinite;
+}
+.animate-marquee-reverse {
+  animation: marquee var(--marquee-duration, 60s) linear infinite reverse;
+}
+.animate-marquee:hover,
+.animate-marquee-reverse:hover {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-marquee-reverse { animation: none; }
+}

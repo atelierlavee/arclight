@@ -176,3 +176,18 @@ export function readRecentlyInteracted(): RecentEntry[] {
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, MAX_PER_KIND);
 }
+
+export type ActivityEntry = RecentEntry & { kind: RecentKind };
+
+/**
+ * Every kind's history as one timeline, newest first, for Your activity.
+ *
+ * Unlike the merged row above, an item you opened and then favourited shows
+ * twice: this answers "what did I do", and those were two things.
+ */
+export function readActivity(): ActivityEntry[] {
+  const kinds: RecentKind[] = ["browsed", "played", "edited", "favourited"];
+  return kinds
+    .flatMap((kind) => readRecent(kind).map((entry) => ({ ...entry, kind })))
+    .sort((a, b) => b.at.localeCompare(a.at));
+}

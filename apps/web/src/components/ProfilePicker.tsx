@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Clapperboard, Delete, Loader2, Lock, Settings2 } from "lucide-react";
+import { ArrowLeft, Delete, Loader2, Lock, Settings2 } from "lucide-react";
 import {
   DEFAULT_PROFILE_COLOR,
   MAX_PIN_LENGTH,
@@ -81,9 +82,8 @@ export function ProfilePicker() {
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-10 md:px-6">
-      <div className="mb-10 flex items-center gap-2">
-        <Clapperboard className="size-6" />
-        <span className="text-xl font-bold tracking-tight">Arc Light</span>
+      <div className="mb-10">
+        <BrandLogo size="lg" className="items-center" />
       </div>
 
       {pinFor ? (

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Pencil, Tag } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { PageBody } from "@/components/PageBody";
 import { EditDialog, SaveButton } from "@/components/EditDialog";
 import { EDIT_INPUT } from "@/lib/editForm";
 import { descendantIds, fetchTags, saveTag, type TagRow } from "@/lib/tagApi";
@@ -45,7 +46,7 @@ export function TagsPage() {
       title="Tags"
       subtitle={tags.length > 0 ? `${tags.length} ${tags.length === 1 ? "tag" : "tags"}` : undefined}
     >
-      <div className="max-w-3xl px-4 py-6 md:px-6">
+      <PageBody width="reading">
         {!isLoading && tags.length === 0 && (
           <p className="text-sm text-muted-foreground">
             No tags yet. Add them to a video from its details.
@@ -56,7 +57,7 @@ export function TagsPage() {
             <TagNode key={tag.id} tag={tag} all={tags} depth={0} path={new Set()} onEdit={setEditing} />
           ))}
         </ul>
-      </div>
+      </PageBody>
       {editing && <TagEditDialog tag={editing} all={tags} onClose={() => setEditing(null)} />}
     </AppShell>
   );

@@ -29,11 +29,8 @@ import {
  */
 export const HOME_ROWS = [
   { key: "categories", label: "Categories" },
-  { key: "funStat", label: "Fun stat of the day" },
   { key: "streak", label: "Watch streak" },
   { key: "dailyPick", label: "Daily pick" },
-  { key: "onThisDay", label: "On this day" },
-  { key: "forgottenGems", label: "Forgotten gems" },
   { key: "tasteTwins", label: "You might like" },
   { key: "continue", label: "Continue watching" },
   { key: "watchLater", label: "Watch later" },
@@ -45,8 +42,6 @@ export const HOME_ROWS = [
   { key: "recentlyWatched", label: "Recently watched" },
   { key: "mostPlayed", label: "Most played" },
   { key: "unwatched", label: "Unwatched" },
-  { key: "recentlyBrowsed", label: "Recently browsed" },
-  { key: "recentlyInteracted", label: "Recently interacted" },
   { key: "randomPicks", label: "Random picks" },
   { key: "pinned", label: "Pinned" },
   { key: "collections", label: "Collections" },
@@ -58,12 +53,41 @@ export type HomeRowKey = (typeof HOME_ROWS)[number]["key"];
 /** An ordered list; anything missing from it is hidden. */
 export type HomeRowSetting = { key: HomeRowKey; visible: boolean };
 
-const HIDDEN_BY_DEFAULT = new Set<HomeRowKey>(["streak"]);
+/**
+ * What a fresh home shows: something to watch now, what's new, and a little
+ * to wander into. Every other row is one switch away in Customize home.
+ *
+ * It used to be every row but the streak — twenty-two of them, two of which
+ * draw a row per tag and per collection — which made the home page a wall
+ * to scroll past rather than a place to start.
+ */
+const VISIBLE_BY_DEFAULT = new Set<HomeRowKey>(["dailyPick", "continue", "following", "recent"]);
 
 const DEFAULT_HOME_ROWS: HomeRowSetting[] = HOME_ROWS.map((row) => ({
   key: row.key,
-  visible: !HIDDEN_BY_DEFAULT.has(row.key),
+  visible: VISIBLE_BY_DEFAULT.has(row.key),
 }));
+
+/**
+ * A stored order that is just the old default saved back — every row on
+ * (the streak aside) in the built-in order. Saving appearance writes the
+ * whole home list along with whatever was actually changed, so this is what
+ * a profile that never touched Customize home has, and it gets the new
+ * default rather than keeping the wall.
+ */
+function isUntouchedLegacyOrder(value: unknown[]): boolean {
+  const order = HOME_ROWS.map((row) => row.key as string);
+  let last = -1;
+  for (const entry of value) {
+    const { key, visible } = (entry ?? {}) as Partial<HomeRowSetting>;
+    const at = typeof key === "string" ? order.indexOf(key) : -1;
+    if (at < 0) continue;
+    if (at < last) return false;
+    last = at;
+    if (visible === false && key !== "streak") return false;
+  }
+  return true;
+}
 
 /**
  * Reconciles a stored order against the rows this build actually has.
@@ -84,7 +108,7 @@ const DEFAULT_HOME_ROWS: HomeRowSetting[] = HOME_ROWS.map((row) => ({
  * move to where they were designed to sit.
  */
 export function readHomeRows(value: unknown): HomeRowSetting[] {
-  if (!Array.isArray(value)) return DEFAULT_HOME_ROWS;
+  if (!Array.isArray(value) || isUntouchedLegacyOrder(value)) return DEFAULT_HOME_ROWS;
 
   const known = new Set<string>(HOME_ROWS.map((row) => row.key));
   const seen = new Set<string>();
@@ -471,6 +495,13 @@ export const APPEARANCE_SHORTCUT = "Ctrl/⌘ + Shift + ,";
 
 /** Opens search from anywhere. The convention every app with a palette uses. */
 export const SEARCH_SHORTCUT = "Ctrl/⌘ + K";
+
+/**
+ * Shrinks the sidebar to icons, or opens it again. The only way to: the
+ * button it used to have was taking a row of the sidebar for something done
+ * rarely. Backslash, because no browser claims it with Ctrl or ⌘.
+ */
+export const SIDEBAR_SHORTCUT = "Ctrl/⌘ + \\";
 
 // localStorage throws outright in some privacy configurations, and an
 // unguarded read here would white-screen the whole app — the same discipline

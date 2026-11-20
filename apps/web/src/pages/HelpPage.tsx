@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/AppShell";
-import { APPEARANCE_SHORTCUT, DISCREET_SHORTCUT, SEARCH_SHORTCUT } from "@/lib/appearance";
+import { PageBody } from "@/components/PageBody";
+import { APPEARANCE_SHORTCUT, DISCREET_SHORTCUT, SEARCH_SHORTCUT, SIDEBAR_SHORTCUT } from "@/lib/appearance";
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
@@ -51,7 +52,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 export function HelpPage() {
   return (
     <AppShell title="Keyboard shortcuts" subtitle="Everything the keyboard does in this app.">
-      <div className="max-w-2xl space-y-8 px-4 py-6 md:px-6">
+      <PageBody width="reading" className="space-y-8">
         <Group title="Anywhere">
           <Row keys={[DISCREET_SHORTCUT]}>
             Discreet mode on or off — blurs every image immediately. Turning it on is instant;
@@ -64,6 +65,9 @@ export function HelpPage() {
           <Row keys={[APPEARANCE_SHORTCUT]}>
             Open the appearance panel — tile size, labels, banner height and discreet settings.
             Press it again to close.
+          </Row>
+          <Row keys={[SIDEBAR_SHORTCUT]}>
+            Shrink the sidebar to icons, or open it out again. Remembered for next time.
           </Row>
           <Row keys={["Esc"]}>
             Close whatever is open — the appearance panel, a video, the photo viewer, a menu.
@@ -179,7 +183,7 @@ export function HelpPage() {
           work regardless — the moment you need discreet mode isn't the moment to discover the
           cursor was in the search box.
         </p>
-      </div>
+      </PageBody>
     </AppShell>
   );
 }

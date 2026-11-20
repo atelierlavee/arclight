@@ -2,26 +2,20 @@ import { pkey } from "@/lib/profileStorage";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
-import { HeroBanner } from "@/components/HeroBanner";
+import { EditorialHome } from "@/components/home/EditorialHome";
+import { CastScene, LibraryScene, StudiosScene } from "@/components/home/LibraryScenes";
 import type { MediaCardItem } from "@/components/MediaCard";
 import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { ClearContinueWatching } from "@/components/ClearContinueWatching";
-import { KindTiles } from "@/components/KindTiles";
 import { ROW_TILE_LIMIT } from "@/lib/rowLimits";
 import { MediaRow } from "@/components/MediaRow";
-import { PerformerRow } from "@/components/PerformerRow";
-import { useAppearance, PageScope } from "@/lib/appearance";
-import { StudioRow } from "@/components/StudioRow";
-import { RecentRow } from "@/components/RecentRow";
+import { useAppearance, PageScope, type HomeRowKey } from "@/lib/appearance";
 import { PinnedRow } from "@/components/PinnedRow";
 import { StreakWidget } from "@/components/StreakWidget";
 import { TasteTwinRow } from "@/components/TasteTwinRow";
-import { DailyPickCard } from "@/components/DailyPickCard";
-import { OnThisDayCard } from "@/components/OnThisDayCard";
-import { HomeThumbnailCollage } from "@/components/HomeThumbnailCollage";
 import { qk } from "@/lib/queryKeys";
 
-type Tag = { id: number; name: string };
+type Tag = { id: number; name: string; itemCount?: number };
 type Collection = { id: number; name: string; type: "manual" | "smart" };
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -40,6 +34,13 @@ function withoutFolders(items: MediaCardItem[]): MediaCardItem[] {
 }
 
 function noopOpenFolder() {}
+
+/**
+ * Rows the magazine-style top of the page lays out itself. Their switches in
+ * Settings → Homepage still decide whether each part appears; the top just
+ * arranges them instead of stacking them as rows.
+ */
+const EDITORIAL_ROWS = new Set<HomeRowKey>(["dailyPick", "continue", "following", "recent"]);
 
 function TagRow({
   tag,
@@ -160,15 +161,7 @@ export function HomePage() {
     queryKey: qk.continueWatching,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/continue-watching"),
   });
-  const { data: funStat } = useQuery({
-    queryKey: qk.funStat,
-    queryFn: () => fetchJson<{ stat: string | null }>("/api/fun-stat"),
-  });
-  const { data: forgottenGems, isLoading: forgottenGemsLoading } = useQuery({
-    queryKey: qk.forgottenGems,
-    queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/forgotten-gems"),
-  });
-  const [dailyPickSeed, setDailyPickSeed] = useState<number | null>(() => {
+  const [dailyPickSeed] = useState<number | null>(() => {
     try {
       const stored = sessionStorage.getItem(pkey("dailyPickSeed"));
       return stored ? Number(stored) : null;
@@ -180,10 +173,6 @@ export function HomePage() {
       fetchJson<{ item: MediaCardItem | null }>(
         dailyPickSeed != null ? `/api/daily-pick?seed=${dailyPickSeed}` : "/api/daily-pick",
       ),
-  });
-  const { data: onThisDay } = useQuery({
-    queryKey: qk.onThisDay,
-    queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/on-this-day"),
   });
   const { data: tagsData } = useQuery({
     queryKey: qk.tags,
@@ -199,6 +188,7 @@ export function HomePage() {
   const heroItems = heroData?.items ?? [];
 
   const { homeRows } = useAppearance();
+  const shown = new Set(homeRows.filter((row) => row.visible).map((row) => row.key));
 
   function openItem(id: number, autoPlay: boolean) {
     setOpen({ id, autoPlay });
@@ -207,83 +197,32 @@ export function HomePage() {
   return (
     <PageScope name="home">
       <AppShell>
-        {heroItems.length > 0 && (
-          <HeroBanner
-            items={heroItems}
-            onPlay={(id) => openItem(id, true)}
-            onMoreInfo={(id) => openItem(id, false)}
+        <div className="stagger space-y-6 px-4 pb-6 pt-[72px] md:space-y-9 md:px-6 md:pb-8 md:pt-[80px]">
+          <EditorialHome
+            featured={withoutFolders(heroItems)}
+            continueWatching={shown.has("continue") ? (continueWatching?.items ?? []) : []}
+            newForYou={shown.has("following") ? withoutFolders(followingNew?.items ?? []) : []}
+            justAdded={shown.has("recent") ? recentItems : []}
+            dailyPick={shown.has("dailyPick") ? (dailyPick?.item ?? null) : null}
+            tags={tagsData?.tags ?? []}
+            loading={recentLoading || continueLoading || followingLoading}
+            onOpen={openItem}
+            resumeAction={<ClearContinueWatching />}
           />
-        )}
-
-        <div className="stagger space-y-6 px-4 py-6 md:space-y-9 md:px-6 md:py-8">
           {/* Rendered from the saved order rather than written out in sequence,
               so hiding or moving a section is a data change rather than an edit
               here. Each case returns null when it has nothing, exactly as it did
               before — an empty row was never shown. */}
           {homeRows
-            .filter((row) => row.visible)
+            .filter((row) => row.visible && !EDITORIAL_ROWS.has(row.key))
             .map(({ key }) => {
               switch (key) {
-                case "funStat":
-                  if (!funStat?.stat) return null;
-                  return (
-                    <p key={key} className="text-sm text-muted-foreground">{funStat.stat}</p>
-                  );
                 case "streak":
                   return <StreakWidget key={key} />;
-                case "dailyPick":
-                  if (!dailyPick?.item) return null;
-                  return (
-                    <DailyPickCard
-                      key={key}
-                      item={dailyPick.item}
-                      onPlay={() => openItem(dailyPick.item!.id, true)}
-                      onSelect={() => openItem(dailyPick.item!.id, false)}
-                      onRefresh={() => {
-                        const seed = Math.floor(Math.random() * 1_000_000);
-                        setDailyPickSeed(seed);
-                        try { sessionStorage.setItem(pkey("dailyPickSeed"), String(seed)); } catch {}
-                      }}
-                    />
-                  );
-                case "onThisDay":
-                  return (
-                    <OnThisDayCard
-                      key={key}
-                      items={onThisDay?.items ?? []}
-                      onPlay={(id) => openItem(id, true)}
-                      onSelect={(id) => openItem(id, false)}
-                    />
-                  );
-                case "forgottenGems":
-                  return (
-                    <MediaRow
-                      key={key}
-                      title="Forgotten Gems"
-                      items={withoutFolders(forgottenGems?.items ?? []).slice(0, ROW_TILE_LIMIT)}
-                      loading={forgottenGemsLoading}
-                      onSelectItem={(id) => openItem(id, false)}
-                      onPlayItem={(id) => openItem(id, true)}
-                      onOpenFolder={noopOpenFolder}
-                    />
-                  );
                 case "tasteTwins":
                   return <TasteTwinRow key={key} />;
                 case "categories":
-                  return <KindTiles key={key} />;
-                case "continue":
-                  return (
-                    <MediaRow
-                      key={key}
-                      title="Continue Watching"
-                      action={<ClearContinueWatching />}
-                      items={(continueWatching?.items ?? []).slice(0, ROW_TILE_LIMIT)}
-                      loading={continueLoading}
-                      onSelectItem={(id) => openItem(id, false)}
-                      onPlayItem={(id) => openItem(id, true)}
-                      onOpenFolder={noopOpenFolder}
-                    />
-                  );
+                  return <LibraryScene key={key} />;
                 case "watchLater":
                   return (
                     <MediaRow
@@ -292,19 +231,6 @@ export function HomePage() {
                       seeMore={{ to: "/browse", search: { watchLater: "true", sort: "watchLater" } }}
                       items={withoutFolders(watchLater?.items ?? []).slice(0, ROW_TILE_LIMIT)}
                       loading={watchLaterLoading}
-                      onSelectItem={(id) => openItem(id, false)}
-                      onPlayItem={(id) => openItem(id, true)}
-                      onOpenFolder={noopOpenFolder}
-                    />
-                  );
-                case "following":
-                  return (
-                    <MediaRow
-                      key={key}
-                      title="New from who you follow"
-                      seeMore={{ to: "/browse", search: { following: "true", watched: "false" } }}
-                      items={withoutFolders(followingNew?.items ?? []).slice(0, ROW_TILE_LIMIT)}
-                      loading={followingLoading}
                       onSelectItem={(id) => openItem(id, false)}
                       onPlayItem={(id) => openItem(id, true)}
                       onOpenFolder={noopOpenFolder}
@@ -323,22 +249,9 @@ export function HomePage() {
                     />
                   );
                 case "performers":
-                  return <PerformerRow key={key} />;
+                  return <CastScene key={key} onOpen={openItem} />;
                 case "studios":
-                  return <StudioRow key={key} />;
-                case "recent":
-                  return (
-                    <MediaRow
-                      key={key}
-                      title="Recently Added"
-                      seeMore={{ to: "/browse" }}
-                      items={recentItems.slice(0, ROW_TILE_LIMIT)}
-                      loading={recentLoading}
-                      onSelectItem={(id) => openItem(id, false)}
-                      onPlayItem={(id) => openItem(id, true)}
-                      onOpenFolder={noopOpenFolder}
-                    />
-                  );
+                  return <StudiosScene key={key} />;
                 case "recentlyWatched":
                   return (
                     <MediaRow
@@ -350,22 +263,6 @@ export function HomePage() {
                         ROW_TILE_LIMIT,
                       )}
                       loading={recentlyWatchedLoading}
-                      onSelectItem={(id) => openItem(id, false)}
-                      onPlayItem={(id) => openItem(id, true)}
-                      onOpenFolder={noopOpenFolder}
-                    />
-                  );
-                case "mostPlayed":
-                  return (
-                    <MediaRow
-                      key={key}
-                      title="Most Played"
-                      seeMore={{ to: "/browse", search: { sort: "played" } }}
-                      items={withoutFolders(mostPlayed?.items ?? []).slice(
-                        0,
-                        ROW_TILE_LIMIT,
-                      )}
-                      loading={mostPlayedLoading}
                       onSelectItem={(id) => openItem(id, false)}
                       onPlayItem={(id) => openItem(id, true)}
                       onOpenFolder={noopOpenFolder}
@@ -387,24 +284,16 @@ export function HomePage() {
                       onOpenFolder={noopOpenFolder}
                     />
                   );
-                case "recentlyBrowsed":
+                case "mostPlayed":
                   return (
-                    <RecentRow
+                    <MediaRow
                       key={key}
-                      title="Recently Browsed"
-                      kind="browsed"
+                      title="Most Played"
+                      items={withoutFolders(mostPlayed?.items ?? []).slice(0, ROW_TILE_LIMIT)}
+                      loading={mostPlayedLoading}
                       onSelectItem={(id) => openItem(id, false)}
                       onPlayItem={(id) => openItem(id, true)}
-                    />
-                  );
-                case "recentlyInteracted":
-                  return (
-                    <RecentRow
-                      key={key}
-                      title="Recently Interacted"
-                      kind="interacted"
-                      onSelectItem={(id) => openItem(id, false)}
-                      onPlayItem={(id) => openItem(id, true)}
+                      onOpenFolder={noopOpenFolder}
                     />
                   );
                 case "randomPicks":
@@ -412,10 +301,7 @@ export function HomePage() {
                     <MediaRow
                       key={key}
                       title="Random Picks"
-                      items={withoutFolders(randomPicks?.items ?? []).slice(
-                        0,
-                        ROW_TILE_LIMIT,
-                      )}
+                      items={withoutFolders(randomPicks?.items ?? []).slice(0, ROW_TILE_LIMIT)}
                       loading={randomLoading}
                       onSelectItem={(id) => openItem(id, false)}
                       onPlayItem={(id) => openItem(id, true)}
@@ -445,8 +331,6 @@ export function HomePage() {
               }
             })}
         </div>
-
-        <HomeThumbnailCollage />
 
         {open && (
           <MediaDetailModal itemId={open.id} autoPlay={open.autoPlay} onClose={() => setOpen(null)} />

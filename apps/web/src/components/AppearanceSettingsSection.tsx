@@ -1,6 +1,6 @@
-import { HOME_ROWS, useAppearance } from "@/lib/appearance";
+import { HOME_ROWS, readHomeRows, useAppearance } from "@/lib/appearance";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, EyeOff, RotateCcw } from "lucide-react";
 import { SettingsSection } from "./SettingsSection";
 
 /**
@@ -34,7 +34,7 @@ export function AppearanceSettingsSection() {
   return (
     <SettingsSection
       title="Homepage layout"
-      description="Which sections the homepage shows, and in what order. Everything else about how the app looks is in the appearance menu, next to your account in the header."
+      description="Which sections the homepage shows, and in what order. Changes save as you make them."
     >
       <div className="space-y-5">
         <div className="space-y-1.5">
@@ -82,9 +82,20 @@ export function AppearanceSettingsSection() {
               </li>
             ))}
           </ul>
-          <span className="block text-[11px] leading-snug text-muted-foreground/70">
-            Collections and Tags cover every row of that kind.
-          </span>
+          <div className="flex items-center justify-between gap-3">
+            <span className="block text-[11px] leading-snug text-muted-foreground/70">
+              Collections and Tags cover every row of that kind.
+            </span>
+            {/* Back to the short default home, without touching anything else. */}
+            <button
+              type="button"
+              onClick={() => set({ homeRows: readHomeRows(undefined) })}
+              className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <RotateCcw className="size-3" />
+              Reset to default
+            </button>
+          </div>
         </div>
       </div>
     </SettingsSection>

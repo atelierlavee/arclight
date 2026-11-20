@@ -70,7 +70,7 @@ export function NotificationCenter() {
             label: `${following.newCount} new video${following.newCount === 1 ? "" : "s"} from who you follow`,
             icon: UserCheck,
             href: "/feed" as const,
-            search: { watched: "false" },
+            search: {},
             tone: "text-sky-400",
           },
         ]

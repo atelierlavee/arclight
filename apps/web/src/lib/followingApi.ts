@@ -67,9 +67,8 @@ export type FeedItem = MediaCardItem & {
 
 export type FeedPage = { items: FeedItem[]; page: number; hasMore: boolean };
 
-/** What the feed shows: all of it or the unwatched, from everyone or one performer or studio. */
+/** What the feed shows: from everyone or one performer or studio, in which order. */
 export type FeedFilter = {
-  unwatchedOnly: boolean;
   /** "added" is newest arrival first; the default is newest release first. */
   order: "released" | "added";
   performerId?: number;
@@ -78,7 +77,6 @@ export type FeedFilter = {
 
 export async function fetchFeed(page: number, filter: FeedFilter): Promise<FeedPage> {
   const params = new URLSearchParams({ page: String(page) });
-  if (filter.unwatchedOnly) params.set("unwatched", "true");
   if (filter.order === "added") params.set("order", "added");
   if (filter.performerId !== undefined) params.set("performer", String(filter.performerId));
   if (filter.studioId !== undefined) params.set("studio", String(filter.studioId));

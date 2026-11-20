@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { PageBody } from "@/components/PageBody";
+import { YouTabs } from "@/components/YouTabs";
 import { PerformerAvatar } from "@/components/PerformerAvatar";
 import { performerPortraitUrl } from "@/lib/performerApi";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
@@ -57,8 +59,12 @@ async function saveBoard(kind: TierKind, board: TierBoard): Promise<void> {
 export function TiersPage() {
   const [kind, setKind] = useState<TierKind>("performer");
   return (
-    <AppShell title="Tier list" subtitle="Your own ranking. Drag, or tap a tile then tap a row.">
-      <div className="space-y-4 px-4 py-6 md:px-6 md:py-8">
+    <AppShell
+      title="Tier list"
+      subtitle="Your own ranking. Drag, or tap a tile then tap a row."
+      actions={<YouTabs />}
+    >
+      <PageBody className="space-y-4">
         <div role="tablist" className="flex w-fit rounded-md bg-secondary p-0.5 text-sm">
           {(["performer", "video"] as const).map((option) => (
             <button
@@ -78,7 +84,7 @@ export function TiersPage() {
         </div>
         {/* Keyed so switching tabs starts from that board's saved state. */}
         <TierBoardView key={kind} kind={kind} />
-      </div>
+      </PageBody>
     </AppShell>
   );
 }

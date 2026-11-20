@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
+  Settings,
   Bookmark,
-  Clapperboard,
   FolderOpen,
   Home,
   Inbox,
@@ -12,23 +12,19 @@ import {
   Images,
   Layers,
   CheckCircle2,
+  ChevronDown,
   TriangleAlert,
   Pin,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
-  Settings,
   Tv,
   Tag,
   Trash2,
   Users,
   X,
-  UserCheck,
-  BookOpen,
-  ListOrdered,
   Rss,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandLogo, BrandMark } from "./BrandLogo";
 import { CreateCollectionModal } from "./CreateCollectionModal";
 import {
   isPinned,
@@ -65,6 +61,24 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
+/** The ways into the library besides Browse, folded under it in the sidebar. */
+const LIBRARY_LINKS = [
+  { to: "/albums", label: "Albums", icon: Images },
+  { to: "/series", label: "Series", icon: Tv },
+  { to: "/tags", label: "Tags", icon: Tag },
+] as const;
+
+/** Per device, like the sidebar's own collapsed state. */
+const LIBRARY_OPEN_KEY = "sidebar-library-open";
+
+function readLibraryOpen(): boolean {
+  try {
+    return localStorage.getItem(LIBRARY_OPEN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="px-3 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
@@ -94,7 +108,9 @@ function InboxLink({
   return (
     <Link
       to="/inbox"
-      className={navItemClass}
+      // Relative, so the count badge pins to this row — collapsed, it is
+      // positioned absolutely and otherwise flew to the top of the sidebar.
+      className={cn(navItemClass, "relative")}
       title={collapsed ? "Inbox" : undefined}
       activeProps={{ className: "bg-accent text-foreground font-medium" }}
     >
@@ -114,13 +130,11 @@ function InboxLink({
 
 export function Sidebar({
   collapsed,
-  onToggle,
   mobile = false,
   mobileOpen = false,
   onMobileClose,
 }: {
   collapsed: boolean;
-  onToggle: () => void;
   /** Phone width: the sidebar is an off-canvas drawer, not a column. */
   mobile?: boolean;
   mobileOpen?: boolean;
@@ -130,6 +144,21 @@ export function Sidebar({
   const [pins, setPins] = useState<PinnedItem[]>(readPins);
   const [saved, setSaved] = useState(readSavedSearches);
   const [dropTarget, setDropTarget] = useState<number | null>(null);
+  const [libraryOpen, setLibraryOpenState] = useState(readLibraryOpen);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const onLibrarySubpage = ["/albums", "/album/", "/series", "/tags"].some((prefix) =>
+    pathname.startsWith(prefix),
+  );
+  const libraryShown = libraryOpen || onLibrarySubpage;
+  const onYouPage = ["/stats", "/diary", "/tiers"].includes(pathname);
+  function setLibraryOpen(open: boolean) {
+    setLibraryOpenState(open);
+    try {
+      localStorage.setItem(LIBRARY_OPEN_KEY, String(open));
+    } catch {
+      // Private mode: it just won't be remembered.
+    }
+  }
   const runUndoable = useUndoable();
   const queryClient = useQueryClient();
 
@@ -238,27 +267,17 @@ export function Sidebar({
             ),
       )}
     >
+      {/* The logo heads the sidebar; the phone drawer adds its close button. */}
       <div
         className={cn(
-          "flex py-5",
-          collapsed ? "flex-col items-center gap-3" : "items-center gap-2 px-5",
+          "flex h-[72px] shrink-0 items-center",
+          collapsed ? "justify-center" : "justify-between px-5",
         )}
       >
-        <div
-          className={cn(
-            "flex min-w-0 items-center gap-2",
-            !collapsed && "flex-1",
-          )}
-        >
-          <Clapperboard className="size-5 shrink-0" />
-          {!collapsed && (
-            <span className="truncate text-base font-bold tracking-tight">
-              Arc Light
-            </span>
-          )}
-        </div>
-        {mobile ? (
-          // Collapsing to an icon rail makes no sense in a drawer you dismiss.
+        <Link to="/" aria-label="Home">
+          {collapsed ? <BrandMark /> : <BrandLogo size="sm" tagline={false} />}
+        </Link>
+        {mobile && (
           <button
             type="button"
             onClick={onMobileClose}
@@ -268,26 +287,11 @@ export function Sidebar({
           >
             <X className="size-5" />
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="size-4" />
-            ) : (
-              <PanelLeftClose className="size-4" />
-            )}
-          </button>
         )}
       </div>
 
       <nav
-        className="flex-1 overflow-y-auto overscroll-contain px-2 pb-4"
+        className="flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2"
         // Following a link should dismiss the drawer, including a link back to
         // the page you are already on, which no route change would catch.
         onClick={
@@ -309,14 +313,57 @@ export function Sidebar({
           {!collapsed && "Home"}
         </Link>
         <Link
-          to="/browse"
+          to="/feed"
           className={navItemClass}
-          title={collapsed ? "Browse" : undefined}
+          title={collapsed ? "Feed" : undefined}
           activeProps={{ className: "bg-accent text-foreground font-medium" }}
         >
-          <FolderOpen className="size-4 shrink-0" />
-          {!collapsed && "Browse"}
+          <Rss className="size-4 shrink-0" />
+          {!collapsed && "Feed"}
         </Link>
+
+        {/* Library is Browse, with the other ways into the same files —
+            albums, series, tags — folded under it instead of each taking a
+            row of their own. Open while you are on one of them. */}
+        <div className="flex items-center">
+          <Link
+            to="/browse"
+            className={cn(navItemClass, "min-w-0 flex-1")}
+            title={collapsed ? "Library" : undefined}
+            activeProps={{ className: "bg-accent text-foreground font-medium" }}
+          >
+            <FolderOpen className="size-4 shrink-0" />
+            {!collapsed && "Library"}
+          </Link>
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={() => setLibraryOpen(!libraryShown)}
+              aria-expanded={libraryShown}
+              aria-label={libraryShown ? "Hide albums, series and tags" : "Show albums, series and tags"}
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ChevronDown className={cn("size-3.5 transition-transform", !libraryShown && "-rotate-90")} />
+            </button>
+          )}
+        </div>
+        {libraryShown && (
+          <div className={cn(!collapsed && "ml-4 border-l border-border pl-1.5")}>
+            {LIBRARY_LINKS.map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className={navItemClass}
+                title={collapsed ? label : undefined}
+                activeProps={{ className: "bg-accent text-foreground font-medium" }}
+              >
+                <Icon className="size-4 shrink-0" />
+                {!collapsed && label}
+              </Link>
+            ))}
+          </div>
+        )}
+
         <Link
           to="/performers"
           className={navItemClass}
@@ -326,52 +373,7 @@ export function Sidebar({
           <Users className="size-4 shrink-0" />
           {!collapsed && "Performers"}
         </Link>
-        <Link
-          to="/albums"
-          className={navItemClass}
-          title={collapsed ? "Albums" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
-        >
-          <Images className="size-4 shrink-0" />
-          {!collapsed && "Albums"}
-        </Link>
-        <Link
-          to="/series"
-          className={navItemClass}
-          title={collapsed ? "Series" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
-        >
-          <Tv className="size-4 shrink-0" />
-          {!collapsed && "Series"}
-        </Link>
-        <Link
-          to="/feed"
-          className={navItemClass}
-          title={collapsed ? "Feed" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
-        >
-          <Rss className="size-4 shrink-0" />
-          {!collapsed && "Feed"}
-        </Link>
-        <Link
-          to="/following"
-          className={navItemClass}
-          title={collapsed ? "Following" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
-        >
-          <UserCheck className="size-4 shrink-0" />
-          {!collapsed && "Following"}
-        </Link>
         {isOwner && <InboxLink collapsed={collapsed} navItemClass={navItemClass} />}
-        <Link
-          to="/vault"
-          className={navItemClass}
-          title={collapsed ? "Vault" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
-        >
-          <Lock className="size-4 shrink-0" />
-          {!collapsed && "Vault"}
-        </Link>
 
 
         {/* Collections are text-only — collapsed they'd be a column of
@@ -473,12 +475,6 @@ export function Sidebar({
                 </button>}
               </div>
             ))}
-
-            {/* No tag list here; the page is still one click away. */}
-            <Link to="/tags" className={navItemClass} activeProps={{ className: "text-foreground" }}>
-              <Tag className="size-4 shrink-0" />
-              <span className="truncate">Tags</span>
-            </Link>
 
             {saved.length > 0 && (
               <>
@@ -597,43 +593,24 @@ export function Sidebar({
             <Lock className="size-3 shrink-0 text-muted-foreground/60" />
           )}
         </Link>}
-        {/* A page you come to browse, so it sits with the other destinations
-            here rather than behind the account menu. */}
+        {/* Stats, Diary and Tier list are one place with three tabs, so one
+            row — lit on any of the three. The vault is in the account menu. */}
         <Link
           to="/stats"
-          className={cn(navItemClass, "mb-1")}
-          title={collapsed ? "Your stats" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
+          className={cn(navItemClass, onYouPage && "bg-accent font-medium text-foreground")}
+          title={collapsed ? "You" : undefined}
         >
           <BarChart3 className="size-4 shrink-0" />
           {!collapsed && "Your stats"}
         </Link>
         <Link
-          to="/diary"
-          className={cn(navItemClass, "mb-1")}
-          title={collapsed ? "Diary" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
-        >
-          <BookOpen className="size-4 shrink-0" />
-          {!collapsed && "Diary"}
-        </Link>
-        <Link
-          to="/tiers"
-          className={cn(navItemClass, "mb-1")}
-          title={collapsed ? "Tier list" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
-        >
-          <ListOrdered className="size-4 shrink-0" />
-          {!collapsed && "Tier list"}
-        </Link>
-        <Link
           to="/settings"
-          className={navItemClass}
-          title={collapsed ? "Site settings" : undefined}
+          className={cn(navItemClass, "mt-1")}
+          title={collapsed ? "Settings" : undefined}
           activeProps={{ className: "bg-accent text-foreground font-medium" }}
         >
           <Settings className="size-4 shrink-0" />
-          {!collapsed && "Site settings"}
+          {!collapsed && "Settings"}
         </Link>
       </div>
 

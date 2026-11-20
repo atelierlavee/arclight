@@ -15,6 +15,29 @@ describe("readHomeRows", () => {
     );
   });
 
+  it("shows a short home by default, with the rest switched off", () => {
+    const visible = keys(readHomeRows(undefined).filter((row) => row.visible));
+    expect(visible).toContain("continue");
+    expect(visible).toContain("following");
+    expect(visible).not.toContain("tags");
+    expect(visible).not.toContain("collections");
+    expect(visible.length).toBeLessThan(10);
+  });
+
+  it("gives an untouched old default the new short one", () => {
+    // Every row on but the streak, in the built-in order: the old default
+    // saved back by an unrelated appearance change.
+    const legacy = HOME_ROWS.map((row) => ({ key: row.key, visible: row.key !== "streak" }));
+    expect(readHomeRows(legacy)).toEqual(readHomeRows(undefined));
+  });
+
+  it("keeps a home you customised, even with every row on", () => {
+    const reordered = [{ key: "tags", visible: true }, { key: "continue", visible: true }];
+    expect(readHomeRows(reordered).find((row) => row.key === "tags")?.visible).toBe(true);
+    const oneHidden = HOME_ROWS.map((row) => ({ key: row.key, visible: row.key !== "favourites" }));
+    expect(readHomeRows(oneHidden).find((row) => row.key === "tags")?.visible).toBe(true);
+  });
+
   it("keeps the order you arranged", () => {
     const order = readHomeRows(stored("tags", "categories", "continue"));
     // The three stored rows keep their relative order, whatever else lands

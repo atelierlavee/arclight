@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, Fingerprint, Loader2, WifiOff } from "lucide-react";
+import { Fingerprint, Loader2, WifiOff } from "lucide-react";
 import { LanBlockedError, fetchAuthStatus, login, setupAccount } from "@/lib/authApi";
 import { loginWithPasskey } from "@/lib/webauthnApi";
 import { AppOpenGate, clearAppOpenUnlock } from "./AppOpenGate";
@@ -126,10 +127,7 @@ function AuthForm({ mode, onSuccess }: { mode: "setup" | "login"; onSuccess: () 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background px-4 md:px-6">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-5">
-        <div className="flex items-center gap-2">
-          <Clapperboard className="size-6" />
-          <span className="text-xl font-bold tracking-tight">Arc Light</span>
-        </div>
+        <BrandLogo size="md" />
 
         <div className="space-y-1">
           <h1 className="text-lg font-semibold">

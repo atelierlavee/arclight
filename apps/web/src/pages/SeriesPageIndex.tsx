@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Film } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { PageBody } from "@/components/PageBody";
 import { AlphabetIndex } from "@/components/AlphabetIndex";
 import { fetchSeries } from "@/lib/seriesApi";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
@@ -21,7 +22,7 @@ export function SeriesPageIndex() {
 
   return (
     <AppShell title="Series" subtitle={all.length ? `${all.length} series` : undefined}>
-      <div className="space-y-6 px-4 py-6 md:px-6 md:py-8">
+      <PageBody className="space-y-6">
         <AlphabetIndex value={letter} onChange={setLetter} available={all.map((entry) => entry.name)} />
         {isLoading ? (
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
@@ -46,7 +47,7 @@ export function SeriesPageIndex() {
             ))}
           </div>
         )}
-      </div>
+      </PageBody>
     </AppShell>
   );
 }

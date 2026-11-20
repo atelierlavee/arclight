@@ -28,7 +28,7 @@ function MissingPageContent() {
 
   if (guarded && !unlocked) {
     return (
-      <AppShell title="Missing videos">
+      <AppShell title="Missing videos" subtitle="Files the library can no longer find on disk.">
         <div className="mx-auto mt-12 max-w-sm rounded-lg border border-border bg-card/60 p-6">
           <div className="flex items-center gap-2.5">
             <ShieldAlert className="size-5 shrink-0 text-amber-500" />
@@ -48,7 +48,7 @@ function MissingPageContent() {
   }
 
   return (
-    <AppShell title="Missing videos">
+    <AppShell title="Missing videos" subtitle="Files the library can no longer find on disk.">
       {/* Nothing set means nothing to prove, and the server agrees — it would
           rather leave this open than lock the owner out permanently. Said
           plainly here, since the whole point of the page is that it is the

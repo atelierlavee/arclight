@@ -44,7 +44,7 @@ export function SeekStrip({
   currentTime: number;
   sprite: ScrubSprite | undefined;
   bookmarks: Bookmark[];
-  /** Named positions, drawn as coloured stretches above the line. */
+  /** Named positions, shown by name in the hover label. */
   markers?: Marker[];
   heatmap?: number[];
   visible: boolean;
@@ -59,10 +59,8 @@ export function SeekStrip({
   const [dragging, setDragging] = useState(false);
 
   const heatmapMax = heatmap ? Math.max(...heatmap) : 0;
+  // Not drawn on the line; only named in the hover label.
   const segments = layoutMarkers(markers, duration);
-  const rows = segments.length ? Math.max(...segments.map((s) => s.row)) + 1 : 0;
-  // Each row is 4px with a 2px gap; the heatmap sits on top of the band.
-  const bandHeight = rows ? rows * 6 : 0;
 
   if (!(duration > 0)) return null;
 
@@ -193,32 +191,9 @@ export function SeekStrip({
         // padding is what a thumb can actually land on.
         className="group relative flex h-5 cursor-pointer touch-none items-center"
       >
-        {segments.length > 0 && (
-          // Part of the track, so pressing a stretch seeks like pressing the
-          // line does — and snaps to nothing but the time under the pointer.
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-full mb-0.5"
-            style={{ height: bandHeight }}
-          >
-            {segments.map((segment) => (
-              <span
-                key={segment.marker.id}
-                className="absolute h-1 rounded-full opacity-90 ring-1 ring-black/30"
-                style={{
-                  left: `${(segment.start / duration) * 100}%`,
-                  width: `max(3px, calc(${((segment.end - segment.start) / duration) * 100}% - 1px))`,
-                  bottom: segment.row * 6,
-                  backgroundColor: markerColor(segment.marker.title),
-                }}
-              />
-            ))}
-          </div>
-        )}
         {heatmapMax > 1 && heatmap && (
           <div
-            className="absolute inset-x-0 bottom-full flex h-6 items-end gap-px opacity-0 transition-opacity group-hover:opacity-100"
-            style={{ marginBottom: 2 + bandHeight }}
+            className="absolute inset-x-0 bottom-full mb-0.5 flex h-6 items-end gap-px opacity-0 transition-opacity group-hover:opacity-100"
           >
             {heatmap.map((count, i) => (
               <div

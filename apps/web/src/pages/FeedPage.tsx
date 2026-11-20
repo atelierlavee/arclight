@@ -1,14 +1,15 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { Loader2, Rss, UserMinus, X } from "lucide-react";
+import { ArrowDownUp, Loader2, Rss, UserMinus } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { PageHint } from "@/components/PageHint";
+import { ManageFollowingPanel } from "@/components/feed/FollowingManager";
 import { ContextMenu } from "@/components/ContextMenu";
 import { FeedSidebar } from "@/components/FeedSidebar";
 import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { FeedPost, PostSkeleton, type PostHandle } from "@/components/feed/FeedPost";
 import { FeedStories } from "@/components/feed/FeedStories";
-import { FeedSuggestions } from "@/components/feed/FeedSuggestions";
 import { useAppearance } from "@/lib/appearance";
 import { isTypingTarget } from "@/lib/appEvents";
 import { arrivedSince } from "@/lib/feed";
@@ -18,14 +19,11 @@ import { qk } from "@/lib/queryKeys";
 import { useTileMenu } from "@/lib/tileMenu";
 import { useFollowToggle } from "@/lib/useFollowToggle";
 import { useMediaQuery } from "@/lib/useMediaQuery";
-import { cn } from "@/lib/utils";
 
 const routeApi = getRouteApi("/feed");
 const LAST_SEEN_KEY = "feed-last-seen";
 /** A post has to be at least this much on screen to start playing. */
 const AUTOPLAY_MIN_VISIBLE = 0.6;
-/** "Suggested for you" goes in after this many posts. */
-const SUGGESTIONS_AFTER = 8;
 
 /**
  * When this profile last opened the feed, read once per visit; the visit
@@ -61,15 +59,17 @@ function useLastSeen(): number | null {
  */
 export function FeedPage() {
   const search = routeApi.useSearch();
-  const { watched, order, performerId, studioId } = search;
+  const { order, performerId, studioId } = search;
   const filter: FeedFilter = {
-    unwatchedOnly: watched === "false",
     order: order === "added" ? "added" : "released",
     performerId,
     studioId,
   };
-  const narrowed = performerId !== undefined || studioId !== undefined;
   const navigate = useNavigate();
+  const closeManage = useCallback(
+    () => void navigate({ to: "/feed", search: { order, performerId, studioId }, replace: true }),
+    [navigate, order, performerId, studioId],
+  );
   const lastSeen = useLastSeen();
   const [open, setOpen] = useState<{ id: number; autoPlay: boolean } | null>(null);
   const { setFollowed } = useFollowToggle();
@@ -85,11 +85,6 @@ export function FeedPage() {
 
   const { data: following } = useQuery({ queryKey: qk.following.list, queryFn: fetchFollowing });
   const followsNobody = following && following.performers.length === 0 && following.studios.length === 0;
-  const narrowedTo = narrowed
-    ? performerId !== undefined
-      ? following?.performers.find((p) => p.id === performerId)?.name
-      : following?.studios.find((s) => s.id === studioId)?.name
-    : undefined;
 
   // Autoplay, as a social feed does it: the post most in view plays its
   // preview, muted, and only that one. Held to the same rules as the hover
@@ -201,74 +196,47 @@ export function FeedPage() {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const tabSearch = { order: search.order, performerId, studioId };
-
   return (
-    <AppShell title="Feed">
-      <div className="mx-auto flex w-full max-w-[1040px] justify-center gap-8 px-0 py-4 sm:px-4 md:py-6">
+    <AppShell
+      actions={
+        // An icon in the header, the same size as search beside it; the
+        // dropdown sits invisibly on top so a click still offers both orders.
+        <label
+          title={filter.order === "added" ? "Sorted by recently added" : "Sorted by newest release"}
+          className="relative flex size-9 cursor-pointer items-center justify-center rounded-full bg-secondary text-muted-foreground ring-1 ring-border transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <ArrowDownUp className="size-4" />
+          <span className="sr-only">Order</span>
+          <select
+            value={filter.order}
+            onChange={(event) =>
+              void navigate({
+                to: "/feed",
+                search: {
+                  performerId,
+                  studioId,
+                  order: event.target.value === "added" ? "added" : undefined,
+                },
+              })
+            }
+            className="absolute inset-0 cursor-pointer appearance-none opacity-0"
+          >
+            <option value="released">Newest release</option>
+            <option value="added">Recently added</option>
+          </select>
+        </label>
+      }
+    >
+      <div className="mx-auto flex w-full max-w-[1040px] justify-center gap-8 px-0 pb-4 pt-[72px] sm:px-4 md:pb-6 md:pt-[80px]">
         <div className="w-full min-w-0 max-w-[640px]">
-          <FeedStories
-            performerId={performerId}
-            studioId={studioId}
-            search={{ watched, order: search.order }}
-          />
-
-          <div className="mb-4 mt-3 flex items-center gap-6 border-b border-border px-4 sm:px-0">
-            {[
-              { label: "Latest", value: undefined },
-              { label: "Unwatched", value: "false" as const },
-            ].map((tab) => (
-              <button
-                key={tab.label}
-                type="button"
-                aria-pressed={watched === tab.value}
-                onClick={() => void navigate({ to: "/feed", search: { ...tabSearch, watched: tab.value } })}
-                className={cn(
-                  "-mb-px border-b-2 py-3 text-sm font-medium transition-colors",
-                  watched === tab.value
-                    ? "border-foreground text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-            <label className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground">
-              <span className="sr-only">Order</span>
-              <select
-                value={filter.order}
-                onChange={(event) =>
-                  void navigate({
-                    to: "/feed",
-                    search: {
-                      watched,
-                      performerId,
-                      studioId,
-                      order: event.target.value === "added" ? "added" : undefined,
-                    },
-                  })
-                }
-                className="cursor-pointer rounded-md bg-transparent py-1 pr-1 text-sm font-medium text-foreground outline-none hover:bg-accent"
-              >
-                <option value="released">Newest release</option>
-                <option value="added">Recently added</option>
-              </select>
-            </label>
+          <FeedStories performerId={performerId} studioId={studioId} search={{ order: search.order }} />
+          <div className="h-4" />
+          <div className="mb-4 px-4 sm:px-0">
+            <PageHint id="feed-avatars">
+              Tap someone's avatar to see only their posts, and tap it again for everyone. Sort is the
+              arrows at the top.
+            </PageHint>
           </div>
-
-          {narrowed && (
-            <div className="mb-4 flex items-center gap-2 px-4 text-sm sm:px-0">
-              <span className="text-muted-foreground">Showing</span>
-              <Link
-                to="/feed"
-                search={{ watched, order: search.order }}
-                className="sensitive flex items-center gap-1 rounded-full bg-secondary py-1 pl-3 pr-2 font-medium transition-colors hover:bg-accent"
-              >
-                {narrowedTo ?? "one of who you follow"}
-                <X className="size-3.5" />
-              </Link>
-            </div>
-          )}
 
           {feed.isPending && (
             <div className="space-y-4">
@@ -293,7 +261,8 @@ export function FeedPage() {
                     Follow performers and studios and their new videos show up here.
                   </p>
                   <Link
-                    to="/following"
+                    to="/feed"
+                    search={{ manage: true }}
                     className="mt-2 rounded-full bg-foreground px-5 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
                   >
                     Find people to follow
@@ -301,13 +270,9 @@ export function FeedPage() {
                 </>
               ) : (
                 <>
-                  <p className="text-lg font-semibold">
-                    {filter.unwatchedOnly ? "You're all caught up" : "Nothing here yet"}
-                  </p>
+                  <p className="text-lg font-semibold">Nothing here yet</p>
                   <p className="max-w-xs text-sm text-muted-foreground">
-                    {filter.unwatchedOnly
-                      ? "You've watched everything here."
-                      : "New videos from who you follow will show up here."}
+                    New videos from who you follow will show up here.
                   </p>
                 </>
               )}
@@ -315,24 +280,22 @@ export function FeedPage() {
           )}
 
           <div className="space-y-4">
-            {items.map((item, index) => (
-              <Fragment key={item.id}>
-                {index === SUGGESTIONS_AFTER && !narrowed && <FeedSuggestions />}
-                <FeedPost
-                  item={item}
-                  isNew={arrivedSince(item.createdAt, lastSeen)}
-                  selected={selectedId === item.id}
-                  playing={playingId === item.id}
-                  hoverPreview={previewsAllowed && !autoplay}
-                  onVisibility={reportVisibility}
-                  onOpen={(autoPlay) => {
-                    setSelectedId(item.id);
-                    setOpen({ id: item.id, autoPlay });
-                  }}
-                  onMenu={onMenu}
-                  register={register}
-                />
-              </Fragment>
+            {items.map((item) => (
+              <FeedPost
+                key={item.id}
+                item={item}
+                isNew={arrivedSince(item.createdAt, lastSeen)}
+                selected={selectedId === item.id}
+                playing={playingId === item.id}
+                hoverPreview={previewsAllowed && !autoplay}
+                onVisibility={reportVisibility}
+                onOpen={(autoPlay) => {
+                  setSelectedId(item.id);
+                  setOpen({ id: item.id, autoPlay });
+                }}
+                onMenu={onMenu}
+                register={register}
+              />
             ))}
           </div>
 
@@ -359,6 +322,7 @@ export function FeedPage() {
       {open !== null && (
         <MediaDetailModal itemId={open.id} autoPlay={open.autoPlay} onClose={() => setOpen(null)} />
       )}
+      {search.manage && <ManageFollowingPanel onClose={closeManage} />}
     </AppShell>
   );
 }

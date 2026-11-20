@@ -11,6 +11,7 @@ import { ArrowRight } from "lucide-react";
 export type SeeMoreDestination =
   | { to: "/performers" }
   | { to: "/studios" }
+  | { to: "/feed" }
   | {
       to: "/browse";
       /**

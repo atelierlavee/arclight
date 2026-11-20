@@ -61,7 +61,6 @@ export const qk = {
     // Under media-items so that watching, favouriting or (un)following —
     // all of which invalidate media-items — refresh it too.
     followingFeed: (filter: unknown) => ["media-items", "following-feed", filter] as const,
-    followingContinue: ["media-items", "following-continue"] as const,
     recentlyWatched: ["media-items", "recently-watched"] as const,
     mostPlayed: ["media-items", "most-played"] as const,
     unwatched: ["media-items", "unwatched"] as const,

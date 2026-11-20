@@ -1,6 +1,7 @@
 import {
   createRootRoute,
   createRoute,
+  redirect,
   createRouter,
 } from "@tanstack/react-router";
 import { AppLayout } from "@/components/AppShell";
@@ -10,7 +11,6 @@ import { AlbumPage } from "@/pages/AlbumPage";
 import { AlbumsPage } from "@/pages/AlbumsPage";
 import { BrowsePage } from "@/pages/BrowsePage";
 import { HelpPage } from "@/pages/HelpPage";
-import { FollowingPage } from "./pages/FollowingPage";
 import { DiaryPage } from "./pages/DiaryPage";
 import { FeedPage } from "./pages/FeedPage";
 import { TiersPage } from "./pages/TiersPage";
@@ -246,11 +246,14 @@ const settingsRoute = createRoute({
 const followingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/following",
-  component: FollowingPage,
+  // Following is managed from the feed now; old links and bookmarks land
+  // there with the panel open.
+  beforeLoad: () => {
+    throw redirect({ to: "/feed", search: { manage: true } });
+  },
 });
 
-// Everything from who you follow, newest first. "watched=false" keeps only
-// the unwatched, the same parameter (and meaning) the browse page uses.
+// Everything from who you follow, newest first.
 const feedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/feed",
@@ -258,16 +261,17 @@ const feedRoute = createRoute({
   // sorts by arrival instead of release.
   validateSearch: (
     search: Record<string, unknown>,
-  ): { watched?: "false"; order?: "added"; performerId?: number; studioId?: number } => {
+  ): { order?: "added"; performerId?: number; studioId?: number; manage?: true } => {
     const id = (value: unknown) => {
       const n = Number(value);
       return Number.isInteger(n) && n > 0 ? n : undefined;
     };
     return {
-      watched: search.watched === "false" ? "false" : undefined,
       order: search.order === "added" ? "added" : undefined,
       performerId: id(search.performerId),
       studioId: id(search.studioId),
+      // The Following panel, open over the feed.
+      manage: search.manage === true || search.manage === "true" ? true : undefined,
     };
   },
   component: FeedPage,
@@ -280,8 +284,10 @@ const diaryRoute = createRoute({
   path: "/diary",
   // "at" rather than "month": the browse page's search already has a
   // numeric month, and the router merges every route's search types.
-  validateSearch: (search: Record<string, unknown>): { at?: string } => ({
+  // "log=all" switches from the watch diary to everything you did.
+  validateSearch: (search: Record<string, unknown>): { at?: string; log?: "all" } => ({
     at: typeof search.at === "string" && /^\d{4}-\d{2}$/.test(search.at) ? search.at : undefined,
+    log: search.log === "all" ? "all" : undefined,
   }),
   component: DiaryPage,
 });

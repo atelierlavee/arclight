@@ -33,7 +33,13 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 });
 
 vi.mock("@/components/AppShell", () => ({
-  AppShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  // Header actions render inline, as the real shell portals them into view.
+  AppShell: ({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) => (
+    <>
+      {actions}
+      {children}
+    </>
+  ),
 }));
 vi.mock("@/components/PerformerEditor", () => ({ PerformerEditor: () => <input aria-label="Add performer" /> }));
 vi.mock("@/components/TagEditor", () => ({ TagEditor: () => <input aria-label="Add tag" /> }));

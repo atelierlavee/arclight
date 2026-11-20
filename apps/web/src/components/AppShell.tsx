@@ -9,8 +9,8 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Outlet, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, Menu, Search, X } from "lucide-react";
+import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { ArrowLeft, CircleHelp, Menu, Search, X } from "lucide-react";
 import { PageScope, SEARCH_SHORTCUT, useAppearanceScope } from "@/lib/appearance";
 import { useIsMobile } from "@/lib/useMediaQuery";
 import { AppearanceMenu } from "./AppearanceMenu";
@@ -146,8 +146,29 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   const subtitle = header?.subtitle;
   const centeredHeader = header?.centeredHeader ?? false;
   const store = useMemo(() => ({ setHeader, actionsSlot }), [actionsSlot]);
-  const [collapsed, setCollapsed] = useState(readCollapsed);
   const isMobile = useIsMobile();
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+
+  // Ctrl/⌘ + \ folds the sidebar to icons and back. Works while typing too —
+  // it is a chord, not a letter, so it can't be mistaken for input.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
+      if (event.code !== "Backslash") return;
+      event.preventDefault();
+      setCollapsed((current) => !current);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
+    } catch {
+      // Preference just won't persist — not worth surfacing.
+    }
+  }, [collapsed]);
   useAchievementWatcher();
   const [drawerRequested, setDrawerRequested] = useState(false);
   // Derived rather than reset by an effect, so growing past `md` with the
@@ -197,14 +218,6 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   // Through the overlays' shared count: a modal opened from the drawer would
   // otherwise restore the overflow this set, or this the modal's.
   useScrollLock(drawerOpen);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
-    } catch {
-      // Preference just won't persist — not worth surfacing.
-    }
-  }, [collapsed]);
 
   useEffect(() => {
     function resumeItem(event: Event) {
@@ -263,10 +276,9 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
         )}
       >
         <Sidebar
-          // The drawer is always full width — an icon-only rail you had to open
-          // first would be the worst of both.
+          // The phone drawer is always full width; on wider screens the
+          // keyboard shortcut folds it to an icon rail.
           collapsed={isMobile ? false : collapsed}
-          onToggle={() => setCollapsed((c) => !c)}
           mobile={isMobile}
           mobileOpen={drawerOpen}
           onMobileClose={() => setDrawerRequested(false)}
@@ -309,6 +321,16 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
                   so they sit in this row's flex layout as if written inline. */}
               <div ref={setActionsSlot} className="contents" />
               <NotificationCenter />
+              {/* The keyboard shortcuts, one click away instead of a sidebar
+                  row or a shortcut you would have to already know. */}
+              <Link
+                to="/help"
+                aria-label="Help and keyboard shortcuts"
+                title="Help and keyboard shortcuts"
+                className="hidden size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:flex"
+              >
+                <CircleHelp className="size-4" />
+              </Link>
               <button
                 type="button"
                 onClick={openSpotlight}

@@ -30,7 +30,7 @@ export function FeedStories({
   performerId?: number;
   studioId?: number;
   /** The rest of the feed's search, kept as the selection changes. */
-  search: { watched?: "false"; order?: "added" };
+  search: { order?: "added" };
 }) {
   const { data } = useQuery({ queryKey: qk.following.list, queryFn: fetchFollowing });
   if (!data) {
@@ -129,11 +129,16 @@ export function FeedStories({
         );
       })}
       <li>
-        <Link to="/following" className="flex w-[68px] flex-col items-center gap-1.5">
+        {/* Who you follow, and who to follow next, in a panel over the feed. */}
+        <Link
+          to="/feed"
+          search={{ ...search, performerId, studioId, manage: true }}
+          className="flex w-[68px] flex-col items-center gap-1.5"
+        >
           <span className="flex size-16 items-center justify-center rounded-full border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-foreground hover:text-foreground">
             <Plus className="size-5" />
           </span>
-          <span className="text-xs text-muted-foreground">Find more</span>
+          <span className="text-xs text-muted-foreground">Manage</span>
         </Link>
       </li>
     </ul>
