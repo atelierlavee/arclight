@@ -23,7 +23,6 @@ import {
   Trash2,
   Users,
   X,
-  Grid2x2,
   UserCheck,
   BookOpen,
   ListOrdered,
@@ -362,15 +361,6 @@ export function Sidebar({
         >
           <UserCheck className="size-4 shrink-0" />
           {!collapsed && "Following"}
-        </Link>
-        <Link
-          to="/multiview"
-          className={navItemClass}
-          title={collapsed ? "Multi-view" : undefined}
-          activeProps={{ className: "bg-accent text-foreground font-medium" }}
-        >
-          <Grid2x2 className="size-4 shrink-0" />
-          {!collapsed && "Multi-view"}
         </Link>
         {isOwner && <InboxLink collapsed={collapsed} navItemClass={navItemClass} />}
         <Link

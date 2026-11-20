@@ -39,6 +39,7 @@ import { useScreenModes } from "./mediaDetail/useScreenModes";
 import { useVideoPlayback, type PlayerMode } from "./mediaDetail/useVideoPlayback";
 import { qk } from "@/lib/queryKeys";
 import { useIsOwner } from "@/lib/profile";
+import { adjacentPositionStart } from "@/lib/markerApi";
 
 export function MediaDetailModal({
   itemId,
@@ -110,7 +111,7 @@ export function MediaDetailModal({
   const scrollRef = useRef<HTMLDivElement>(null);
   const playerAreaRef = useRef<HTMLDivElement>(null);
 
-  const { bookmarks, scrubSprite, heatmapBuckets, categories, accent, addBookmark } =
+  const { bookmarks, markers, scrubSprite, heatmapBuckets, categories, accent, addBookmark } =
     usePlayerData({ viewingId, item, mode, mini, videoRef });
   const { updateKind, toggleFavorite, saveFraming, toggleWatched, toggleOrganised, countO } =
     useItemActions({
@@ -180,6 +181,17 @@ export function MediaDetailModal({
     if (bestPart === null) return;
     seekTo(bestPart);
     void videoRef.current?.play().catch(() => {});
+  }
+
+  /** `[` and `]`: the previous or next named position, like chapters. */
+  function jumpToPosition(direction: 1 | -1) {
+    const video = videoRef.current;
+    if (!video) return;
+    const target = adjacentPositionStart(markers, video.currentTime, direction);
+    if (target === undefined) return;
+    seekTo(target);
+    // So the stretches, and which one you landed on, are there to see.
+    revealPlayerControls();
   }
 
   /**
@@ -266,6 +278,7 @@ export function MediaDetailModal({
     countO,
     cycleSubtitles: subtitles.cycle,
     jumpToBestPart,
+    jumpToPosition,
     toggleContactSheet: () => setContactSheetOpen((open) => !open),
   });
 
@@ -393,6 +406,7 @@ export function MediaDetailModal({
                   currentTime={playback.currentTime}
                   sprite={scrubSprite}
                   bookmarks={bookmarks}
+                  markers={markers}
                   heatmap={heatmapBuckets}
                   visible={showPlayerControls}
                   onSeek={seekTo}

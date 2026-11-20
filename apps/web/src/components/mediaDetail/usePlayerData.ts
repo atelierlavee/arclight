@@ -7,6 +7,7 @@ import {
 } from "@/lib/bookmarkApi";
 import { fetchCategories } from "@/lib/categoryApi";
 import { useAccentColor } from "@/lib/dominantColor";
+import { useMarkers } from "@/lib/markerApi";
 import { thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { useToast } from "@/lib/toast";
 import { qk } from "@/lib/queryKeys";
@@ -32,6 +33,7 @@ export function usePlayerData({
   const isVideo = item?.itemType === "video";
   const { data: bookmarks = [] } = useBookmarks(viewingId, isVideo);
   const bookmarkMutations = useBookmarkMutations(viewingId);
+  const { data: markerData } = useMarkers(viewingId, isVideo && !mini);
   // Asked for as soon as real playback starts, not on hover: the first build
   // takes a few seconds, and by the time you reach for the bar it is there.
   const { data: scrubSprite } = useScrubSprite(
@@ -72,6 +74,7 @@ export function usePlayerData({
 
   return {
     bookmarks,
+    markers: markerData ?? [],
     scrubSprite,
     heatmapBuckets: heatmapData?.buckets,
     categories,

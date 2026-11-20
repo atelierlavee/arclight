@@ -22,6 +22,8 @@ export type PlayerKeyboardOptions = {
   countO: () => void;
   cycleSubtitles: () => void;
   jumpToBestPart: () => void;
+  /** To the next (1) or previous (-1) named position on the seek bar. */
+  jumpToPosition: (direction: 1 | -1) => void;
   toggleContactSheet: () => void;
   seekTo: (seconds: number) => void;
 };
@@ -54,6 +56,7 @@ export function usePlayerKeyboard(options: PlayerKeyboardOptions) {
       countO,
       cycleSubtitles,
       jumpToBestPart,
+      jumpToPosition,
       toggleContactSheet,
       seekTo,
     } = options;
@@ -110,6 +113,8 @@ export function usePlayerKeyboard(options: PlayerKeyboardOptions) {
         e.key !== "o" &&
         e.key !== "s" &&
         e.key !== "h" &&
+        e.key !== "[" &&
+        e.key !== "]" &&
         !isDigitKey(e.key)
       )
         return;
@@ -162,6 +167,14 @@ export function usePlayerKeyboard(options: PlayerKeyboardOptions) {
           break;
         case "h":
           jumpToBestPart();
+          break;
+        case "[":
+          e.preventDefault();
+          jumpToPosition(-1);
+          break;
+        case "]":
+          e.preventDefault();
+          jumpToPosition(1);
           break;
         default:
           // 0–9 jump to that tenth of the video, as on YouTube: 5 is

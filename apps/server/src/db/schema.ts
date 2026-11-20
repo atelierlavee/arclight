@@ -127,6 +127,11 @@ export const mediaItems = pgTable("media_items", {
   // clears the inbox of new arrivals, this is a judgement about the metadata.
   organisedAt: timestamp("organised_at"),
   durationSeconds: integer("duration_seconds"),
+  // The ThePornDB scene this video was matched to, for its position markers,
+  // and when it was last looked up there. checked_at is set whether or not a
+  // match was found, so a library-wide fetch does not ask about it again.
+  tpdbSceneId: text("tpdb_scene_id"),
+  tpdbCheckedAt: timestamp("tpdb_checked_at"),
   takenAt: timestamp("taken_at"),
   extraMetadata: jsonb("extra_metadata"),
   missingSince: timestamp("missing_since"),
@@ -790,3 +795,28 @@ export const bookmarks = pgTable("bookmarks", {
   note: text("note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [index("bookmarks_profile_item_idx").on(table.profileId, table.mediaItemId)]);
+
+/**
+ * Named stretches of a video — the positions or acts in a scene — drawn as
+ * segments along the seek bar, as ThePornDB lists them.
+ *
+ * Library data, not per profile: they describe the video, like its tags, so
+ * every profile sees the same ones. Personal moments stay in `bookmarks`.
+ *
+ * `end_seconds` is null when ThePornDB gave only a start; the segment then
+ * runs to the next marker.
+ */
+export const mediaItemMarkers = pgTable(
+  "media_item_markers",
+  {
+    id: serial("id").primaryKey(),
+    mediaItemId: integer("media_item_id")
+      .notNull()
+      .references(() => mediaItems.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    startSeconds: integer("start_seconds").notNull(),
+    endSeconds: integer("end_seconds"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("media_item_markers_item_idx").on(table.mediaItemId, table.startSeconds)],
+);

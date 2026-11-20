@@ -33,6 +33,7 @@ import {
   bookmarks,
   collectionItems,
   collections,
+  mediaItemMarkers,
   mediaItems,
   playbackHeatmap,
   playbackStates,
@@ -359,6 +360,14 @@ async function seedLibrary(): Promise<Seeded> {
       label: mediaItemId === visibleId ? "Visible mark" : `${SENTINEL} mark`,
     })),
   );
+  // Library-wide, not per profile: the same named positions for everyone.
+  await db.insert(mediaItemMarkers).values(
+    videos.map((mediaItemId) => ({
+      mediaItemId,
+      startSeconds: 60,
+      title: mediaItemId === visibleId ? "Shared Position" : `${SENTINEL} position`,
+    })),
+  );
   await db.insert(activityEvents).values(
     videos.map((mediaItemId) => ({
       type: "playback",
@@ -396,6 +405,7 @@ function parameterisedGets(s: Seeded): Record<string, string | null> {
   return {
     "/api/media-items/:id": item(),
     "/api/media-items/:id/bookmarks": item("/bookmarks"),
+    "/api/media-items/:id/markers": item("/markers"),
     "/api/media-items/:id/cast": item("/cast"),
     "/api/media-items/:id/gallery": `/api/media-items/${s.visiblePhotoId}/gallery`,
     "/api/media-items/:id/heatmap": item("/heatmap"),

@@ -88,8 +88,6 @@ export const qk = {
   tiers: (kind: string) => ["tiers", kind] as const,
   /** The tier list's library search for videos to add to the pool. */
   tierSearch: (q: string) => ["tier-search", q] as const,
-  /** The multi-view page's "add a video" search. */
-  multiviewSearch: (q: string) => ["multiview-search", q] as const,
   /** The Following page: who is followed, and who might be. */
   following: {
     all: ["following"] as const,
@@ -126,6 +124,7 @@ export const qk = {
   /** Per-item media the detail modal loads under the item's id. */
   gallery: (id: Id) => ["gallery", id] as const,
   bookmarks: (id: Id) => ["bookmarks", id] as const,
+  markers: (id: Id) => ["markers", id] as const,
   heatmap: (id: Id) => ["heatmap", id] as const,
   scrubSprite: (id: Id) => ["scrub-sprite", id] as const,
   subtitles: (id: Id) => ["subtitles", id] as const,
@@ -239,6 +238,7 @@ export function itemScopedKeys(id: Id) {
     qk.mediaItem.detail(id),
     qk.gallery(id),
     qk.bookmarks(id),
+    qk.markers(id),
     qk.heatmap(id),
     qk.scrubSprite(id),
     qk.subtitles(id),

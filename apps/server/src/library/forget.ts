@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import {
   albums,
   bookmarks,
+  mediaItemMarkers,
   collectionItems,
   mediaFiles,
   mediaItemPerformers,
@@ -155,6 +156,7 @@ export async function deleteItems(targets: number[]): Promise<number> {
       .delete(playbackHeatmap)
       .where(anyInt(playbackHeatmap.mediaItemId, targets));
     await tx.delete(bookmarks).where(anyInt(bookmarks.mediaItemId, targets));
+    await tx.delete(mediaItemMarkers).where(anyInt(mediaItemMarkers.mediaItemId, targets));
     await tx.delete(watchLog).where(anyInt(watchLog.mediaItemId, targets));
     await tx
       .delete(collectionItems)

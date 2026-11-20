@@ -54,6 +54,10 @@ you tick what to keep.
   details* in the inbox and the look-up on a performer's page show matches you
   tick through before anything is saved — cast (women only), studio, tags,
   description and release date
+- **Marks positions on the seek bar** (optional, with a ThePornDB API key in
+  `TPDB_API_KEY`): named, coloured stretches — "Blowjob 8:39", "Missionary
+  15:21" — looked up on ThePornDB the first time a video is opened, by its
+  studio, release date and title, and taken only when the match is sure
 - **Suggests a filename** in the convention below, with a copy button in the
   inbox. If the studio or title is missing it opens a small form to fill them in
 - **Marks videos organised**: the owner flags a video once its title, cast and
@@ -96,10 +100,6 @@ you tick what to keep.
 - **Lays a video out as a contact sheet** (`G`, or the grid button): 20,
   50 or every frame of the seek-bar preview in a grid, with the most-replayed
   stretch and your bookmarks marked. Click a frame to play from there
-- **Plays up to four at once** — *Multi-view* in the sidebar, or select two
-  to four tiles and choose it from the selection bar. Every picture plays,
-  one is heard: its speaker button or `1`–`4` moves the sound. Nothing
-  watched there counts towards history or stats
 - **Leans back**: *Lean back* beside Play All and Shuffle (on performer,
   studio, album, series, collection and filtered browse pages) shuffles the
   set into the queue and plays it hands-free in cinema mode — whole videos,
@@ -663,6 +663,7 @@ start from.
 | `Space` / `K` | Play or pause |
 | `←` `→` | Skip 10 seconds |
 | `0`–`9` | Jump to that tenth of the video — `5` is halfway, `0` the start |
+| `[` `]` | Previous / next named position on the seek bar |
 | `↑` `↓` | Volume |
 | `F` / `M` | Fullscreen / mute |
 | `B` | Bookmark the current moment |
