@@ -8,7 +8,6 @@ const marker = (title: string, startSeconds: number, endSeconds: number | null =
   title,
   startSeconds,
   endSeconds,
-  source: "tpdb",
 });
 
 describe("layoutMarkers", () => {

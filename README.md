@@ -56,12 +56,8 @@ you tick what to keep.
   description and release date
 - **Marks positions on the seek bar** (optional, with a ThePornDB API key in
   `TPDB_API_KEY`): named, coloured stretches — "Blowjob 8:39", "Missionary
-  15:21" — fetched from ThePornDB for one video (*Find on ThePornDB* under
-  *Positions* in its details) or the whole library (Site settings → Library),
-  matched by studio, release date and title and taken only when sure. The
-  owner can add, rename and delete them by hand too. *Positions* in the
-  sidebar gathers every moment with one name across the library, each a click
-  from playing there
+  15:21" — looked up on ThePornDB the first time a video is opened, by its
+  studio, release date and title, and taken only when the match is sure
 - **Suggests a filename** in the convention below, with a copy button in the
   inbox. If the studio or title is missing it opens a small form to fill them in
 - **Marks videos organised**: the owner flags a video once its title, cast and

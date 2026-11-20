@@ -1,5 +1,5 @@
 {
-  "id": "22964280-9481-4928-9703-80cf71bb8d1f",
+  "id": "0f2b2881-6204-417e-8578-b083111ac539",
   "prevId": "3ca16573-f076-42bf-9c85-b11e52b2779a",
   "version": "7",
   "dialect": "postgresql",
@@ -846,12 +846,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
         },
         "created_at": {
           "name": "created_at",

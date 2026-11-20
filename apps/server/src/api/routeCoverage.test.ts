@@ -364,7 +364,6 @@ async function seedLibrary(): Promise<Seeded> {
       mediaItemId,
       startSeconds: 60,
       title: mediaItemId === visibleId ? "Shared Position" : `${SENTINEL} position`,
-      source: "tpdb",
     })),
   );
   await db.insert(activityEvents).values(
@@ -401,7 +400,6 @@ function parameterisedGets(s: Seeded): Record<string, string | null> {
     "/api/media-items/:id": item(),
     "/api/media-items/:id/bookmarks": item("/bookmarks"),
     "/api/media-items/:id/markers": item("/markers"),
-    "/api/tpdb/match/:id": `/api/tpdb/match/${s.visibleId}`,
     "/api/media-items/:id/cast": item("/cast"),
     "/api/media-items/:id/gallery": `/api/media-items/${s.visiblePhotoId}/gallery`,
     "/api/media-items/:id/heatmap": item("/heatmap"),
@@ -452,9 +450,6 @@ function queryVariants(s: Seeded): string[] {
     `/api/albums?performer=${s.performerId}`,
     `/api/albums?studio=${s.studioId}`,
     "/api/activity?type=playback",
-    "/api/markers?name=Shared%20Position",
-    // Every sentinel marker shares this name; it must find nothing.
-    "/api/markers?name=ZZ-HIDDEN-SENTINEL%20position",
     `/api/storage/treemap?path=${encodeURIComponent(s.dir)}`,
   ];
 }
@@ -598,7 +593,6 @@ const GATED_DELETES: Record<string, string> = {
 /** DELETEs that need no privacy credential, each with why. */
 const UNGATED_DELETES: Record<string, string> = {
   "/api/bookmarks/:id": "one bookmark the user made; no library record or history goes",
-  "/api/markers/:id": "one named position on a video; the video and everything else stay",
   "/api/collections/:id": "a hand-made grouping; the items themselves are untouched",
   "/api/collections/:id/items/:mediaItemId": "takes an item out of a collection, not the library",
   "/api/categories/:id": "a home-page label; its items move to another category, none are deleted",

@@ -44,7 +44,6 @@ export function MediaDetailModal({
   itemId,
   autoPlay = false,
   resume = false,
-  startAt,
   onClose,
   mini = false,
   onExpand,
@@ -52,8 +51,6 @@ export function MediaDetailModal({
   itemId: number;
   autoPlay?: boolean;
   resume?: boolean;
-  /** A second to start at, from a position elsewhere in the app. */
-  startAt?: number;
   onClose: () => void;
   mini?: boolean;
   onExpand?: () => void;
@@ -138,7 +135,6 @@ export function MediaDetailModal({
     revealPlayerControls,
     autoPlay,
     resume,
-    startAt,
     itemId,
     resolveStart: leanBack.resolveStart,
   });
@@ -547,8 +543,6 @@ export function MediaDetailModal({
               accent={accent}
               categories={categories}
               bookmarks={bookmarks}
-              markers={markers}
-              currentTime={() => videoRef.current?.currentTime ?? null}
               onJumpToBookmark={jumpTo}
               kindPending={updateKind.isPending}
               onChangeKind={(kind) => updateKind.mutate(kind)}

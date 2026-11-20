@@ -54,16 +54,6 @@ export const OWNER_ONLY_ROUTES: ReadonlySet<string> = new Set([
   "GET /api/stashdb/performers",
   "GET /api/stashdb/scenes",
 
-  // ThePornDB position markers: lookups spend the owner's API key, and the
-  // markers themselves are library data shared by every profile, like tags.
-  "GET /api/tpdb",
-  "POST /api/tpdb/fetch-all",
-  "GET /api/tpdb/match/:id",
-  "POST /api/media-items/:id/tpdb-markers",
-  "POST /api/media-items/:id/markers",
-  "PATCH /api/markers/:id",
-  "DELETE /api/markers/:id",
-
   // Metadata and artwork.
   "PUT /api/media-items/:id/performers",
   "PUT /api/media-items/:id/tags",

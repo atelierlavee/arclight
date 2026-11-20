@@ -24,7 +24,6 @@ export function useVideoPlayback({
   revealPlayerControls,
   autoPlay,
   resume,
-  startAt,
   itemId,
   resolveStart,
 }: {
@@ -35,8 +34,6 @@ export function useVideoPlayback({
   revealPlayerControls: () => void;
   autoPlay: boolean;
   resume: boolean;
-  /** Overrides resume: start here, e.g. where a named position begins. */
-  startAt?: number;
   /** The item the modal was asked to show, which autoPlay and resume apply to. */
   itemId: number;
   /** Lets lean-back mode move an autoplay's start to the clip it plays. */
@@ -140,16 +137,14 @@ export function useVideoPlayback({
     ) {
       autoPlayTriggered.current = true;
       const requested =
-        startAt != null
-          ? startAt
-          : resume && item.lastPositionSeconds > MIN_RESUMABLE_SECONDS
-            ? item.lastPositionSeconds
-            : 0;
+        resume && item.lastPositionSeconds > MIN_RESUMABLE_SECONDS
+          ? item.lastPositionSeconds
+          : 0;
       startPlaying(resolveStart ? resolveStart(item, requested) : requested);
     }
     // startPlaying is rebuilt every render; only these inputs should run it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPlay, item, itemId, resume, startAt]);
+  }, [autoPlay, item, itemId, resume]);
 
   function handleLoadedMetadata() {
     const video = videoRef.current;

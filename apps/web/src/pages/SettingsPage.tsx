@@ -7,7 +7,6 @@ import { HeroSettingsSection } from "@/components/HeroSettingsSection";
 import { LibraryCleanupSection } from "@/components/LibraryCleanupSection";
 import { LibrarySettingsSection } from "@/components/LibrarySettingsSection";
 import { LibraryHealthSection } from "@/components/LibraryHealthSection";
-import { TpdbFetchSection } from "@/components/TpdbFetchSection";
 import { DuplicatesSection } from "@/components/DuplicatesSection";
 import { CacheSettingsSection } from "@/components/CacheSettingsSection";
 import { NetworkSettingsSection } from "@/components/NetworkSettingsSection";
@@ -94,7 +93,6 @@ export function SettingsPage() {
               <LibraryHealthSection />
               <DuplicatesSection />
               <LibraryCleanupSection />
-              <TpdbFetchSection />
               <LibrarySettingsSection />
               <CategorySettings />
             </>

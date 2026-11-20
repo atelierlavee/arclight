@@ -6,7 +6,7 @@ import { makeItem, makeLibrary, makeStudio } from "../test/fixtures.js";
 import { deleteItems } from "../library/forget.js";
 import { db } from "../db/client.js";
 import { mediaItemMarkers, mediaItems } from "../db/schema.js";
-import { fetchAllSettled, fitMarkers, setFetchAllGap } from "./markers.js";
+import { fitMarkers } from "./markers.js";
 import { searchTpdbScenes } from "../metadata/tpdb.js";
 
 let app: FastifyInstance;
@@ -15,7 +15,6 @@ let libraryId: number;
 
 beforeAll(async () => {
   app = await testApp();
-  setFetchAllGap(0);
 });
 beforeEach(async () => {
   await resetDatabase();
@@ -28,8 +27,8 @@ afterEach(() => {
   delete process.env.TPDB_API_KEY;
 });
 
-const request = (method: "GET" | "POST" | "PATCH" | "DELETE", url: string, payload?: object, as = cookie) =>
-  app.inject({ method, url, headers: { cookie: as }, payload });
+const getMarkers = async (id: number, as = cookie) =>
+  app.inject({ method: "GET", url: `/api/media-items/${id}/markers`, headers: { cookie: as } });
 
 type FakeScene = {
   id: string;
@@ -69,7 +68,7 @@ const mainEvent: FakeScene = {
   ],
 };
 
-async function videoAt(studio: string, date: string, title = "Main Event") {
+async function videoAt(studio: string, date: string | null, title = "Main Event") {
   const studioId = await makeStudio(studio);
   return makeItem(libraryId, { title, studioId, releaseDate: date, durationSeconds: 2288 });
 }
@@ -93,140 +92,95 @@ describe("fitMarkers", () => {
 });
 
 describe("searchTpdbScenes", () => {
-  it("is confident only about one scene on the same date from the same studio or network", async () => {
+  it("is sure only about one scene on the same date from the same studio or network", async () => {
     fakeTpdb([mainEvent, { ...mainEvent, id: "other", date: "2021-01-01" }]);
     const query = { studio: "BlackedRaw", date: "2020-02-13", title: "Main Event" };
     expect((await searchTpdbScenes("k", query)).confidentId).toBe("scene-1");
     expect((await searchTpdbScenes("k", { ...query, studio: "Vixen Media Group" })).confidentId).toBe("scene-1");
     expect((await searchTpdbScenes("k", { ...query, studio: "Tushy" })).confidentId).toBeNull();
-    expect((await searchTpdbScenes("k", { ...query, date: null })).confidentId).toBeNull();
   });
 
-  it("is not confident when two scenes fit", async () => {
+  it("is not sure when two scenes fit", async () => {
     fakeTpdb([mainEvent, { ...mainEvent, id: "twin" }]);
     const found = await searchTpdbScenes("k", { studio: "Blacked Raw", date: "2020-02-13", title: "x" });
     expect(found.confidentId).toBeNull();
-    expect(found.candidates).toHaveLength(2);
   });
 });
 
-describe("markers", () => {
-  it("fetches a scene's markers, replacing earlier fetched ones and keeping hand-made ones", async () => {
-    fakeTpdb([mainEvent]);
+describe("GET /api/media-items/:id/markers", () => {
+  it("looks a video up on its first open, stores the markers, and never asks again", async () => {
+    const calls = fakeTpdb([mainEvent]);
     const id = await videoAt("Blacked Raw", "2020-02-13");
 
-    const manual = await request("POST", `/api/media-items/${id}/markers`, { title: " Intro ", startSeconds: 0 });
-    expect(manual.statusCode).toBe(201);
-
-    expect((await request("POST", `/api/media-items/${id}/tpdb-markers`, { sceneId: "scene-1" })).json()).toEqual({ count: 2 });
-    // A second fetch replaces, rather than adds to, the first.
-    await request("POST", `/api/media-items/${id}/tpdb-markers`, { sceneId: "scene-1" });
-
-    const list = (await request("GET", `/api/media-items/${id}/markers`)).json();
-    expect(list.tpdbSceneId).toBe("scene-1");
-    expect(list.markers.map((m: { title: string }) => m.title)).toEqual(["Intro", "Blowjob", "Missionary"]);
-    expect(list.markers[1]).toMatchObject({ startSeconds: 519, endSeconds: 600, source: "tpdb" });
-  });
-
-  it("makes an edited marker the owner's, and deletes", async () => {
-    const id = await videoAt("Studio", "2020-01-01");
-    const [fetched] = await db
-      .insert(mediaItemMarkers)
-      .values({ mediaItemId: id, title: "Doggystyle", startSeconds: 100, source: "tpdb" })
-      .returning();
-    const edited = await request("PATCH", `/api/markers/${fetched.id}`, { endSeconds: 9999 });
-    expect(edited.json()).toMatchObject({ endSeconds: 2288, source: "manual" });
-    expect((await request("PATCH", `/api/markers/${fetched.id}`, { title: "  " })).statusCode).toBe(400);
-    expect((await request("DELETE", `/api/markers/${fetched.id}`)).statusCode).toBe(200);
-    expect((await request("DELETE", `/api/markers/${fetched.id}`)).statusCode).toBe(404);
-  });
-
-  it("lets every profile read markers but only the owner change them", async () => {
-    const id = await videoAt("Studio", "2020-01-01");
-    await request("POST", `/api/media-items/${id}/markers`, { title: "Missionary", startSeconds: 10 });
-    const guest = await signInOtherProfile("Guest");
-    expect((await request("GET", `/api/media-items/${id}/markers`, undefined, guest.cookie)).json().markers).toHaveLength(1);
-    expect((await request("POST", `/api/media-items/${id}/markers`, { title: "X", startSeconds: 1 }, guest.cookie)).statusCode).toBe(403);
-    expect((await request("GET", `/api/tpdb/match/${id}`, undefined, guest.cookie)).statusCode).toBe(403);
-  });
-
-  it("hides a vault item's markers", async () => {
-    const id = await makeItem(libraryId, { hiddenAt: new Date() });
-    await db.insert(mediaItemMarkers).values({ mediaItemId: id, title: "Secret", startSeconds: 1, source: "manual" });
-    expect((await request("GET", `/api/media-items/${id}/markers`)).statusCode).toBe(404);
-    expect((await request("GET", "/api/markers/names")).json().names).toEqual([]);
-    expect((await request("GET", "/api/markers?name=secret")).json().markers).toEqual([]);
-  });
-
-  it("groups spellings of one position across the library", async () => {
-    const a = await videoAt("Studio A", "2020-01-01");
-    const b = await videoAt("Studio B", "2021-01-01");
-    await db.insert(mediaItemMarkers).values([
-      { mediaItemId: a, title: "Standing Doggystyle", startSeconds: 10, source: "tpdb" },
-      { mediaItemId: a, title: "Standing Doggystyle", startSeconds: 90, source: "tpdb" },
-      { mediaItemId: b, title: "Standing Doggy Style", startSeconds: 20, source: "tpdb" },
-      { mediaItemId: b, title: "Blowjob", startSeconds: 5, source: "tpdb" },
-    ]);
-    const names = (await request("GET", "/api/markers/names")).json().names;
-    expect(names[0]).toMatchObject({ key: "standingdoggystyle", name: "Standing Doggystyle", markers: 3, videos: 2 });
-    const list = (await request("GET", "/api/markers?name=standing%20doggy%20style")).json();
-    expect(list.markers).toHaveLength(3);
-    expect(list.markers[0]).toMatchObject({ studio: expect.any(String), item: { id: expect.any(Number) } });
-    expect((await request("GET", "/api/markers")).statusCode).toBe(400);
-  });
-
-  it("goes when its video is deleted", async () => {
-    const id = await videoAt("Studio", "2020-01-01");
-    await request("POST", `/api/media-items/${id}/markers`, { title: "Missionary", startSeconds: 10 });
-    await deleteItems([id]);
-    expect(await db.select().from(mediaItemMarkers)).toEqual([]);
-  });
-
-  it("explains a missing key", async () => {
-    delete process.env.TPDB_API_KEY;
-    const id = await videoAt("Studio", "2020-01-01");
-    const res = await request("GET", `/api/tpdb/match/${id}`);
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error).toContain("TPDB_API_KEY");
-  });
-});
-
-describe("library-wide fetch", () => {
-  it("takes confident matches, records every video it checked, and skips them next time", async () => {
-    const calls = fakeTpdb([mainEvent]);
-    const matched = await videoAt("Blacked Raw", "2020-02-13");
-    const unmatched = await videoAt("Someone Else", "2020-02-13");
-    await makeItem(libraryId, { title: "No studio or date" });
-
-    const started = await request("POST", "/api/tpdb/fetch-all");
-    expect(started.statusCode).toBe(202);
-    expect(started.json()).toMatchObject({ running: true, total: 2 });
-    await fetchAllSettled();
-
-    expect((await request("GET", "/api/tpdb")).json().fetchAll).toMatchObject({
-      running: false,
-      checked: 2,
-      matched: 1,
-      markers: 2,
-    });
-    const [row] = await db.select().from(mediaItems).where(eq(mediaItems.id, unmatched));
-    expect(row.tpdbCheckedAt).not.toBeNull();
-    expect(row.tpdbSceneId).toBeNull();
-    expect((await request("GET", `/api/media-items/${matched}/markers`)).json().markers).toHaveLength(2);
+    const first = (await getMarkers(id)).json();
+    expect(first.markers.map((m: { title: string }) => m.title)).toEqual(["Blowjob", "Missionary"]);
+    expect(first.markers[0]).toMatchObject({ startSeconds: 519, endSeconds: 600 });
+    const [row] = await db.select().from(mediaItems).where(eq(mediaItems.id, id));
+    expect(row.tpdbSceneId).toBe("scene-1");
 
     calls.length = 0;
-    await request("POST", "/api/tpdb/fetch-all");
-    await fetchAllSettled();
+    expect((await getMarkers(id)).json().markers).toHaveLength(2);
     expect(calls).toEqual([]);
   });
 
-  it("stops at a rejected key", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 401 })));
-    await videoAt("A", "2020-01-01");
-    await videoAt("B", "2020-01-02");
-    await request("POST", "/api/tpdb/fetch-all");
-    await fetchAllSettled();
-    const status = (await request("GET", "/api/tpdb")).json().fetchAll;
-    expect(status).toMatchObject({ checked: 0, error: "ThePornDB rejected the API key." });
+  it("asks once when the player opens it twice at the same moment", async () => {
+    const calls = fakeTpdb([mainEvent]);
+    const id = await videoAt("Blacked Raw", "2020-02-13");
+    await Promise.all([getMarkers(id), getMarkers(id)]);
+    expect(calls.filter((url) => url.includes("/scenes?"))).toHaveLength(1);
+    expect(await db.select().from(mediaItemMarkers)).toHaveLength(2);
+  });
+
+  it("records a video with no sure match as checked, with no markers", async () => {
+    const calls = fakeTpdb([mainEvent]);
+    const id = await videoAt("Someone Else", "2020-02-13");
+    expect((await getMarkers(id)).json().markers).toEqual([]);
+    calls.length = 0;
+    await getMarkers(id);
+    expect(calls).toEqual([]);
+  });
+
+  it("does not ask about a video without a studio and date, nor mark it checked", async () => {
+    const calls = fakeTpdb([mainEvent]);
+    const id = await videoAt("Blacked Raw", null);
+    expect((await getMarkers(id)).json().markers).toEqual([]);
+    expect(calls).toEqual([]);
+    const [row] = await db.select().from(mediaItems).where(eq(mediaItems.id, id));
+    expect(row.tpdbCheckedAt).toBeNull();
+  });
+
+  it("leaves a video unchecked when ThePornDB can't be reached", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 503 })));
+    const id = await videoAt("Blacked Raw", "2020-02-13");
+    expect((await getMarkers(id)).statusCode).toBe(200);
+    const [row] = await db.select().from(mediaItems).where(eq(mediaItems.id, id));
+    expect(row.tpdbCheckedAt).toBeNull();
+  });
+
+  it("asks nothing without a key", async () => {
+    delete process.env.TPDB_API_KEY;
+    const calls = fakeTpdb([mainEvent]);
+    const id = await videoAt("Blacked Raw", "2020-02-13");
+    expect((await getMarkers(id)).json().markers).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it("shows every profile the same markers, and hides a vault item's", async () => {
+    fakeTpdb([mainEvent]);
+    const id = await videoAt("Blacked Raw", "2020-02-13");
+    await getMarkers(id);
+    const guest = await signInOtherProfile("Guest");
+    expect((await getMarkers(id, guest.cookie)).json().markers).toHaveLength(2);
+
+    const hidden = await makeItem(libraryId, { hiddenAt: new Date() });
+    expect((await getMarkers(hidden)).statusCode).toBe(404);
+  });
+
+  it("goes when its video is deleted", async () => {
+    fakeTpdb([mainEvent]);
+    const id = await videoAt("Blacked Raw", "2020-02-13");
+    await getMarkers(id);
+    await deleteItems([id]);
+    expect(await db.select().from(mediaItemMarkers)).toEqual([]);
   });
 });

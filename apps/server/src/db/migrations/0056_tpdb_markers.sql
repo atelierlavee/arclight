@@ -4,7 +4,6 @@ CREATE TABLE "media_item_markers" (
 	"title" text NOT NULL,
 	"start_seconds" integer NOT NULL,
 	"end_seconds" integer,
-	"source" text NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint

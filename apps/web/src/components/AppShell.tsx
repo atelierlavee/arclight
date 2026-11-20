@@ -161,7 +161,6 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   const [playRequest, setPlayRequest] = useState(0);
   const [miniPlayer, setMiniPlayer] = useState(false);
   const [resumePlayer, setResumePlayer] = useState(false);
-  const [startAt, setStartAt] = useState<number | undefined>(undefined);
   const [focusMode, setFocusMode] = useState(false);
   const [scrolled, setScrolled] = useState(() => window.scrollY > 0);
   // Keying the main region on the path re-runs its entry animation on every
@@ -225,7 +224,6 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
       // asked to read about into a thumbnail in the corner.
       setMiniPlayer(!wantsDetails);
       setResumePlayer(typeof detail !== "number" && detail.resume === true);
-      setStartAt(typeof detail !== "number" ? detail.startAt : undefined);
     }
     window.addEventListener("media-server:play-item", resumeItem);
     return () =>
@@ -412,14 +410,12 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
             itemId={playingId}
             autoPlay={miniPlayer}
             resume={resumePlayer}
-            startAt={startAt}
             mini={miniPlayer}
             onExpand={() => setMiniPlayer(false)}
             onClose={() => {
               setPlayingId(null);
               setMiniPlayer(false);
               setResumePlayer(false);
-              setStartAt(undefined);
             }}
           />
         )}

@@ -798,15 +798,12 @@ export const bookmarks = pgTable("bookmarks", {
 
 /**
  * Named stretches of a video — the positions or acts in a scene — drawn as
- * segments along the seek bar.
+ * segments along the seek bar, as ThePornDB lists them.
  *
  * Library data, not per profile: they describe the video, like its tags, so
- * every profile sees the same ones and only the owner changes them. Personal
- * moments stay in `bookmarks`.
+ * every profile sees the same ones. Personal moments stay in `bookmarks`.
  *
- * `source` is 'tpdb' for markers fetched from ThePornDB, which a re-fetch
- * replaces, and 'manual' for ones added by hand, which it never touches.
- * `end_seconds` is null when the source gave only a start; the segment then
+ * `end_seconds` is null when ThePornDB gave only a start; the segment then
  * runs to the next marker.
  */
 export const mediaItemMarkers = pgTable(
@@ -819,7 +816,6 @@ export const mediaItemMarkers = pgTable(
     title: text("title").notNull(),
     startSeconds: integer("start_seconds").notNull(),
     endSeconds: integer("end_seconds"),
-    source: text("source").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [index("media_item_markers_item_idx").on(table.mediaItemId, table.startSeconds)],
