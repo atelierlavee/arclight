@@ -39,6 +39,7 @@ import { useScreenModes } from "./mediaDetail/useScreenModes";
 import { useVideoPlayback, type PlayerMode } from "./mediaDetail/useVideoPlayback";
 import { qk } from "@/lib/queryKeys";
 import { useIsOwner } from "@/lib/profile";
+import { adjacentPositionStart } from "@/lib/markerApi";
 
 export function MediaDetailModal({
   itemId,
@@ -182,6 +183,17 @@ export function MediaDetailModal({
     void videoRef.current?.play().catch(() => {});
   }
 
+  /** `[` and `]`: the previous or next named position, like chapters. */
+  function jumpToPosition(direction: 1 | -1) {
+    const video = videoRef.current;
+    if (!video) return;
+    const target = adjacentPositionStart(markers, video.currentTime, direction);
+    if (target === undefined) return;
+    seekTo(target);
+    // So the stretches, and which one you landed on, are there to see.
+    revealPlayerControls();
+  }
+
   /**
    * Shows another item in this same modal, from a clean slate.
    *
@@ -266,6 +278,7 @@ export function MediaDetailModal({
     countO,
     cycleSubtitles: subtitles.cycle,
     jumpToBestPart,
+    jumpToPosition,
     toggleContactSheet: () => setContactSheetOpen((open) => !open),
   });
 

@@ -80,6 +80,27 @@ export function markerAt(segments: MarkerSegment[], seconds: number): Marker | u
   return found?.marker;
 }
 
+/**
+ * Seconds into the current position, past which "previous" goes back to its
+ * start rather than to the one before — as chapter keys do in most players.
+ */
+const RESTART_WITHIN = 3;
+
+/**
+ * Where `]` (next) or `[` (previous) should go from `current`: the start of
+ * the next position, or the start of the one playing — or the one before it
+ * when you are only just into it. Undefined when there is nowhere to go.
+ */
+export function adjacentPositionStart(
+  markers: Marker[],
+  current: number,
+  direction: 1 | -1,
+): number | undefined {
+  const starts = [...new Set(markers.map((m) => m.startSeconds))].sort((a, b) => a - b);
+  if (direction === 1) return starts.find((start) => start > current + 0.5);
+  return starts.filter((start) => start <= current - RESTART_WITHIN).at(-1);
+}
+
 export function useMarkers(itemId: number, enabled = true) {
   return useQuery({
     queryKey: qk.markers(itemId),

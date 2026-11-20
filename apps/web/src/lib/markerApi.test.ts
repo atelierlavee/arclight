@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { layoutMarkers, markerAt, markerColor, markerKey, MAX_MARKER_ROWS, type Marker } from "./markerApi";
+import { adjacentPositionStart, layoutMarkers, markerAt, markerColor, markerKey, MAX_MARKER_ROWS, type Marker } from "./markerApi";
 
 let nextId = 1;
 const marker = (title: string, startSeconds: number, endSeconds: number | null = null): Marker => ({
@@ -61,5 +61,22 @@ describe("markerKey and markerColor", () => {
     expect(markerKey("Standing Doggy Style")).toBe(markerKey("Standing Doggystyle"));
     expect(markerColor("Blow Job")).toBe(markerColor("blowjob"));
     expect(markerColor("Missionary")).not.toBe(markerColor("Cowgirl"));
+  });
+});
+
+describe("adjacentPositionStart", () => {
+  const markers = [marker("A", 100), marker("B", 300), marker("C", 300, 400), marker("D", 600)];
+
+  it("goes to the next start, skipping duplicates and the one just landed on", () => {
+    expect(adjacentPositionStart(markers, 50, 1)).toBe(100);
+    expect(adjacentPositionStart(markers, 100, 1)).toBe(300);
+    expect(adjacentPositionStart(markers, 300.2, 1)).toBe(600);
+    expect(adjacentPositionStart(markers, 700, 1)).toBeUndefined();
+  });
+
+  it("goes back to the current one's start, or the one before when only just into it", () => {
+    expect(adjacentPositionStart(markers, 450, -1)).toBe(300);
+    expect(adjacentPositionStart(markers, 301, -1)).toBe(100);
+    expect(adjacentPositionStart(markers, 101, -1)).toBeUndefined();
   });
 });

@@ -663,6 +663,7 @@ start from.
 | `Space` / `K` | Play or pause |
 | `←` `→` | Skip 10 seconds |
 | `0`–`9` | Jump to that tenth of the video — `5` is halfway, `0` the start |
+| `[` `]` | Previous / next named position on the seek bar |
 | `↑` `↓` | Volume |
 | `F` / `M` | Fullscreen / mute |
 | `B` | Bookmark the current moment |

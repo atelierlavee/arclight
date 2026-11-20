@@ -107,6 +107,10 @@ export function HelpPage() {
           <Row keys={["Space", "K"]}>Play or pause.</Row>
           <Row keys={["←", "→"]}>Skip back or forward 10 seconds.</Row>
           <Row keys={["0–9"]}>Jump to that tenth of the video: 5 is halfway, 0 is the start.</Row>
+          <Row keys={["[", "]"]}>
+            Previous or next named position on the seek bar, like chapters. A few
+            seconds into one, [ goes back to its start first.
+          </Row>
           <Row keys={["↑", "↓"]}>Volume up or down. It's remembered for next time.</Row>
           <Row keys={["M"]}>Mute or unmute.</Row>
           <Row keys={["F"]}>Fullscreen.</Row>
