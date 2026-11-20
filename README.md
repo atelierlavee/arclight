@@ -54,6 +54,14 @@ you tick what to keep.
   details* in the inbox and the look-up on a performer's page show matches you
   tick through before anything is saved — cast (women only), studio, tags,
   description and release date
+- **Marks positions on the seek bar** (optional, with a ThePornDB API key in
+  `TPDB_API_KEY`): named, coloured stretches — "Blowjob 8:39", "Missionary
+  15:21" — fetched from ThePornDB for one video (*Find on ThePornDB* under
+  *Positions* in its details) or the whole library (Site settings → Library),
+  matched by studio, release date and title and taken only when sure. The
+  owner can add, rename and delete them by hand too. *Positions* in the
+  sidebar gathers every moment with one name across the library, each a click
+  from playing there
 - **Suggests a filename** in the convention below, with a copy button in the
   inbox. If the studio or title is missing it opens a small form to fill them in
 - **Marks videos organised**: the owner flags a video once its title, cast and

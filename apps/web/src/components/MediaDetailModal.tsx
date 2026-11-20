@@ -44,6 +44,7 @@ export function MediaDetailModal({
   itemId,
   autoPlay = false,
   resume = false,
+  startAt,
   onClose,
   mini = false,
   onExpand,
@@ -51,6 +52,8 @@ export function MediaDetailModal({
   itemId: number;
   autoPlay?: boolean;
   resume?: boolean;
+  /** A second to start at, from a position elsewhere in the app. */
+  startAt?: number;
   onClose: () => void;
   mini?: boolean;
   onExpand?: () => void;
@@ -110,7 +113,7 @@ export function MediaDetailModal({
   const scrollRef = useRef<HTMLDivElement>(null);
   const playerAreaRef = useRef<HTMLDivElement>(null);
 
-  const { bookmarks, scrubSprite, heatmapBuckets, categories, accent, addBookmark } =
+  const { bookmarks, markers, scrubSprite, heatmapBuckets, categories, accent, addBookmark } =
     usePlayerData({ viewingId, item, mode, mini, videoRef });
   const { updateKind, toggleFavorite, saveFraming, toggleWatched, toggleOrganised, countO } =
     useItemActions({
@@ -135,6 +138,7 @@ export function MediaDetailModal({
     revealPlayerControls,
     autoPlay,
     resume,
+    startAt,
     itemId,
     resolveStart: leanBack.resolveStart,
   });
@@ -393,6 +397,7 @@ export function MediaDetailModal({
                   currentTime={playback.currentTime}
                   sprite={scrubSprite}
                   bookmarks={bookmarks}
+                  markers={markers}
                   heatmap={heatmapBuckets}
                   visible={showPlayerControls}
                   onSeek={seekTo}
@@ -542,6 +547,8 @@ export function MediaDetailModal({
               accent={accent}
               categories={categories}
               bookmarks={bookmarks}
+              markers={markers}
+              currentTime={() => videoRef.current?.currentTime ?? null}
               onJumpToBookmark={jumpTo}
               kindPending={updateKind.isPending}
               onChangeKind={(kind) => updateKind.mutate(kind)}

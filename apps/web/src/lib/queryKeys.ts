@@ -118,6 +118,9 @@ export const qk = {
   /** Per-item media the detail modal loads under the item's id. */
   gallery: (id: Id) => ["gallery", id] as const,
   bookmarks: (id: Id) => ["bookmarks", id] as const,
+  markers: (id: Id) => ["markers", id] as const,
+  /** Every video's markers at once, for after a library-wide fetch. */
+  allMarkers: ["markers"] as const,
   heatmap: (id: Id) => ["heatmap", id] as const,
   scrubSprite: (id: Id) => ["scrub-sprite", id] as const,
   subtitles: (id: Id) => ["subtitles", id] as const,
@@ -216,6 +219,15 @@ export const qk = {
     byType: (type: unknown) => ["activity", type] as const,
   },
   achievements: ["achievements"] as const,
+  /** Position markers across the library, for the Positions page. */
+  positions: {
+    all: ["positions"] as const,
+    names: ["positions", "names"] as const,
+    list: (key: string) => ["positions", "list", key] as const,
+  },
+  /** Whether a ThePornDB key is set, and the library-wide fetch's progress. */
+  tpdb: ["tpdb"] as const,
+  tpdbMatch: (id: Id) => ["tpdb-match", id] as const,
   insights: ["insights"] as const,
   streak: ["streak"] as const,
   funStat: ["fun-stat"] as const,
@@ -230,6 +242,7 @@ export function itemScopedKeys(id: Id) {
     qk.mediaItem.detail(id),
     qk.gallery(id),
     qk.bookmarks(id),
+    qk.markers(id),
     qk.heatmap(id),
     qk.scrubSprite(id),
     qk.subtitles(id),

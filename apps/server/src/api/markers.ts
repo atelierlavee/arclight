@@ -1,10 +1,10 @@
-import { and, asc, count, countDistinct, desc, eq, inArray, isNotNull, isNull, not, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { logActivity } from "../activity/log.js";
 import { profileId } from "../auth/profileContext.js";
 import { db } from "../db/client.js";
 import { mediaItemMarkers, mediaItems, mediaItemTypes, studios } from "../db/schema.js";
-import { awaitingApproval, hiddenGate, itemReachable, visibleItems } from "../library/visibility.js";
+import { hiddenGate, itemReachable, visibleItems } from "../library/visibility.js";
 import {
   fetchTpdbMarkers,
   getTpdbKey,
@@ -144,11 +144,12 @@ export function fetchAllSettled(): Promise<void> {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Every approved, present video with a studio and a release date that has not
- * been looked up yet. Without both there is no confident match to take
- * unattended; those are left for the per-video dialog.
+ * Every video the owner can see in the library, with a studio and a release
+ * date, that has not been looked up yet. Without both there is no confident
+ * match to take unattended; those are left for the per-video dialog, as are
+ * videos in the owner's vault.
  */
-async function videosToCheck(): Promise<number[]> {
+async function videosToCheck(viewer: number): Promise<number[]> {
   const videoTypeIds = db
     .select({ id: mediaItemTypes.id })
     .from(mediaItemTypes)
@@ -159,9 +160,7 @@ async function videosToCheck(): Promise<number[]> {
     .where(
       and(
         inArray(mediaItems.itemTypeId, videoTypeIds),
-        eq(mediaItems.inScope, true),
-        isNull(mediaItems.missingSince),
-        not(awaitingApproval()),
+        visibleItems(viewer),
         isNotNull(mediaItems.studioId),
         isNotNull(mediaItems.releaseDate),
         isNull(mediaItems.tpdbCheckedAt),
@@ -428,7 +427,7 @@ export async function markerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/tpdb", async () => ({ configured: getTpdbKey() !== null, fetchAll: fetchAllStatus() }));
 
-  app.post("/api/tpdb/fetch-all", async (_request, reply) => {
+  app.post("/api/tpdb/fetch-all", async (request, reply) => {
     const apiKey = getTpdbKey();
     if (!apiKey) {
       reply.code(400);
@@ -438,7 +437,7 @@ export async function markerRoutes(app: FastifyInstance): Promise<void> {
       reply.code(409);
       return { error: "Already fetching positions." };
     }
-    const ids = await videosToCheck();
+    const ids = await videosToCheck(profileId(request));
     fetchAll = {
       running: true,
       total: ids.length,

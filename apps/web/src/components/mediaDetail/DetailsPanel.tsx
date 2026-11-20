@@ -11,9 +11,11 @@ import { ThumbnailPicker } from "../ThumbnailPicker";
 import { FramingEditor, type FramingValue } from "../FramingEditor";
 import { StarRating } from "../StarRating";
 import { BookmarkList } from "../BookmarkList";
+import { PositionList } from "../PositionList";
 import { SeriesAssignment } from "../SeriesAssignment";
 import { NoteEditor } from "../NoteEditor";
 import type { Bookmark } from "@/lib/bookmarkApi";
+import type { Marker } from "@/lib/markerApi";
 import type { Category } from "@/lib/categoryApi";
 import { setItemNote, thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { useQueryClient } from "@tanstack/react-query";
@@ -66,6 +68,8 @@ export function DetailsPanel({
   accent,
   categories,
   bookmarks,
+  markers,
+  currentTime,
   onJumpToBookmark,
   kindPending,
   onChangeKind,
@@ -84,6 +88,9 @@ export function DetailsPanel({
   accent: string | null;
   categories: Category[];
   bookmarks: Bookmark[];
+  markers: Marker[];
+  /** Where playback is now, for adding a position there. */
+  currentTime: () => number | null;
   onJumpToBookmark: (seconds: number) => void;
   kindPending: boolean;
   onChangeKind: (kind: string) => void;
@@ -209,6 +216,21 @@ export function DetailsPanel({
             readOnly={!editing}
           />
         </div>
+
+        {item.itemType === "video" && (
+          <div className="space-y-1.5 pt-1">
+            <FieldLabel accent={accent}>
+              Positions{markers.length > 0 && ` · ${markers.length}`}
+            </FieldLabel>
+            <PositionList
+              itemId={item.id}
+              durationSeconds={item.durationSeconds}
+              markers={markers}
+              currentTime={currentTime}
+              onJump={onJumpToBookmark}
+            />
+          </div>
+        )}
 
         {item.itemType === "video" && (
           <div className="space-y-1.5 pt-1">

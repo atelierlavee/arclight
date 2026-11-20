@@ -26,6 +26,7 @@ import {
   UserCheck,
   BookOpen,
   ListOrdered,
+  Shapes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreateCollectionModal } from "./CreateCollectionModal";
@@ -351,6 +352,15 @@ export function Sidebar({
         >
           <UserCheck className="size-4 shrink-0" />
           {!collapsed && "Following"}
+        </Link>
+        <Link
+          to="/positions"
+          className={navItemClass}
+          title={collapsed ? "Positions" : undefined}
+          activeProps={{ className: "bg-accent text-foreground font-medium" }}
+        >
+          <Shapes className="size-4 shrink-0" />
+          {!collapsed && "Positions"}
         </Link>
         {isOwner && <InboxLink collapsed={collapsed} navItemClass={navItemClass} />}
         <Link

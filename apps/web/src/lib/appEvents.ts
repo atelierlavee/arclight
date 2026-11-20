@@ -20,6 +20,8 @@ export const DISCREET_OFF_EVENT = "media-server:discreet-off";
 export type PlayItemDetail = {
   id: number;
   resume?: boolean;
+  /** Start playing at this second instead of the beginning or the resume point. */
+  startAt?: number;
   /**
    * Open the full detail view rather than the corner mini player.
    *
@@ -34,10 +36,10 @@ export function openSearch(): void {
   window.dispatchEvent(new Event(OPEN_SEARCH_EVENT));
 }
 
-export function playItem(id: number, options: { resume?: boolean } = {}): void {
+export function playItem(id: number, options: { resume?: boolean; startAt?: number } = {}): void {
   window.dispatchEvent(
     new CustomEvent<PlayItemDetail>(PLAY_ITEM_EVENT, {
-      detail: { id, resume: options.resume ?? false },
+      detail: { id, resume: options.resume ?? false, startAt: options.startAt },
     }),
   );
 }

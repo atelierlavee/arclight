@@ -42,6 +42,7 @@ function forgetVaultContents(queryClient: QueryClient): void {
   }
   // Related lists computed while unlocked may include hidden items.
   queryClient.removeQueries({ queryKey: qk.relatedItems.all });
+  queryClient.removeQueries({ queryKey: qk.positions.all });
   queryClient.removeQueries({ queryKey: qk.vaultItems });
 }
 

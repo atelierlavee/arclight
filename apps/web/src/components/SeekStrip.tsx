@@ -6,6 +6,7 @@ import {
   type Bookmark,
   type ScrubSprite,
 } from "@/lib/bookmarkApi";
+import { layoutMarkers, markerAt, markerColor, type Marker } from "@/lib/markerApi";
 import { cn } from "@/lib/utils";
 
 /** How close, in pixels, a press has to land to a bookmark to snap onto it. */
@@ -32,6 +33,7 @@ export function SeekStrip({
   currentTime,
   sprite,
   bookmarks,
+  markers = [],
   heatmap,
   visible,
   onSeek,
@@ -42,6 +44,8 @@ export function SeekStrip({
   currentTime: number;
   sprite: ScrubSprite | undefined;
   bookmarks: Bookmark[];
+  /** Named positions, drawn as coloured stretches above the line. */
+  markers?: Marker[];
   heatmap?: number[];
   visible: boolean;
   onSeek: (seconds: number) => void;
@@ -55,6 +59,10 @@ export function SeekStrip({
   const [dragging, setDragging] = useState(false);
 
   const heatmapMax = heatmap ? Math.max(...heatmap) : 0;
+  const segments = layoutMarkers(markers, duration);
+  const rows = segments.length ? Math.max(...segments.map((s) => s.row)) + 1 : 0;
+  // Each row is 4px with a 2px gap; the heatmap sits on top of the band.
+  const bandHeight = rows ? rows * 6 : 0;
 
   if (!(duration > 0)) return null;
 
@@ -99,6 +107,7 @@ export function SeekStrip({
   const hoveredBookmark = hover
     ? bookmarks.find((bookmark) => bookmark.positionSeconds === hover.seconds)
     : undefined;
+  const hoveredMarker = hover ? markerAt(segments, hover.seconds) : undefined;
 
   const previewWidth = sprite ? Math.min(PREVIEW_MAX_WIDTH, sprite.tileWidth) : 0;
   const previewScale = sprite ? previewWidth / sprite.tileWidth : 1;
@@ -148,9 +157,15 @@ export function SeekStrip({
               }}
             />
           )}
-          <span className="max-w-[12rem] truncate rounded bg-black/80 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">
+          <span className="max-w-[14rem] truncate rounded bg-black/80 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">
             {formatTimestamp(hover.seconds)}
             {hoveredBookmark?.label && ` · ${hoveredBookmark.label}`}
+            {hoveredMarker && !hoveredBookmark?.label && (
+              <>
+                {" · "}
+                <span style={{ color: markerColor(hoveredMarker.title) }}>{hoveredMarker.title}</span>
+              </>
+            )}
           </span>
         </div>
       )}
@@ -178,8 +193,33 @@ export function SeekStrip({
         // padding is what a thumb can actually land on.
         className="group relative flex h-5 cursor-pointer touch-none items-center"
       >
+        {segments.length > 0 && (
+          // Part of the track, so pressing a stretch seeks like pressing the
+          // line does — and snaps to nothing but the time under the pointer.
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-full mb-0.5"
+            style={{ height: bandHeight }}
+          >
+            {segments.map((segment) => (
+              <span
+                key={segment.marker.id}
+                className="absolute h-1 rounded-full opacity-90 ring-1 ring-black/30"
+                style={{
+                  left: `${(segment.start / duration) * 100}%`,
+                  width: `max(3px, calc(${((segment.end - segment.start) / duration) * 100}% - 1px))`,
+                  bottom: segment.row * 6,
+                  backgroundColor: markerColor(segment.marker.title),
+                }}
+              />
+            ))}
+          </div>
+        )}
         {heatmapMax > 1 && heatmap && (
-          <div className="absolute inset-x-0 bottom-full mb-0.5 flex h-6 items-end gap-px opacity-0 transition-opacity group-hover:opacity-100">
+          <div
+            className="absolute inset-x-0 bottom-full flex h-6 items-end gap-px opacity-0 transition-opacity group-hover:opacity-100"
+            style={{ marginBottom: 2 + bandHeight }}
+          >
             {heatmap.map((count, i) => (
               <div
                 key={i}

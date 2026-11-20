@@ -13,6 +13,7 @@ import { HelpPage } from "@/pages/HelpPage";
 import { FollowingPage } from "./pages/FollowingPage";
 import { DiaryPage } from "./pages/DiaryPage";
 import { TiersPage } from "./pages/TiersPage";
+import { PositionsPage } from "./pages/PositionsPage";
 import { HomePage } from "@/pages/HomePage";
 import { InboxPage } from "@/pages/InboxPage";
 import { VaultPage } from "@/pages/VaultPage";
@@ -255,6 +256,16 @@ const diaryRoute = createRoute({
   component: DiaryPage,
 });
 
+// Named positions across the library; ?position= is the chosen name's key.
+const positionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/positions",
+  validateSearch: (search: Record<string, unknown>): { position?: string } => ({
+    position: typeof search.position === "string" && search.position ? search.position : undefined,
+  }),
+  component: PositionsPage,
+});
+
 const tiersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tiers",
@@ -289,6 +300,7 @@ const routeTree = rootRoute.addChildren([
   followingRoute,
   diaryRoute,
   tiersRoute,
+  positionsRoute,
 ]);
 
 export const router = createRouter({
