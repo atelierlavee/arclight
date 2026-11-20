@@ -231,6 +231,10 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const info = await ensureScrubSprite(file.filePath, id, file.contentHash, item.durationSeconds);
+      if (info === "offline") {
+        reply.code(404);
+        return { error: "The video file is not reachable — is its drive connected?", offline: true };
+      }
       if (!info) {
         reply.code(404);
         return { error: "No preview frames could be read from this video" };

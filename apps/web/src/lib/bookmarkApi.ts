@@ -44,10 +44,25 @@ export function spriteFrameAt(sprite: ScrubSprite, seconds: number): { x: number
   };
 }
 
+/** The video's file could not be reached (its drive is not connected), as opposed to unreadable. */
+export class VideoOfflineError extends Error {
+  constructor() {
+    super("The video file is not reachable");
+    this.name = "VideoOfflineError";
+  }
+}
+
 export function useScrubSprite(itemId: number, enabled: boolean) {
   return useQuery({
     queryKey: qk.scrubSprite(itemId),
-    queryFn: async () => json<ScrubSprite>(await fetch(`/api/media-items/${itemId}/scrub`)),
+    queryFn: async () => {
+      const res = await fetch(`/api/media-items/${itemId}/scrub`);
+      if (res.status === 404) {
+        const body = (await res.json().catch(() => null)) as { offline?: boolean } | null;
+        if (body?.offline) throw new VideoOfflineError();
+      }
+      return json<ScrubSprite>(res);
+    },
     enabled,
     // Built once per file and never changes, so there is nothing to refetch.
     // No retry: a 404 means ffmpeg could read no frames, and asking again

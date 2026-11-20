@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { access, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import sharp from "sharp";
@@ -189,17 +189,30 @@ async function generate(
  */
 const building = new Map<number, Promise<SpriteInfo | null>>();
 
-/** The sprite's layout, building the sprite first if it isn't cached. */
+/**
+ * The sprite's layout, building the sprite first if it isn't cached.
+ *
+ * "offline" when there is no sheet yet and the video itself cannot be
+ * reached — its drive unplugged, most often. Checked up front because every
+ * one of the hundred seeks would otherwise fail on its own, taking seconds to
+ * arrive at an answer that looks the same as a video ffmpeg cannot read.
+ */
 export async function ensureScrubSprite(
   videoPath: string,
   mediaItemId: number,
   contentHash: string | null,
   durationSeconds: number,
-): Promise<SpriteInfo | null> {
+): Promise<SpriteInfo | "offline" | null> {
   try {
     return JSON.parse(await readFile(infoPathFor(mediaItemId, contentHash), "utf8")) as SpriteInfo;
   } catch {
     // Not built yet.
+  }
+
+  try {
+    await access(videoPath);
+  } catch {
+    return "offline";
   }
 
   const pending = building.get(mediaItemId);

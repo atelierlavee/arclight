@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Bookmark as BookmarkIcon, Flame, LayoutGrid, Loader2, X } from "lucide-react";
 import { Portal } from "./Portal";
 import { useFocusTrap } from "@/lib/useFocusTrap";
-import { formatTimestamp, useScrubSprite, type Bookmark, type ScrubSprite } from "@/lib/bookmarkApi";
+import {
+  formatTimestamp,
+  useScrubSprite,
+  VideoOfflineError,
+  type Bookmark,
+  type ScrubSprite,
+} from "@/lib/bookmarkApi";
 import { HEATMAP_MIN_PEAK } from "@/lib/heatmap";
 import { cn } from "@/lib/utils";
 import { pickFrames, type Frame } from "@/lib/contactSheet";
@@ -60,7 +66,7 @@ export function ContactSheet({
   onPick: (seconds: number) => void;
   onClose: () => void;
 }) {
-  const { data: sprite, isPending, isError } = useScrubSprite(itemId, true);
+  const { data: sprite, isPending, isError, error } = useScrubSprite(itemId, true);
   const [density, setDensity] = useState<number>(50);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -180,7 +186,9 @@ export function ContactSheet({
           )}
           {isError && (
             <p className="py-16 text-center text-sm text-muted-foreground">
-              No frames could be read from this video.
+              {error instanceof VideoOfflineError
+                ? "This video's drive isn't connected. Plug it in and open the contact sheet again."
+                : "No frames could be read from this video."}
             </p>
           )}
 
