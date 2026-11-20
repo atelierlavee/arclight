@@ -32,6 +32,8 @@ services:
       # Turns on "Look up on StashDB" on performer pages. Unset, the feature
       # stays off and nothing is sent anywhere.
       STASHDB_API_KEY: ${STASHDB_API_KEY:-}
+      # Turns on position markers from ThePornDB. Unset, nothing is sent.
+      TPDB_API_KEY: ${TPDB_API_KEY:-}
     volumes:
       # Kept for compatibility with an existing library: paths already in the
       # database are /media/..., so this must stay pointed where it was.

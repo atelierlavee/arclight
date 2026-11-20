@@ -26,6 +26,7 @@ import { privacyRoutes } from "./api/privacy.js";
 import { scanRoutes } from "./api/scan.js";
 import { settingsRoutes } from "./api/settings.js";
 import { stashDbRoutes } from "./api/stashdb.js";
+import { markerRoutes } from "./api/markers.js";
 import { missingRoutes } from "./api/missing.js";
 import { statsRoutes } from "./api/stats.js";
 import { seriesRoutes } from "./api/series.js";
@@ -236,6 +237,7 @@ export async function buildApp({
   await app.register(seriesRoutes);
   await app.register(settingsRoutes);
   await app.register(stashDbRoutes);
+  await app.register(markerRoutes);
   await app.register(libraryRoutes);
   await app.register(backupRoutes);
   await app.register(categoryRoutes);
