@@ -84,8 +84,6 @@ export const qk = {
   tiers: (kind: string) => ["tiers", kind] as const,
   /** The tier list's library search for videos to add to the pool. */
   tierSearch: (q: string) => ["tier-search", q] as const,
-  /** The multi-view page's "add a video" search. */
-  multiviewSearch: (q: string) => ["multiview-search", q] as const,
   /** The Following page: who is followed, and who might be. */
   following: {
     all: ["following"] as const,
