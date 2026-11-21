@@ -5,7 +5,7 @@ import { profiles } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../auth/passwords.js";
 import { serialized } from "../auth/serialize.js";
 import { lockPrivacySession } from "../auth/privacyUnlock.js";
-import { accountPasswordOk } from "../auth/profileProof.js";
+import { accountPasswordOk, proveIdentity } from "../auth/profileProof.js";
 import { setSessionProfile } from "../auth/sessions.js";
 import { sweeper } from "../auth/sweep.js";
 import { lockVaultSession } from "../auth/vaultUnlock.js";
@@ -69,6 +69,8 @@ function present(row: ProfileRow) {
   return {
     id: row.id,
     name: row.name,
+    firstName: row.firstName,
+    lastName: row.lastName,
     color: row.color,
     isOwner: row.isOwner,
     hasPin: row.pinHash !== null,
@@ -144,6 +146,23 @@ function cleanName(raw: unknown): { name: string } | { error: string } {
   const name = raw.trim();
   if (name.length > MAX_NAME_LENGTH) return { error: `name must be at most ${MAX_NAME_LENGTH} characters` };
   return { name };
+}
+
+/** How long a first or last name may be. */
+const MAX_PERSON_NAME_LENGTH = 40;
+
+/**
+ * Validates a first or last name: trimmed, at most 40 characters, and an
+ * empty one clears it (null). Returns an error message instead when invalid.
+ */
+function cleanPersonName(raw: unknown, label: string): { value: string | null } | { error: string } {
+  if (raw === null) return { value: null };
+  if (typeof raw !== "string") return { error: `${label} must be text` };
+  const value = raw.trim();
+  if (value.length > MAX_PERSON_NAME_LENGTH) {
+    return { error: `${label} must be at most ${MAX_PERSON_NAME_LENGTH} characters` };
+  }
+  return { value: value || null };
 }
 
 async function nameTaken(userId: number, name: string, exceptId?: number): Promise<boolean> {
@@ -249,7 +268,20 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
    * Rename / recolour / reorder. Your own profile, or — for the owner —
    * anyone's. Not in OWNER_ONLY_ROUTES because "self" is decided per row.
    */
-  app.patch<{ Params: { id: string }; Body: { name?: unknown; color?: unknown; position?: unknown } | undefined }>(
+  app.patch<{
+    Params: { id: string };
+    Body:
+      | {
+          name?: unknown;
+          firstName?: unknown;
+          lastName?: unknown;
+          color?: unknown;
+          position?: unknown;
+          accountPassword?: unknown;
+          profilePin?: unknown;
+        }
+      | undefined;
+  }>(
     "/api/profiles/:id",
     async (request, reply) => {
       const row = await ownProfile(request, request.params.id);
@@ -263,6 +295,18 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Only the owner profile can change other profiles", code: "owner_only" };
       }
       const body = request.body ?? {};
+      // Any change to a profile needs proof it's you (see proveIdentity).
+      // Reordering the picker alone is housekeeping, not a change to anyone.
+      const changesProfile = ["name", "firstName", "lastName", "color"].some(
+        (field) => body[field as keyof typeof body] !== undefined,
+      );
+      if (changesProfile) {
+        const failure = await proveIdentity(request, body);
+        if (failure) {
+          reply.code(403);
+          return failure;
+        }
+      }
       const patch: Partial<typeof profiles.$inferInsert> = {};
       if (body.name !== undefined) {
         const named = cleanName(body.name);
@@ -275,6 +319,18 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
           return { error: "A profile with that name already exists" };
         }
         patch.name = named.name;
+      }
+      for (const [field, label] of [
+        ["firstName", "First name"],
+        ["lastName", "Last name"],
+      ] as const) {
+        if (body[field] === undefined) continue;
+        const cleaned = cleanPersonName(body[field], label);
+        if ("error" in cleaned) {
+          reply.code(400);
+          return { error: cleaned.error };
+        }
+        patch[field] = cleaned.value;
       }
       if (body.color !== undefined) {
         if (typeof body.color !== "string" || !COLOR_PATTERN.test(body.color)) {

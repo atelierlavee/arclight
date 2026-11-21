@@ -10,6 +10,7 @@ import {
   profileInitial,
   selectProfile,
   type Profile,
+  displayName,
 } from "@/lib/profilesApi";
 import { qk } from "@/lib/queryKeys";
 
@@ -99,9 +100,7 @@ export function ProfilePicker() {
             </p>
           )}
 
-          {profiles.isPending && (
-            <Loader2 className="mx-auto size-6 animate-spin text-muted-foreground" />
-          )}
+          {profiles.isPending && <Loader2 className="mx-auto size-6 animate-spin text-muted-foreground" />}
           {profiles.isError && (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">The profiles couldn’t be loaded.</p>
@@ -122,12 +121,12 @@ export function ProfilePicker() {
                   type="button"
                   onClick={() => void choose(profile)}
                   disabled={busy !== null}
-                  aria-label={`${profile.name}${profile.hasPin ? " (PIN protected)" : ""}`}
+                  aria-label={`${displayName(profile)}${profile.hasPin ? " (PIN protected)" : ""}`}
                   className="group flex w-24 flex-col items-center gap-2 rounded-lg p-1 outline-none disabled:opacity-60 md:w-32"
                 >
                   <span className="relative">
                     <ProfileAvatar
-                      name={profile.name}
+                      name={displayName(profile)}
                       color={profile.color}
                       className="size-24 text-4xl ring-offset-2 ring-offset-background transition group-hover:ring-2 group-hover:ring-foreground group-focus-visible:ring-2 group-focus-visible:ring-foreground md:size-32 md:text-5xl"
                     />
@@ -136,7 +135,7 @@ export function ProfilePicker() {
                     )}
                   </span>
                   <span className="flex max-w-full items-center gap-1 truncate text-sm text-muted-foreground group-hover:text-foreground">
-                    <span className="truncate">{profile.name}</span>
+                    <span className="truncate">{displayName(profile)}</span>
                     {profile.hasPin && <Lock className="size-3 shrink-0" aria-hidden />}
                   </span>
                 </button>
@@ -254,13 +253,21 @@ export function PinPad({
     "flex h-14 items-center justify-center rounded-lg bg-secondary text-lg font-semibold transition-colors hover:bg-accent disabled:opacity-50";
 
   return (
-    <div className="w-full max-w-xs space-y-6 text-center" role="group" aria-label={`PIN for ${profile.name}`}>
+    <div
+      className="w-full max-w-xs space-y-6 text-center"
+      role="group"
+      aria-label={`PIN for ${displayName(profile)}`}
+    >
       <div className="flex flex-col items-center gap-3">
-        <ProfileAvatar name={profile.name} color={profile.color} className="size-20 text-3xl" />
-        <h1 className="text-lg font-semibold">Enter {profile.name}’s PIN</h1>
+        <ProfileAvatar name={displayName(profile)} color={profile.color} className="size-20 text-3xl" />
+        <h1 className="text-lg font-semibold">Enter {displayName(profile)}’s PIN</h1>
       </div>
 
-      <div className="flex justify-center gap-2" aria-live="polite" aria-label={`${pin.length} digits entered`}>
+      <div
+        className="flex justify-center gap-2"
+        aria-live="polite"
+        aria-label={`${pin.length} digits entered`}
+      >
         {Array.from({ length: Math.max(MIN_PIN_LENGTH, pin.length) }, (_, i) => (
           <span
             key={i}
@@ -283,7 +290,13 @@ export function PinPad({
 
       <div className="grid grid-cols-3 gap-2">
         {KEYS.map((key) => (
-          <button key={key} type="button" className={padButton} disabled={locked || checking} onClick={() => press(key)}>
+          <button
+            key={key}
+            type="button"
+            className={padButton}
+            disabled={locked || checking}
+            onClick={() => press(key)}
+          >
             {key}
           </button>
         ))}

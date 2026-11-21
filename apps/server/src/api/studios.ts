@@ -62,16 +62,17 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
         // A frame to put on the card. Highest id is the most recently
         // scanned, which is the freshest thing the studio has.
         representativeItemId: sql<number | null>`max(${mediaItems.id})`,
-        // A handful of recent frames, so a card can show a different one each
-        // time instead of the same still forever. Capped rather than every
-        // id: the homepage only needs something to choose between, and a
-        // studio with hundreds of videos should not send hundreds of numbers
-        // to pick one of them.
+        // A handful of frames drawn at random from every video the studio
+        // has, so its cover changes from visit to visit and takes in new
+        // videos as the studio grows, rather than one still forever. Capped
+        // rather than every id: a card only needs something to choose
+        // between, and a studio with hundreds of videos should not send
+        // hundreds of numbers to pick one of them.
         //
         // The filter matters — a LEFT JOIN gives studios with no videos a
         // single NULL row, and array_agg would happily collect that.
         frameItemIds: sql<number[]>`coalesce(
-          (array_agg(${mediaItems.id} order by ${mediaItems.id} desc)
+          (array_agg(${mediaItems.id} order by random())
             filter (where ${mediaItems.id} is not null))[1:8],
           '{}'
         )`,
@@ -96,7 +97,42 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
 
     const followed = await followedStudioIds(profile);
     const rolled = rollUpNetworks(rows, await db.select({ id: studios.id, parentId: studios.parentId }).from(studios));
-    return { studios: rolled.map((studio) => ({ ...studio, isFollowed: followed.has(studio.id) })) };
+
+    // Each frame's thumbnail version, so a card's image URL changes when its
+    // thumbnail is replaced. Thumbnails are cached for a year by URL; an id
+    // alone gives the same URL forever, and a new thumbnail never shows.
+    const frameIds = [
+      ...new Set(
+        rolled.flatMap((studio) =>
+          studio.representativeItemId == null
+            ? studio.frameItemIds
+            : [...studio.frameItemIds, studio.representativeItemId],
+        ),
+      ),
+    ];
+    const thumbnailFileOf = new Map(
+      frameIds.length
+        ? (
+            await db
+              .select({ id: mediaItems.id, thumbnailFile: mediaItems.thumbnailFile })
+              .from(mediaItems)
+              .where(inArray(mediaItems.id, frameIds))
+          ).map((row) => [row.id, row.thumbnailFile])
+        : [],
+    );
+
+    return {
+      studios: rolled.map((studio) => {
+        const ids = studio.representativeItemId == null
+          ? studio.frameItemIds
+          : [...studio.frameItemIds, studio.representativeItemId];
+        return {
+          ...studio,
+          isFollowed: followed.has(studio.id),
+          thumbnailFiles: Object.fromEntries(ids.map((id) => [id, thumbnailFileOf.get(id) ?? null])),
+        };
+      }),
+    };
   });
 
   /**
@@ -355,6 +391,16 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
  * without overlap, and frames just merge. A visited set stops a loop a
  * restore might bring back from walking forever.
  */
+/** A copy in random order (Fisher–Yates). */
+function shuffle<T>(items: T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 function rollUpNetworks<
   T extends { id: number; videoCount: number; representativeItemId: number | null; frameItemIds: number[] },
 >(rows: T[], links: { id: number; parentId: number | null }[]) {
@@ -372,7 +418,9 @@ function rollUpNetworks<
       if (network) {
         network.videoCount += row.videoCount;
         network.representativeItemId = Math.max(network.representativeItemId ?? 0, row.representativeItemId ?? 0) || null;
-        network.frameItemIds = [...network.frameItemIds, ...row.frameItemIds].sort((a, b) => b - a).slice(0, 8);
+        // Shuffled, as each site's own sample is, so a network's cover draws
+        // from all its sites rather than favouring the first one listed.
+        network.frameItemIds = shuffle([...network.frameItemIds, ...row.frameItemIds]).slice(0, 8);
       }
       up = parentOf.get(up) ?? null;
     }

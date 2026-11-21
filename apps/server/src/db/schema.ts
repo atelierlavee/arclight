@@ -547,6 +547,10 @@ export const profiles = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    // The person's own name, for greeting them; optional. `name` stays the
+    // profile's handle — unique within the account, shown in the picker.
+    firstName: text("first_name"),
+    lastName: text("last_name"),
     color: text("color").notNull().default("#6366f1"),
     isOwner: boolean("is_owner").notNull().default(false),
     // Optional 4–8 digit PIN, scrypt-hashed like every other credential.

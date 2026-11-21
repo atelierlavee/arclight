@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PreviewClip } from "../PreviewClip";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Play } from "lucide-react";
@@ -13,7 +14,7 @@ import {
   type SharedVideo,
 } from "@/lib/performerApi";
 import { qk } from "@/lib/queryKeys";
-import { fetchStudios } from "@/lib/studioApi";
+import { fetchStudios, randomStudioFrame, studioFrameUrl, type StudioSummary } from "@/lib/studioApi";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn, formatDuration } from "@/lib/utils";
 
@@ -100,6 +101,139 @@ export function LibraryScene() {
   );
 }
 
+/** The silk's canvas, in its own units. */
+const SILK_W = 600;
+const SILK_H = 300;
+
+/**
+ * One ribbon of silk as many fine lines: each a wave, the waves shifting
+ * step by step from one shape to another, so together they twist like
+ * fabric. Worked out once, at load, since it never changes.
+ */
+function silkRibbon(
+  lines: number,
+  from: { amp: number; phase: number; offset: number },
+  to: { amp: number; phase: number; offset: number },
+  width = SILK_W,
+  waves = 1.15,
+): string[] {
+  const out: string[] = [];
+  for (let line = 0; line < lines; line++) {
+    const t = line / (lines - 1);
+    const amp = from.amp + (to.amp - from.amp) * t;
+    const phase = from.phase + (to.phase - from.phase) * t;
+    const offset = from.offset + (to.offset - from.offset) * t;
+    let d = "";
+    for (let x = 0; x <= width; x += 8) {
+      const u = x / width;
+      // Swells in the middle and eases off at the ends.
+      const swell = 0.55 + 0.45 * Math.sin(u * Math.PI);
+      const y = SILK_H / 2 + offset + amp * swell * Math.sin(u * Math.PI * 2 * waves + phase);
+      d += `${x === 0 ? "M" : "L"}${x} ${y.toFixed(1)} `;
+    }
+    out.push(d);
+  }
+  return out;
+}
+
+/** The pink ribbon runs this many times the box's width, out to the left. */
+const PINK_REACH = 2.2;
+const SILK_PINK = silkRibbon(
+  46,
+  { amp: 70, phase: 0, offset: -10 },
+  { amp: 40, phase: 1.6, offset: 20 },
+  SILK_W * PINK_REACH,
+  1.15 * PINK_REACH,
+);
+const SILK_VIOLET = silkRibbon(36, { amp: 55, phase: 2.4, offset: 10 }, { amp: 85, phase: 3.6, offset: -15 });
+
+// The same ribbons a moment later in their sway: phase moved on, the twist
+// a little different. Each line morphs to its twin and back, so the silk
+// moves like fabric in a draught. Same number of points, so they morph cleanly.
+const SILK_PINK_SWAY = silkRibbon(
+  46,
+  { amp: 58, phase: 0.9, offset: 0 },
+  { amp: 52, phase: 2.3, offset: 10 },
+  SILK_W * PINK_REACH,
+  1.15 * PINK_REACH,
+);
+const SILK_VIOLET_SWAY = silkRibbon(
+  36,
+  { amp: 68, phase: 3.1, offset: 0 },
+  { amp: 70, phase: 4.5, offset: -5 },
+);
+
+/** An eased there-and-back for a path's shape. */
+function Sway({ from, to, seconds }: { from: string; to: string; seconds: number }) {
+  return (
+    <animate
+      attributeName="d"
+      values={`${from};${to};${from}`}
+      keyTimes="0;0.5;1"
+      calcMode="spline"
+      keySplines="0.45 0 0.55 1;0.45 0 0.55 1"
+      dur={`${seconds}s`}
+      repeatCount="indefinite"
+    />
+  );
+}
+
+/**
+ * Two ribbons of silk — pink and violet — drawn as fine lines twisting past
+ * each other, fading in from the left so they rise out of the words beside
+ * them. Purely decorative.
+ */
+export function SilkWaves({ className }: { className?: string }) {
+  const { motion } = useAppearance();
+  const osReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const animated = motion === "full" && !osReducedMotion;
+  return (
+    <div aria-hidden className={cn("pointer-events-none relative", className)}>
+      {/* Pink runs long, out to the left behind the words, fading in. */}
+      <svg
+        viewBox={`0 0 ${SILK_W * PINK_REACH} ${SILK_H}`}
+        preserveAspectRatio="none"
+        fill="none"
+        className="absolute right-0 top-0 h-full"
+        style={{ width: `${PINK_REACH * 100}%` }}
+      >
+        <defs>
+          <linearGradient id="silk-pink" x1="0" x2="1">
+            <stop offset="0" stopColor="#ff2d95" stopOpacity="0" />
+            <stop offset="0.35" stopColor="#ff2d95" />
+            <stop offset="1" stopColor="#ff7ac0" />
+          </linearGradient>
+        </defs>
+        {SILK_PINK.map((d, index) => (
+          <path key={index} d={d} stroke="url(#silk-pink)" strokeWidth="0.8" opacity="0.55">
+            {animated && <Sway from={d} to={SILK_PINK_SWAY[index]} seconds={9} />}
+          </path>
+        ))}
+      </svg>
+      {/* Violet stays within the box. */}
+      <svg
+        viewBox={`0 0 ${SILK_W} ${SILK_H}`}
+        preserveAspectRatio="none"
+        fill="none"
+        className="absolute inset-0 size-full"
+      >
+        <defs>
+          <linearGradient id="silk-violet" x1="0" x2="1">
+            <stop offset="0" stopColor="#b026ff" stopOpacity="0" />
+            <stop offset="0.35" stopColor="#b026ff" />
+            <stop offset="1" stopColor="#7b2cff" />
+          </linearGradient>
+        </defs>
+        {SILK_VIOLET.map((d, index) => (
+          <path key={index} d={d} stroke="url(#silk-violet)" strokeWidth="0.8" opacity="0.45">
+            {animated && <Sway from={d} to={SILK_VIOLET_SWAY[index]} seconds={7} />}
+          </path>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 /** How many performers take a turn in the spotlight. */
 const CAST_SIZE = 10;
 
@@ -169,7 +303,7 @@ export function CastScene({ onOpen }: { onOpen: (id: number, autoPlay: boolean) 
       )}
       {/* One even overlay over the whole banner, so the words read anywhere
           on it. Top and bottom are left sharp: the scene is a frame. */}
-      <div className="pointer-events-none absolute inset-0 bg-black/55" />
+      <div className="pointer-events-none absolute inset-0 bg-black/80" />
 
       {/* The section's own words, which stay put while the spotlight moves. */}
       <div className="relative max-w-2xl space-y-3 px-6 pt-14 md:px-14 md:pt-16">
@@ -304,31 +438,26 @@ export function CastScene({ onOpen }: { onOpen: (id: number, autoPlay: boolean) 
   );
 }
 
-/** How many studios are in the deck. */
-const DECK_SIZE = 8;
-/** How long the top card takes to fly off. */
-const DEAL_MS = 320;
+/** How many channels the control room has. */
+/** How many channels scroll past on the wall. */
+const CHANNELS = 16;
 
-/** Where each card of the visible stack sits: the top first. */
-const STACK = [
-  "z-30 translate-x-0 translate-y-0 rotate-0 scale-100 opacity-100",
-  "z-20 translate-x-6 -translate-y-3 rotate-[4deg] scale-[0.96] opacity-90",
-  "z-10 translate-x-12 -translate-y-6 rotate-[8deg] scale-[0.92] opacity-70",
-  "z-0 translate-x-16 -translate-y-8 rotate-[11deg] scale-[0.88] opacity-40",
-];
+/** Scanlines over a screen: fine dark lines, as on a monitor. */
+const SCANLINES =
+  "repeating-linear-gradient(to bottom, rgba(0,0,0,0.28) 0px, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 3px)";
 
 /**
- * The studios as a deck of cards: their stills stacked and fanned on the
- * right, the top card's studio named large on the left. "Next" deals the top
- * card away and the rest move up; the top card opens its studio. Arrow keys
- * deal too while the pointer is over the scene.
+ * The studios as a broadcast control room: a wall of small screens, one per
+ * studio, each showing a still with its channel number, and a main monitor
+ * playing whichever channel is selected. Hovering a screen switches the main
+ * monitor to it. Only the main monitor plays, so the wall stays light.
  */
 export function StudiosScene() {
-  const { motion } = useAppearance();
+  const { hoverPreview, discreet, motion } = useAppearance();
   const osReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const animated = motion === "full" && !osReducedMotion;
+  const previews = hoverPreview && !discreet;
   const { data } = useQuery({ queryKey: qk.studios.all, queryFn: fetchStudios });
-  const deck = [...(data?.studios ?? [])]
+  const channels = [...(data?.studios ?? [])]
     .filter(
       (studio) =>
         studio.videoCount > 0 && (studio.frameItemIds.length > 0 || studio.representativeItemId != null),
@@ -336,131 +465,206 @@ export function StudiosScene() {
     .sort(
       (a, b) => Number(b.isFollowed ?? false) - Number(a.isFollowed ?? false) || b.videoCount - a.videoCount,
     )
-    .slice(0, DECK_SIZE);
-  const [top, setTop] = useState(0);
-  const [dealing, setDealing] = useState(false);
-  if (deck.length < 2) return null;
+    .slice(0, CHANNELS);
+  const [tunedId, setTunedId] = useState<number | null>(null);
+  // A random still per studio, picked once per visit.
+  const [covers] = useState(() => new Map<number, number | null>());
+  const coverOf = (studio: StudioSummary) => {
+    if (!covers.has(studio.id)) covers.set(studio.id, randomStudioFrame(studio));
+    return covers.get(studio.id) ?? null;
+  };
+  if (channels.length < 2) return null;
 
-  const at = (offset: number) => deck[(top + offset + deck.length) % deck.length];
-  const current = at(0);
-
-  function step(direction: 1 | -1) {
-    if (dealing) return;
-    if (direction === -1 || !animated) {
-      setTop((value) => (value + direction + deck.length) % deck.length);
-      return;
-    }
-    // Fly the top card off, then bring the next one up.
-    setDealing(true);
-    window.setTimeout(() => {
-      setTop((value) => (value + 1) % deck.length);
-      setDealing(false);
-    }, DEAL_MS);
-  }
-
-  const visible = Math.min(STACK.length, deck.length);
+  const tunedIndex = Math.max(
+    0,
+    channels.findIndex((studio) => studio.id === tunedId),
+  );
+  const tuned = channels[tunedIndex];
+  const tunedCover = coverOf(tuned);
+  // Rolls only when there are enough channels to fill a column, and motion is welcome.
+  const rolling = motion === "full" && !osReducedMotion && channels.length >= 6;
+  const channelNumber = (index: number) => `CH ${String(index + 1).padStart(2, "0")}`;
 
   return (
-    <section
-      className="relative -mx-4 overflow-hidden px-6 py-14 md:-mx-6 md:px-14 md:py-16"
-      tabIndex={-1}
-      onKeyDown={(event) => {
-        if (event.key === "ArrowRight") step(1);
-        if (event.key === "ArrowLeft") step(-1);
-      }}
-      onMouseEnter={(event) => event.currentTarget.focus({ preventScroll: true })}
-    >
-      <div className="grid items-center gap-12 md:grid-cols-2">
-        <div key={current.id} className="animate-fade-in space-y-5">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <Kicker>The studios</Kicker>
-            <Link
-              to="/studios"
-              className="flex items-center gap-2 text-sm font-bold text-muted-foreground transition-colors hover:text-foreground"
-            >
-              All studios
-              <ArrowRight className="size-4" />
-            </Link>
-          </div>
-          <h2 className="truncate text-5xl font-black uppercase leading-[0.9] tracking-tighter md:text-7xl">
-            {current.name}
-          </h2>
-          <p className="text-lg text-muted-foreground">
-            {current.videoCount} {current.videoCount === 1 ? "video" : "videos"} in your library
+    <section className="relative -mx-4 overflow-hidden px-6 py-14 md:-mx-6 md:px-14 md:py-16">
+      <div className="mb-8 flex items-center gap-8">
+        <div className="relative z-10 shrink-0 space-y-3">
+          <Kicker>The studios</Kicker>
+          <p className="max-w-2xl text-2xl font-black leading-tight tracking-tight md:text-3xl">
+            Irresistible women. <span className="text-primary">Untamed fantasies.</span>
           </p>
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <Link
-              to="/studio/$studioId"
-              params={{ studioId: String(current.id) }}
-              className="flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-sm font-bold text-black transition-transform hover:scale-[1.04]"
+          <p className="max-w-2xl text-muted-foreground">
+            Discover the studios creating seductive performances, breathtaking beauty, and fantasies worth
+            exploring.
+          </p>
+          <Link
+            to="/studios"
+            className="flex w-fit items-center gap-2 pt-1 text-sm font-bold text-muted-foreground transition-colors hover:text-foreground"
+          >
+            All studios
+            <ArrowRight className="size-4" />
+          </Link>
+        </div>
+        <SilkWaves className="ml-auto hidden h-64 w-full min-w-0 max-w-lg md:block" />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
+        {/* The main monitor: the tuned channel, playing. */}
+        {/* The monitor sets the row's height; the wall beside it fills that. */}
+        <div className="rounded-xl bg-[#0b0b0d] p-2 shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+          <div className="relative aspect-video overflow-hidden rounded-lg bg-black">
+            {tunedCover != null && (
+              <img
+                key={`still-${tuned.id}`}
+                src={studioFrameUrl(tuned, tunedCover)}
+                alt=""
+                className="sensitive animate-fade-in absolute inset-0 size-full object-cover"
+              />
+            )}
+            {previews && tunedCover != null && <PreviewClip key={`clip-${tuned.id}`} itemId={tunedCover} />}
+            <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: SCANLINES }} />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(0,0,0,0.6)_100%)]" />
+
+            <span className="absolute left-4 top-4 flex items-center gap-1.5 rounded-sm bg-red-600 px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-white">
+              <span className="size-1.5 animate-pulse rounded-full bg-white" />
+              Live
+            </span>
+            <span className="absolute right-4 top-4 font-mono text-sm font-bold tracking-widest text-white/80">
+              {channelNumber(tunedIndex)}
+            </span>
+
+            <div
+              key={`caption-${tuned.id}`}
+              className="animate-fade-in absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-gradient-to-t from-black/85 to-transparent p-5 md:p-6"
             >
-              Open studio
-              <ArrowRight className="size-4" />
-            </Link>
-            <div className="ml-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => step(-1)}
-                aria-label="Previous studio"
-                className="flex size-10 items-center justify-center rounded-full ring-1 ring-border transition-colors hover:bg-white/10"
+              <div>
+                <p className="text-3xl font-black uppercase tracking-tight text-white md:text-5xl">
+                  {tuned.name}
+                </p>
+                <p className="mt-1 text-sm text-white/70">
+                  {tuned.videoCount} {tuned.videoCount === 1 ? "video" : "videos"}
+                </p>
+              </div>
+              <Link
+                to="/studio/$studioId"
+                params={{ studioId: String(tuned.id) }}
+                className="flex items-center gap-2 rounded-full bg-white px-5 py-2 text-sm font-bold text-black transition-transform hover:scale-[1.04]"
               >
-                <ArrowRight className="size-4 rotate-180" />
-              </button>
-              <button
-                type="button"
-                onClick={() => step(1)}
-                aria-label="Next studio"
-                className="flex size-10 items-center justify-center rounded-full ring-1 ring-border transition-colors hover:bg-white/10"
-              >
+                Open studio
                 <ArrowRight className="size-4" />
-              </button>
-              <span className="ml-1 font-mono text-sm tabular-nums text-muted-foreground">
-                {String((top % deck.length) + 1).padStart(2, "0")} / {String(deck.length).padStart(2, "0")}
-              </span>
+              </Link>
             </div>
           </div>
         </div>
 
-        {/* The deck. Cards keep their keys as they move up, so each glides
-            to its new place rather than being redrawn there. */}
-        <div className="relative mx-auto aspect-video w-full max-w-xl">
-          {Array.from({ length: visible }, (_, offset) => {
-            const studio = at(offset);
-            const stillId = studio.frameItemIds[0] ?? studio.representativeItemId;
-            const flying = dealing && offset === 0;
-            return (
-              <Link
-                key={studio.id}
-                to="/studio/$studioId"
-                params={{ studioId: String(studio.id) }}
-                tabIndex={offset === 0 ? undefined : -1}
-                aria-label={offset === 0 ? `Open ${studio.name}` : undefined}
-                aria-hidden={offset === 0 ? undefined : true}
-                className={cn(
-                  "absolute inset-0 overflow-hidden rounded-md bg-secondary shadow-[0_30px_60px_-15px_rgba(0,0,0,0.85)] ring-1 ring-white/10",
-                  animated && "transition-all duration-300 ease-out",
-                  flying ? "z-40 -translate-x-[120%] -rotate-12 opacity-0" : STACK[offset],
-                  offset > 0 && "pointer-events-none",
-                )}
-              >
-                {stillId != null && (
-                  <img
-                    src={thumbnailUrl({ id: stillId })}
-                    alt=""
-                    loading="lazy"
-                    className="sensitive size-full object-cover"
+        {/* The wall of channels: two columns rolling in opposite directions,
+            left down and right up, inside a window exactly the monitor's
+            height. Each column is drawn twice, so moving by half its height
+            loops without a seam. Hovering a column holds that column still. */}
+        <div className="relative h-[420px] overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_8%,black_92%,transparent)] lg:h-auto">
+          <div
+            className={cn(
+              "grid grid-cols-2 gap-3",
+              rolling ? "absolute inset-0" : "h-full overflow-y-auto scrollbar-hide",
+            )}
+          >
+            {[0, 1].map((column) => {
+              const list = channels
+                .map((studio, index) => ({ studio, index }))
+                .filter((_, position) => position % 2 === column);
+              const track = (copy: number) =>
+                list.map(({ studio, index }) => (
+                  <ChannelTile
+                    key={`${copy}:${studio.id}`}
+                    studio={studio}
+                    cover={coverOf(studio)}
+                    number={channelNumber(index)}
+                    active={studio.id === tuned.id}
+                    copy={copy > 0}
+                    onTune={() => setTunedId(studio.id)}
                   />
-                )}
-                {offset === 0 && (
-                  <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4 text-left text-xs font-semibold uppercase tracking-[0.25em] text-white/80">
-                    {studio.name}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+                ));
+              return (
+                <div key={column} className="min-w-0">
+                  <div
+                    className={cn(rolling && (column === 0 ? "animate-roll-down" : "animate-roll-up"))}
+                    style={{ "--roll-duration": `${list.length * 5}s` } as React.CSSProperties}
+                  >
+                    {track(0)}
+                    {rolling && track(1)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * One screen on the control room's wall: a still with scanlines, its name and
+ * channel number. Spacing is padding below each tile rather than a gap, so a
+ * column drawn twice is exactly twice as tall and its loop has no seam.
+ */
+function ChannelTile({
+  studio,
+  cover,
+  number,
+  active,
+  copy,
+  onTune,
+}: {
+  studio: StudioSummary;
+  cover: number | null;
+  number: string;
+  active: boolean;
+  copy: boolean;
+  onTune: () => void;
+}) {
+  return (
+    <div className="pb-3" aria-hidden={copy || undefined}>
+      <Link
+        to="/studio/$studioId"
+        params={{ studioId: String(studio.id) }}
+        tabIndex={copy ? -1 : undefined}
+        onMouseEnter={onTune}
+        onFocus={onTune}
+        className={cn(
+          "group block rounded-lg bg-[#0b0b0d] p-1.5 ring-1 transition-all duration-200",
+          active ? "ring-primary" : "ring-white/10 hover:ring-white/30",
+        )}
+      >
+        <span className="relative block aspect-video overflow-hidden rounded-md bg-black">
+          {cover != null && (
+            <img
+              src={studioFrameUrl(studio, cover)}
+              alt=""
+              loading="lazy"
+              className={cn(
+                "sensitive size-full object-cover transition-all duration-300",
+                active ? "brightness-100" : "brightness-50 saturate-50 group-hover:brightness-90",
+              )}
+            />
+          )}
+          <span className="pointer-events-none absolute inset-0" style={{ backgroundImage: SCANLINES }} />
+          {active && (
+            <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-red-500 shadow-[0_0_6px_#ef4444]" />
+          )}
+        </span>
+        <span className="flex items-baseline justify-between gap-2 px-1 pb-0.5 pt-1.5">
+          <span
+            className={cn(
+              "truncate text-xs font-bold uppercase tracking-wide",
+              active ? "text-primary" : "text-foreground/70",
+            )}
+          >
+            {studio.name}
+          </span>
+          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{number}</span>
+        </span>
+      </Link>
+    </div>
   );
 }

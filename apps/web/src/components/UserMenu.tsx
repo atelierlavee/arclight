@@ -7,6 +7,7 @@ import { useToast } from "@/lib/toast";
 import { clearUserLocalData } from "@/lib/userData";
 import { qk } from "@/lib/queryKeys";
 import { useProfile } from "@/lib/profile";
+import { displayName as personName } from "@/lib/profilesApi";
 import { ProfileAvatar } from "./ProfilePicker";
 
 /**
@@ -81,7 +82,7 @@ export function UserMenu() {
   if (!auth?.user) return null;
 
   const initial = auth.user.username.trim()[0]?.toUpperCase() ?? "?";
-  const displayName = profile?.name ?? auth.user.username;
+  const displayName = profile ? personName(profile) : auth.user.username;
 
   return (
     <div ref={containerRef} className="relative">
@@ -95,7 +96,7 @@ export function UserMenu() {
         className="flex size-9 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold ring-1 ring-border transition-colors hover:bg-accent hover:text-foreground"
       >
         {profile ? (
-          <ProfileAvatar name={profile.name} color={profile.color} className="size-9 rounded-full text-sm" />
+          <ProfileAvatar name={personName(profile)} color={profile.color} className="size-9 rounded-full text-sm" />
         ) : (
           initial
         )}
@@ -108,7 +109,7 @@ export function UserMenu() {
         >
           <div className="flex items-center gap-2.5 border-b border-border px-3 py-2.5">
             {profile ? (
-              <ProfileAvatar name={profile.name} color={profile.color} className="size-8 rounded-full text-xs" />
+              <ProfileAvatar name={personName(profile)} color={profile.color} className="size-8 rounded-full text-xs" />
             ) : (
               <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
                 {initial}

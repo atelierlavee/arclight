@@ -1,3 +1,4 @@
+import { thumbnailUrl } from "./mediaItemApi";
 import type { CoPerformer, YearGroup } from "./performerApi";
 
 export type StudioSummary = {
@@ -16,7 +17,31 @@ export type StudioSummary = {
    * with no videos.
    */
   frameItemIds: number[];
+  /**
+   * Each frame's thumbnail version, by video id, so its image URL changes
+   * when the thumbnail is replaced. Optional so older payloads still parse.
+   */
+  thumbnailFiles?: Record<string, string | null>;
 };
+
+/**
+ * One of a studio's frames, picked at random — the server already samples
+ * them at random from every video it has, so a cover is never the same
+ * still forever and takes in new videos as the studio grows.
+ */
+export function randomStudioFrame(studio: Pick<StudioSummary, "frameItemIds" | "representativeItemId">): number | null {
+  const frames = studio.frameItemIds;
+  if (frames.length === 0) return studio.representativeItemId;
+  return frames[Math.floor(Math.random() * frames.length)];
+}
+
+/**
+ * A studio frame's image URL, versioned by its thumbnail so a replaced
+ * thumbnail shows at once instead of the year-cached old one.
+ */
+export function studioFrameUrl(studio: Pick<StudioSummary, "thumbnailFiles">, id: number): string {
+  return thumbnailUrl({ id, thumbnailFile: studio.thumbnailFiles?.[id] ?? null });
+}
 
 /**
  * A performer credited on this studio's videos.

@@ -273,7 +273,8 @@ describe("profiles API", () => {
     const list = (await call(c2, "GET", "/api/profiles")).json();
     expect(list.profiles.map((p: { name: string }) => p.name)).toEqual(["tester", "Second"]);
     expect(list.profiles[0]).toEqual({
-      id: expect.any(Number), name: "tester", color: "#6366f1", isOwner: true, hasPin: false, position: 0,
+      id: expect.any(Number), name: "tester", firstName: null, lastName: null, color: "#6366f1",
+      isOwner: true, hasPin: false, position: 0,
     });
   });
 
@@ -329,7 +330,11 @@ describe("profiles API", () => {
     expect((await call(owner, "POST", "/api/profiles", { name: "" })).statusCode).toBe(400);
     expect((await call(owner, "POST", "/api/profiles", { name: "X", color: "red" })).statusCode).toBe(400);
 
-    const renamed = await call(owner, "PATCH", `/api/profiles/${id}`, { name: "Love", color: "#00ff00" });
+    const renamed = await call(owner, "PATCH", `/api/profiles/${id}`, {
+      name: "Love",
+      color: "#00ff00",
+      accountPassword: "test-password",
+    });
     expect(renamed.json().profile).toMatchObject({ name: "Love", color: "#00ff00" });
 
     const { ownerProfileId } = await testAccount();
@@ -352,6 +357,54 @@ describe("profiles API", () => {
     expect((await call(guest.cookie, "GET", "/api/media-items")).statusCode).toBe(409);
     const [row] = await db.select().from(sessions).where(eq(sessions.profileId, guest.profileId));
     expect(row).toBeUndefined();
+  });
+
+  it("saves a first and last name, reports them, and clears them when emptied", async () => {
+    const owner = await signIn();
+    const { ownerProfileId } = await testAccount();
+    const url = `/api/profiles/${ownerProfileId}`;
+
+    const proof = { accountPassword: "test-password" };
+    const saved = await call(owner, "PATCH", url, { firstName: "  Vivek ", lastName: "Jaiswal", ...proof });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().profile).toMatchObject({ firstName: "Vivek", lastName: "Jaiswal" });
+    expect((await call(owner, "GET", "/api/auth/status")).json().profile).toMatchObject({
+      firstName: "Vivek",
+      lastName: "Jaiswal",
+    });
+
+    const cleared = await call(owner, "PATCH", url, { firstName: "", lastName: null, ...proof });
+    expect(cleared.json().profile).toMatchObject({ firstName: null, lastName: null });
+
+    expect((await call(owner, "PATCH", url, { firstName: "x".repeat(41), ...proof })).statusCode).toBe(400);
+    expect((await call(owner, "PATCH", url, { lastName: 5, ...proof })).statusCode).toBe(400);
+  });
+
+  // Someone at an unlocked screen must not be able to rename you.
+  it("refuses a profile change without the account password, and accepts it with", async () => {
+    const owner = await signIn();
+    const { ownerProfileId } = await testAccount();
+    const url = `/api/profiles/${ownerProfileId}`;
+
+    const bare = await call(owner, "PATCH", url, { firstName: "Mallory" });
+    expect(bare.statusCode).toBe(403);
+    expect(bare.json().code).toBe("account_password_required");
+    const wrong = await call(owner, "PATCH", url, { firstName: "Mallory", accountPassword: "nope" });
+    expect(wrong.statusCode).toBe(403);
+
+    const right = await call(owner, "PATCH", url, { firstName: "Vivek", accountPassword: "test-password" });
+    expect(right.statusCode).toBe(200);
+  });
+
+  it("refuses a username change without the account password", async () => {
+    const owner = await signIn();
+    const bare = await call(owner, "PATCH", "/api/auth/account", { username: "someone-else" });
+    expect(bare.statusCode).toBe(403);
+    const right = await call(owner, "PATCH", "/api/auth/account", {
+      username: "someone-else",
+      accountPassword: "test-password",
+    });
+    expect(right.statusCode).toBe(200);
   });
 
   it("a non-owner may rename itself but not others", async () => {

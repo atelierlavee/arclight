@@ -7,7 +7,10 @@
 
 export type Profile = {
   id: number;
+  /** The profile's handle: unique within the account, shown in the picker. */
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
   color: string;
   isOwner: boolean;
   hasPin: boolean;
@@ -18,12 +21,23 @@ export type Profile = {
 export type CurrentProfile = {
   id: number;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
   isOwner: boolean;
   color?: string;
   hasPin?: boolean;
 };
 
 export const DEFAULT_PROFILE_COLOR = "#6366f1";
+
+/**
+ * What to call someone: their first and last name when they've given one,
+ * otherwise the profile's username.
+ */
+export function displayName(profile: Pick<CurrentProfile, "name" | "firstName" | "lastName">): string {
+  const full = [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim();
+  return full || profile.name;
+}
 
 /** The colours offered when adding or recolouring a profile. */
 export const PROFILE_COLORS = [
@@ -118,9 +132,12 @@ export async function createProfile(input: { name: string; color: string }): Pro
 
 export async function updateProfile(
   id: number,
-  input: { name?: string; color?: string },
+  input: { name?: string; color?: string; firstName?: string | null; lastName?: string | null },
+  /** Proof it's you; null after Touch ID, which the server remembers. */
+  proof: Proof | null = null,
 ): Promise<Profile> {
-  return (await send<{ profile: Profile }>(`/api/profiles/${id}`, "PATCH", input)).profile;
+  return (await send<{ profile: Profile }>(`/api/profiles/${id}`, "PATCH", { ...input, ...proofBody(proof) }))
+    .profile;
 }
 
 /**

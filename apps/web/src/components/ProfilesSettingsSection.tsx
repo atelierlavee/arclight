@@ -15,9 +15,11 @@ import {
   setProfilePin,
   updateProfile,
   type Profile,
+  type Proof,
 } from "@/lib/profilesApi";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { ConfirmIdentityDialog } from "./ConfirmIdentityDialog";
 import { ProfileAvatar } from "./ProfilePicker";
 import { SettingsSection, settingsInputClass } from "./SettingsSection";
 
@@ -76,9 +78,7 @@ export function ProfilesSettingsSection() {
   const { profile: current, isOwner } = useProfile();
   const profiles = useQuery({ queryKey: qk.profiles, queryFn: fetchProfiles });
 
-  const visible = (profiles.data ?? []).filter(
-    (profile) => isOwner || profile.id === current?.id,
-  );
+  const visible = (profiles.data ?? []).filter((profile) => isOwner || profile.id === current?.id);
 
   return (
     <SettingsSection
@@ -225,21 +225,27 @@ function ProfileCard({
 
 function EditProfile({ profile, onDone }: { profile: Profile; onDone: () => void }) {
   const refresh = useRefreshProfiles();
+  const { profile: current, isOwner } = useProfile();
   const [name, setName] = useState(profile.name);
   const [color, setColor] = useState(profile.color);
-  const save = useMutation({
-    mutationFn: () => updateProfile(profile.id, { name: name.trim(), color }),
-    onSuccess: () => {
-      refresh();
-      onDone();
-    },
-  });
+  // Any change to a profile needs proof it's you. A non-owner without a PIN
+  // has nothing to prove, so it saves straight away.
+  const [confirming, setConfirming] = useState(false);
+  const needsProof = isOwner || Boolean(current?.hasPin);
+  async function saveWith(proof: Proof | null) {
+    await updateProfile(profile.id, { name: name.trim(), color }, proof);
+    refresh();
+    onDone();
+  }
+  const save = useMutation({ mutationFn: () => saveWith(null) });
   return (
     <form
       className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
-        if (name.trim()) save.mutate();
+        if (!name.trim()) return;
+        if (needsProof) setConfirming(true);
+        else save.mutate();
       }}
     >
       <input
@@ -253,6 +259,9 @@ function EditProfile({ profile, onDone }: { profile: Profile; onDone: () => void
       <button type="submit" disabled={!name.trim() || save.isPending} className={primaryButton}>
         Save
       </button>
+      {confirming && (
+        <ConfirmIdentityDialog isOwner={isOwner} run={saveWith} onClose={() => setConfirming(false)} />
+      )}
     </form>
   );
 }
@@ -261,15 +270,7 @@ function EditProfile({ profile, onDone }: { profile: Profile; onDone: () => void
  * Set, change or remove a PIN. Your own needs the current PIN when one is
  * set; the owner resetting someone else's gives the account password instead.
  */
-function PinEditor({
-  profile,
-  isSelf,
-  onDone,
-}: {
-  profile: Profile;
-  isSelf: boolean;
-  onDone: () => void;
-}) {
+function PinEditor({ profile, isSelf, onDone }: { profile: Profile; isSelf: boolean; onDone: () => void }) {
   const refresh = useRefreshProfiles();
   const [proof, setProof] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -389,8 +390,7 @@ function ResetSecrets({ profile, onDone }: { profile: Profile; onDone: () => voi
       }}
     >
       <p className="text-sm text-muted-foreground">
-        Clears {profile.name}’s chosen secrets so they can set new ones. Their vault keeps its
-        items.
+        Clears {profile.name}’s chosen secrets so they can set new ones. Their vault keeps its items.
       </p>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={vaultPin} onChange={(e) => setVaultPin(e.target.checked)} />
@@ -445,8 +445,8 @@ function DeleteProfile({ profile, onDone }: { profile: Profile; onDone: () => vo
       }}
     >
       <p className="rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
-        Deleting {profile.name} also deletes their watch history, favourites, ratings, bookmarks
-        and vault. This can’t be undone.
+        Deleting {profile.name} also deletes their watch history, favourites, ratings, bookmarks and vault.
+        This can’t be undone.
       </p>
       <input
         value={typed}

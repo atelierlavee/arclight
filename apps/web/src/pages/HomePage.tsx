@@ -2,7 +2,7 @@ import { pkey } from "@/lib/profileStorage";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
-import { EditorialHome } from "@/components/home/EditorialHome";
+import { EditorialHome, EndCard } from "@/components/home/EditorialHome";
 import { CastScene, LibraryScene, StudiosScene } from "@/components/home/LibraryScenes";
 import type { MediaCardItem } from "@/components/MediaCard";
 import { MediaDetailModal } from "@/components/MediaDetailModal";
@@ -203,6 +203,7 @@ export function HomePage() {
             continueWatching={shown.has("continue") ? (continueWatching?.items ?? []) : []}
             newForYou={shown.has("following") ? withoutFolders(followingNew?.items ?? []) : []}
             justAdded={shown.has("recent") ? recentItems : []}
+            recentlyWatched={withoutFolders(recentlyWatched?.items ?? [])}
             dailyPick={shown.has("dailyPick") ? (dailyPick?.item ?? null) : null}
             tags={tagsData?.tags ?? []}
             loading={recentLoading || continueLoading || followingLoading}
@@ -330,6 +331,18 @@ export function HomePage() {
                   ));
               }
             })}
+          {/* The arclight card closes the page, after every row and scene. */}
+          <div className="-mx-4 md:-mx-6">
+            <EndCard
+              onOpen={openItem}
+              stills={[
+                ...withoutFolders(heroItems),
+                ...recentItems,
+                ...withoutFolders(followingNew?.items ?? []),
+                ...(continueWatching?.items ?? []),
+              ]}
+            />
+          </div>
         </div>
 
         {open && (

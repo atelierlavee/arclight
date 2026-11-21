@@ -1,4 +1,4 @@
-import type { CurrentProfile } from "./profilesApi";
+import { proofBody, type CurrentProfile, type Proof } from "./profilesApi";
 
 export type AuthUser = { id: number; username: string };
 /**
@@ -55,11 +55,15 @@ export function setupAccount(username: string, password: string) {
   return postJson<{ user: AuthUser }>("/api/auth/setup", { username, password });
 }
 
-export async function updateUsername(username: string): Promise<{ user: AuthUser }> {
+export async function updateUsername(
+  username: string,
+  /** Proof it's you; null after Touch ID, which the server remembers. */
+  proof: Proof | null = null,
+): Promise<{ user: AuthUser }> {
   const res = await fetch("/api/auth/account", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username, ...proofBody(proof) }),
   });
   const data = (await res.json().catch(() => null)) as { user?: AuthUser; error?: string } | null;
   if (!res.ok) throw new Error(data?.error ?? `Request failed: ${res.status}`);

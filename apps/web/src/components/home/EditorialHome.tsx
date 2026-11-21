@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Info, Play, RotateCcw, Shuffle } from "lucide-react";
+import { ArrowRight, Info, Play, Shuffle } from "lucide-react";
 import type { MediaCardItem } from "../MediaCard";
 import { PreviewClip } from "../PreviewClip";
+import { BecauseYouWatched, MoodPicker } from "./DiscoverScenes";
 import { ExploreTags } from "./ExploreTags";
 import { BrandLogo } from "../BrandLogo";
 import { useAppearance } from "@/lib/appearance";
 import { framingStyle, thumbnailUrl } from "@/lib/mediaItemApi";
+import { useScrubSprite } from "@/lib/bookmarkApi";
 import { useProfile } from "@/lib/profile";
+import { displayName } from "@/lib/profilesApi";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { cn, formatDuration } from "@/lib/utils";
 
@@ -34,6 +37,7 @@ export function EditorialHome({
   continueWatching,
   newForYou,
   justAdded,
+  recentlyWatched,
   dailyPick,
   tags,
   loading,
@@ -44,6 +48,8 @@ export function EditorialHome({
   continueWatching: MediaCardItem[];
   newForYou: MediaCardItem[];
   justAdded: MediaCardItem[];
+  /** Finished videos, newest first: the first seeds "Because you watched". */
+  recentlyWatched: MediaCardItem[];
   dailyPick: MediaCardItem | null;
   tags: { id: number; name: string; itemCount?: number }[];
   loading: boolean;
@@ -54,7 +60,6 @@ export function EditorialHome({
   const { hoverPreview, discreet, motion } = useAppearance();
   const osReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const previews = hoverPreview && !discreet;
-  const autoplay = previews && motion === "full" && !osReducedMotion;
 
   const used = new Set<number>();
   const take = (items: MediaCardItem[], count: number) => {
@@ -69,9 +74,15 @@ export function EditorialHome({
   };
 
   const [lead] = take(featured.length ? featured : dailyPick ? [dailyPick] : justAdded, 1);
-  const resume = take(continueWatching, 3);
+  const resume = take(continueWatching, 6);
   const fresh = take(newForYou, 5);
   const credits = take(justAdded, 7);
+  // What "Because you watched" builds on: the last video finished, or failing
+  // that the one you're in the middle of.
+  const lastWatched =
+    recentlyWatched.find((item) => item.itemType === "video") ??
+    continueWatching.find((item) => item.itemType === "video") ??
+    null;
 
   // Chapter numbers count only the scenes that are actually shown.
   let chapterCount = 0;
@@ -85,7 +96,7 @@ export function EditorialHome({
       {lead && (
         <OpeningShot
           item={lead}
-          playing={autoplay}
+          preview={previews}
           onOpen={onOpen}
           toFinish={continueWatching.length}
           newCount={newForYou.length}
@@ -100,17 +111,27 @@ export function EditorialHome({
           <KeepWatching items={resume} onOpen={onOpen} action={resumeAction} chapter={chapters.next()} />
         </Reveal>
       )}
+      {lastWatched && (
+        <Reveal>
+          <BecauseYouWatched
+            item={lastWatched}
+            chapter={chapters.next()}
+            onOpen={onOpen}
+            preview={previews}
+          />
+        </Reveal>
+      )}
       {fresh.length > 0 && (
         <Reveal>
           <NewArrivals items={fresh} preview={previews} onOpen={onOpen} chapter={chapters.next()} />
         </Reveal>
       )}
       <Reveal>
-        <EndCard onOpen={onOpen} stills={[...featured, ...justAdded, ...newForYou, ...continueWatching]} />
+        <MoodPicker tags={tags} chapter={chapters.next()} onOpen={onOpen} preview={previews} />
       </Reveal>
       {credits.length > 0 && (
         <Reveal>
-          <Credits items={credits} onOpen={onOpen} chapter={chapters.next()} preview={previews} />
+          <Credits items={credits} onOpen={onOpen} preview={previews} />
         </Reveal>
       )}
     </div>
@@ -247,14 +268,15 @@ function rundown(toFinish: number, newCount: number): string {
 
 function OpeningShot({
   item,
-  playing,
+  preview,
   onOpen,
   toFinish,
   newCount,
   parallax,
 }: {
   item: MediaCardItem;
-  playing: boolean;
+  /** Whether previews may play at all (previews on, discreet off). */
+  preview: boolean;
   onOpen: Open;
   toFinish: number;
   newCount: number;
@@ -263,6 +285,7 @@ function OpeningShot({
 }) {
   const { profile } = useProfile();
   const sectionRef = useRef<HTMLElement>(null);
+  const [hovering, setHovering] = useState(false);
   const imageRef = useRef<HTMLDivElement>(null);
   const shadeRef = useRef<HTMLDivElement>(null);
   const wordsRef = useRef<HTMLDivElement>(null);
@@ -307,10 +330,16 @@ function OpeningShot({
   const now = new Date();
   const date = now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
   return (
-    <section ref={sectionRef} className="relative flex h-[88vh] min-h-[640px] items-end overflow-hidden">
+    <section
+      ref={sectionRef}
+      className="relative flex h-[88vh] min-h-[640px] items-end overflow-hidden"
+      // The clip plays only while the pointer is over the scene.
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
       <div ref={imageRef} className="absolute inset-0 will-change-transform">
         <Backdrop item={item} className="animate-ken-burns" />
-        {playing && <PreviewClip itemId={item.id} />}
+        {preview && hovering && <PreviewClip itemId={item.id} />}
       </div>
       {/* Darkness pooled at the bottom and left, where the words sit, and
           fading into the page below so the scene has no edge. */}
@@ -328,7 +357,7 @@ function OpeningShot({
             {date} · {greeting(now.getHours())}
           </p>
           <p className="mt-2 text-2xl font-black tracking-tight text-white md:text-4xl">
-            Welcome back{profile?.name && <span className="text-white/60">, {profile.name}</span>}.
+            Welcome back{profile && <span className="text-white/60">, {displayName(profile)}</span>}.
           </p>
           <p className="mt-1.5 text-sm text-white/70 md:text-base">{rundown(toFinish, newCount)}</p>
         </div>
@@ -375,7 +404,11 @@ function OpeningShot({
   );
 }
 
-/** Scene two: where you left off, over a blurred wash of that same video. */
+/**
+ * Scene two: where you left off, as timeline rails. Each unfinished video is
+ * one full-width rail — its frames laid end to end like a scrubber, the part
+ * you watched tinted, and a bright marker where you stopped. A click resumes.
+ */
 function KeepWatching({
   items,
   onOpen,
@@ -387,74 +420,135 @@ function KeepWatching({
   action?: React.ReactNode;
   chapter: string;
 }) {
-  const [first, ...others] = items;
-  const duration = first.durationSeconds ?? 0;
-  const position = first.lastPositionSeconds ?? 0;
-  const progress = duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
-  const left = duration > position ? Math.ceil((duration - position) / 60) : null;
   return (
-    <section className="relative overflow-hidden py-16 md:py-24">
-      <Backdrop item={first} className="scale-125 opacity-40 blur-3xl" />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background via-transparent to-background" />
-
-      <div className="relative grid items-center gap-10 px-6 md:grid-cols-2 md:px-14">
-        <button
-          type="button"
-          onClick={() => onOpen(first.id, true)}
-          className="group relative aspect-video overflow-hidden rounded-sm shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)]"
-        >
-          <Backdrop item={first} className="transition-transform duration-700 group-hover:scale-105" />
-          <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/40">
-            <span className="flex size-16 items-center justify-center rounded-full bg-white/90 text-black transition-transform group-hover:scale-110">
-              <Play className="ml-1 size-7 fill-current" />
-            </span>
-          </span>
-          <span className="absolute inset-x-0 bottom-0 h-1 bg-white/20">
-            <span className="block h-full bg-primary" style={{ width: `${progress}%` }} />
-          </span>
-        </button>
-
-        <div className="space-y-4">
+    <section className="relative px-6 py-14 md:px-14 md:py-16">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2">
           <Chapter n={chapter} label="Keep watching" />
-          <h2 className="sensitive text-3xl font-black leading-tight tracking-tight md:text-5xl">
-            {first.title}
+          <h2 className="text-3xl font-black tracking-tight md:text-4xl">
+            Your unfinished <span className="text-primary">fantasies</span> await.
           </h2>
-          <p className="text-muted-foreground">
-            {left !== null ? `${left} minutes left` : "Pick up where you stopped"}
-            <span className="sensitive">
-              <Byline item={first} prefix=" · " />
-            </span>
-          </p>
-          <button
-            type="button"
-            onClick={() => onOpen(first.id, true)}
-            className="flex items-center gap-2 text-sm font-bold text-foreground transition-colors hover:text-primary"
-          >
-            <RotateCcw className="size-4" />
-            Resume
-          </button>
-          {others.length > 0 && (
-            <ul className="space-y-1 pt-4 text-sm text-muted-foreground">
-              <li className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/60">
-                Also unfinished
-              </li>
-              {others.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(item.id, true)}
-                    className="sensitive text-left transition-colors hover:text-foreground"
-                  >
-                    {item.title}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {action && <div className="pt-2">{action}</div>}
         </div>
+        {action}
+      </div>
+      <div className="space-y-3">
+        {items.map((item) => (
+          <TimelineRail key={item.id} item={item} onOpen={onOpen} />
+        ))}
       </div>
     </section>
+  );
+}
+
+/** One rail: title on the left, the video's frames, where you stopped, the time. */
+function TimelineRail({ item, onOpen }: { item: MediaCardItem; onOpen: Open }) {
+  const { data: sprite } = useScrubSprite(item.id, true);
+  const duration = item.durationSeconds ?? 0;
+  const position = item.lastPositionSeconds ?? 0;
+  const progress = duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
+  const left = duration > position ? Math.ceil((duration - position) / 60) : null;
+  const performers = item.performers
+    ?.slice(0, 2)
+    .map((performer) => performer.name)
+    .join(", ");
+
+  // As many frames as fit, each at its true shape: the rail's height, and the
+  // width that keeps the frame's own proportions. So it is measured, and the
+  // count follows the rail's width rather than squeezing a fixed number in.
+  const railRef = useRef<HTMLSpanElement>(null);
+  const [box, setBox] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const node = railRef.current;
+    if (!node) return;
+    const measure = () => setBox({ width: node.clientWidth, height: node.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const rows = sprite ? Math.ceil(sprite.count / sprite.columns) : 0;
+  const cellWidth = sprite && box.height ? box.height * (sprite.tileWidth / sprite.tileHeight) : 0;
+  const frameCount = cellWidth ? Math.max(1, Math.ceil(box.width / cellWidth)) : 0;
+  const frames =
+    sprite && duration > 0 && frameCount
+      ? Array.from({ length: frameCount }, (_, n) => {
+          const seconds = ((n + 0.5) / frameCount) * duration;
+          const index = Math.min(sprite.count - 1, Math.floor(seconds / sprite.interval));
+          const column = index % sprite.columns;
+          const row = Math.floor(index / sprite.columns);
+          return {
+            x: sprite.columns > 1 ? (column / (sprite.columns - 1)) * 100 : 0,
+            y: rows > 1 ? (row / (rows - 1)) * 100 : 0,
+          };
+        })
+      : null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item.id, true)}
+      aria-label={`Resume ${item.title}${left !== null ? `, ${left} minutes left` : ""}`}
+      className="group flex w-full items-center gap-5 rounded-xl p-2 text-left transition-colors hover:bg-white/[0.04]"
+    >
+      <span className="w-40 shrink-0 md:w-56">
+        <span className="sensitive line-clamp-2 text-sm font-bold leading-snug md:text-base">
+          {item.title}
+        </span>
+        {performers && (
+          <span className="sensitive mt-0.5 block truncate text-xs text-muted-foreground">{performers}</span>
+        )}
+        <span className="mt-1 block text-xs font-semibold text-primary">
+          {left !== null ? `${left} min left` : "Pick up again"}
+        </span>
+      </span>
+
+      <span
+        ref={railRef}
+        className="relative block h-14 min-w-0 flex-1 overflow-hidden rounded-md bg-secondary md:h-20"
+      >
+        {frames ? (
+          <span className="flex h-full">
+            {frames.map((frame, n) => (
+              <span
+                key={n}
+                className="sensitive h-full shrink-0 border-r border-black/40 last:border-r-0"
+                style={{
+                  width: cellWidth,
+                  backgroundImage: `url(${sprite!.url})`,
+                  backgroundSize: `${sprite!.columns * 100}% ${rows * 100}%`,
+                  backgroundPosition: `${frame.x}% ${frame.y}%`,
+                }}
+              />
+            ))}
+          </span>
+        ) : (
+          // No frames yet (or the drive is away): the poster, across the rail.
+          <img
+            src={thumbnailUrl(item)}
+            alt=""
+            loading="lazy"
+            style={framingStyle(item)}
+            className="sensitive size-full object-cover opacity-60"
+          />
+        )}
+        {/* Watched: a pink tint. Still to come: darkened. */}
+        <span className="absolute inset-y-0 left-0 bg-primary/25" style={{ width: `${progress}%` }} />
+        <span className="absolute inset-y-0 right-0 bg-black/55" style={{ width: `${100 - progress}%` }} />
+        {/* Where you stopped. */}
+        <span
+          className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary shadow-[0_0_10px_var(--primary)]"
+          style={{ left: `${progress}%` }}
+        >
+          <span className="absolute left-1/2 top-1/2 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-black opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+            <Play className="ml-0.5 size-3.5 fill-current" />
+          </span>
+        </span>
+      </span>
+
+      <span className="hidden w-28 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground md:block">
+        {formatDuration(position) ?? "0:00"} / {formatDuration(item.durationSeconds) ?? "—"}
+      </span>
+    </button>
   );
 }
 
@@ -481,7 +575,7 @@ function NewArrivals({
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
   return (
-    <section className="relative overflow-hidden pt-16 pb-8 md:pt-24 md:pb-10">
+    <section className="relative overflow-hidden pt-16 pb-6 md:pt-24 md:pb-8">
       {/* The word itself, enormous and hollow, behind everything. */}
       <p
         aria-hidden
@@ -540,25 +634,27 @@ function NewArrivals({
 }
 
 /** Scene five: just added, rolled like closing credits over the newest arrival. */
-function Credits({
-  items,
-  onOpen,
-  chapter,
-  preview,
-}: {
-  items: MediaCardItem[];
-  onOpen: Open;
-  chapter: string;
-  preview: boolean;
-}) {
+function Credits({ items, onOpen, preview }: { items: MediaCardItem[]; onOpen: Open; preview: boolean }) {
   const [first] = items;
   // The title under the pointer: its clip plays behind the credits.
   const [hovered, setHovered] = useState<MediaCardItem | null>(null);
   return (
-    <section className="relative overflow-hidden pt-10 pb-20 md:pt-14 md:pb-28">
+    <section className="relative overflow-hidden pt-14 pb-20 md:pt-16 md:pb-28">
+      {/* Where this scene begins: a hairline of the accent, fading out at both ends. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-0 z-10 h-px w-2/3 -translate-x-1/2 bg-gradient-to-r from-transparent via-primary/60 to-transparent"
+      />
       <Backdrop
         item={first}
         className={cn("grayscale transition-opacity duration-700", hovered ? "opacity-0" : "opacity-25")}
+      />
+      {/* Colour over the grey: a duotone of the brand's pink and violet. */}
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,45,149,0.35),rgba(176,38,255,0.30))] mix-blend-color transition-opacity duration-700",
+          hovered ? "opacity-0" : "opacity-100",
+        )}
       />
       {/* Keyed by the hovered video, so moving between titles fades one
           clip out and the next one in rather than swapping in place. */}
@@ -569,12 +665,21 @@ function Credits({
         </div>
       )}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background via-background/60 to-background" />
+      {/* The word itself, enormous and hollow, barely there behind the list. */}
+      <p
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none whitespace-nowrap text-[15vw] font-black uppercase leading-none tracking-tighter transition-opacity duration-500 md:text-[12vw]",
+          // Out of the way while a hovered title plays behind the credits.
+          hovered ? "opacity-0" : "opacity-[0.18]",
+        )}
+        style={{ WebkitTextStroke: "2px var(--primary)", color: "transparent" }}
+      >
+        Just added
+      </p>
 
       <div className="relative mx-auto max-w-2xl px-6 text-center">
-        <Chapter n={chapter} label="Just added" center />
-        <div className="mt-10">
-          <CreditList items={items} onOpen={onOpen} onHover={setHovered} />
-        </div>
+        <CreditList items={items} onOpen={onOpen} onHover={setHovered} />
       </div>
     </section>
   );
@@ -592,15 +697,21 @@ function CreditList({
 }) {
   return (
     <ol>
-      {items.map((item) => (
+      {items.map((item, index) => (
         <li
           key={item.id}
           className="pb-7"
           onMouseEnter={() => onHover(item)}
           onMouseLeave={() => onHover((current) => (current?.id === item.id ? null : current))}
         >
+          {/* A small ornament between entries, as on a credits roll. */}
+          {index > 0 && (
+            <span aria-hidden className="mb-7 block text-xs text-primary/60">
+              ✦
+            </span>
+          )}
           <button type="button" onClick={() => onOpen(item.id, false)} className="group w-full">
-            <span className="block text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.3em] text-primary/90">
               {item.studio ?? item.releaseDate?.slice(0, 4) ?? "\u00a0"}
             </span>
             <span className="sensitive mt-1 block text-2xl font-bold tracking-tight transition-colors group-hover:text-primary md:text-3xl">
@@ -608,8 +719,9 @@ function CreditList({
             </span>
           </button>
           {item.performers && item.performers.length > 0 && (
-            <p className="sensitive mt-1 text-sm italic text-muted-foreground">
-              starring <PerformerLinks performers={item.performers} max={3} />
+            <p className="sensitive mt-1 text-sm italic text-foreground/85">
+              <span className="text-muted-foreground">starring</span>{" "}
+              <PerformerLinks performers={item.performers} max={3} />
             </p>
           )}
         </li>
@@ -656,7 +768,7 @@ function StillWall({ items }: { items: MediaCardItem[] }) {
  * the next step — a random video, the whole library, the feed, or back up to
  * the feature — instead of ending on a logo with nothing to do.
  */
-function EndCard({ onOpen, stills }: { onOpen: Open; stills: MediaCardItem[] }) {
+export function EndCard({ onOpen, stills }: { onOpen: Open; stills: MediaCardItem[] }) {
   const [rolling, setRolling] = useState(false);
 
   async function surprise() {
@@ -684,7 +796,14 @@ function EndCard({ onOpen, stills }: { onOpen: Open; stills: MediaCardItem[] }) 
             "radial-gradient(ellipse 40% 60% at 50% 50%, color-mix(in oklch, var(--primary) 16%, transparent), transparent 70%)",
         }}
       />
-      <BrandLogo size="hero" tagline={false} className="relative mb-4" />
+      {/* The logo, a dot, then a word that changes in place. */}
+      <div className="relative mb-4 flex flex-wrap items-baseline justify-center gap-x-5 gap-y-2">
+        <BrandLogo size="hero" tagline={false} />
+        <span aria-hidden className="text-5xl font-black text-primary md:text-7xl lg:text-8xl">
+          ·
+        </span>
+        <RotatingWord words={["Untamed", "Unfiltered", "Unforgettable"]} />
+      </div>
       <div className="relative space-y-2">
         <p className="text-3xl font-black tracking-tight md:text-5xl">
           In the mood for something <span className="text-primary">naughty</span>?
@@ -723,5 +842,43 @@ function EndCard({ onOpen, stills }: { onOpen: Open; stills: MediaCardItem[] }) 
         </Link>
       </div>
     </section>
+  );
+}
+
+/** How long each word holds before the next slides in. */
+const WORD_MS = 3000;
+
+/**
+ * One word that changes in place, each new one sliding up into view. The
+ * space is held at the longest word's width, so nothing beside it shifts.
+ * With less motion asked for, the words sit together, dotted apart.
+ */
+function RotatingWord({ words }: { words: string[] }) {
+  const { motion } = useAppearance();
+  const osReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const animated = motion === "full" && !osReducedMotion;
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (!animated) return;
+    const timer = window.setInterval(() => setIndex((current) => (current + 1) % words.length), WORD_MS);
+    return () => window.clearInterval(timer);
+  }, [animated, words.length]);
+
+  const wordClass = "text-5xl font-black leading-[1.1] tracking-tighter text-white md:text-7xl lg:text-8xl";
+
+  if (!animated) {
+    return <p className={wordClass}>{words.join(" · ")}</p>;
+  }
+
+  const longest = words.reduce((a, b) => (b.length > a.length ? b : a));
+  return (
+    <span className="grid overflow-hidden">
+      {/* Holds the width and height of the longest word. */}
+      <span className={cn(wordClass, "invisible col-start-1 row-start-1")}>{longest}</span>
+      <span key={index} className={cn(wordClass, "animate-word-in col-start-1 row-start-1 text-left")}>
+        {words[index]}
+      </span>
+    </span>
   );
 }

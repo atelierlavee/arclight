@@ -3,8 +3,7 @@ import { Pin } from "lucide-react";
 import { useState } from "react";
 import { isPinned, togglePin } from "@/lib/pinned";
 import { cn } from "@/lib/utils";
-import { thumbnailUrl } from "@/lib/mediaItemApi";
-import type { StudioSummary } from "@/lib/studioApi";
+import { randomStudioFrame, studioFrameUrl, type StudioSummary } from "@/lib/studioApi";
 
 /**
  * A studio tile, shared by the studios page and the homepage row.
@@ -23,20 +22,23 @@ import type { StudioSummary } from "@/lib/studioApi";
 export function StudioCard({
   studio,
   className,
-  frameItemId = studio.representativeItemId,
+  frameItemId: frameOverride,
 }: {
   studio: StudioSummary;
   className?: string;
   /**
-   * Which frame to show. Defaults to the newest, which is what the studios
-   * page wants — a stable picture you can learn to recognise. The homepage
-   * row passes a shuffled one instead.
+   * Which frame to show. Defaults to a random one of the studio's videos,
+   * chosen once per visit, so the cover changes over time and grows with
+   * the studio instead of being the same still forever.
    */
   frameItemId?: number | null;
 }) {
   // The count is deliberately not shown: the name is the whole label, and a
   // "1 video" line under half of them made the row read as a list of gaps.
   const [pinned, setPinned] = useState(() => isPinned(`studio:${studio.id}`));
+  // Chosen once on mount, so the cover holds still while you are on the page.
+  const [randomFrame] = useState(() => randomStudioFrame(studio));
+  const frameItemId = frameOverride ?? randomFrame;
   return (
     <div className={`motion-card group relative ${className ?? ""}`}>
       <Link
@@ -47,7 +49,7 @@ export function StudioCard({
         <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-secondary ring-1 ring-border transition-all duration-200 group-hover:ring-white/40">
           {frameItemId != null ? (
             <img
-              src={thumbnailUrl({ id: frameItemId })}
+              src={studioFrameUrl(studio, frameItemId)}
               alt=""
               loading="lazy"
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"

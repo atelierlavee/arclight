@@ -43,7 +43,7 @@ describe("GET /api/studios", () => {
     });
   });
 
-  it("offers several frames to choose between, newest first", async () => {
+  it("offers several frames to choose between, drawn from its videos", async () => {
     const vixen = await makeStudio("Vixen");
     const ids = [];
     for (let n = 0; n < 3; n++) {
@@ -51,7 +51,25 @@ describe("GET /api/studios", () => {
     }
 
     const [studio] = (await get("/api/studios")).json().studios;
-    expect(studio.frameItemIds).toEqual([...ids].reverse());
+    // Random order, so compare as sets.
+    expect([...studio.frameItemIds].sort()).toEqual([...ids].sort());
+  });
+
+  it("draws frames from every video, not only the newest", async () => {
+    const vixen = await makeStudio("Vixen");
+    const ids: number[] = [];
+    for (let n = 0; n < 12; n++) {
+      ids.push(await makeItem(libraryId, { title: `V${n}`, studioId: vixen }));
+    }
+    const oldest = new Set(ids.slice(0, 4));
+
+    // Over a few loads an older video turns up; newest-only never would.
+    let sawOlder = false;
+    for (let attempt = 0; attempt < 20 && !sawOlder; attempt++) {
+      const [studio] = (await get("/api/studios")).json().studios;
+      sawOlder = studio.frameItemIds.some((id: number) => oldest.has(id));
+    }
+    expect(sawOlder).toBe(true);
   });
 
   it("caps the frames rather than sending every video a studio has", async () => {
@@ -62,6 +80,18 @@ describe("GET /api/studios", () => {
 
     const [studio] = (await get("/api/studios")).json().studios;
     expect(studio.frameItemIds).toHaveLength(8);
+  });
+
+  // Thumbnails are cached for a year by URL, so a frame's URL has to carry
+  // its thumbnail version or a replaced thumbnail never shows on the card.
+  it("sends each frame's thumbnail version, so a replaced thumbnail shows", async () => {
+    const vixen = await makeStudio("Vixen");
+    const plain = await makeItem(libraryId, { title: "Plain", studioId: vixen });
+    const custom = await makeItem(libraryId, { title: "Custom", studioId: vixen });
+    await db.update(mediaItems).set({ thumbnailFile: "custom-1.jpg" }).where(eq(mediaItems.id, custom));
+
+    const [studio] = (await get("/api/studios")).json().studios;
+    expect(studio.thumbnailFiles).toEqual({ [plain]: null, [custom]: "custom-1.jpg" });
   });
 
   // A LEFT JOIN gives a studio with nothing attached one null-padded row, and

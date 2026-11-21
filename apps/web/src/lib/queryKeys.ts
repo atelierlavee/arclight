@@ -67,6 +67,8 @@ export const qk = {
     heroPicker: ["media-items", "hero-picker"] as const,
     homeCollage: ["media-items", "home-collage"] as const,
     randomPicks: (seed: unknown) => ["media-items", "random-picks", seed] as const,
+    /** Home's mood picker: a shuffle of one tag's videos. */
+    mood: (tag: string, seed: number) => ["media-items", "mood", tag, seed] as const,
     tagRow: (tag: string) => ["media-items", "tag-row", tag] as const,
   },
   /** One item's full detail, as the modal shows it. */

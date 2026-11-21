@@ -655,6 +655,47 @@ video.custom-seek::-webkit-media-controls-timeline {
   .film-grain { animation: none; }
 }
 
+/* The studios control room's wall: two columns rolling in opposite
+   directions. Each is drawn twice, so half its height loops seamlessly. */
+@keyframes roll-up {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+.animate-roll-up {
+  animation: roll-up var(--roll-duration, 40s) linear infinite;
+}
+.animate-roll-down {
+  animation: roll-up var(--roll-duration, 40s) linear infinite reverse;
+}
+/* Hovering a column holds that column still. Here rather than as a utility:
+   the animation shorthand above would reset a play-state set anywhere less
+   specific. */
+.animate-roll-up:hover,
+.animate-roll-down:hover {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-roll-up,
+  .animate-roll-down { animation: none; }
+}
+
+/* The rotating word beside the logo: each one slides up into place. */
+@keyframes word-in {
+  from { transform: translateY(70%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-word-in {
+  animation: word-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* "Because you watched": light running along a hovered branch. */
+@keyframes chain-flow {
+  to { stroke-dashoffset: -24; }
+}
+.animate-chain-flow {
+  animation: chain-flow 0.8s linear infinite;
+}
+
 /* The home page's opening shot: a slow push-in on the still, once. */
 @keyframes ken-burns {
   from { transform: scale(1); }

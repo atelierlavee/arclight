@@ -4,6 +4,8 @@ import { db } from "../db/client.js";
 import { profiles, users } from "../db/schema.js";
 import { verifyPassword } from "./passwords.js";
 import { serialized } from "./serialize.js";
+import { isUnlocked } from "./privacyUnlock.js";
+import { unlockKey } from "./profileContext.js";
 
 // Failures per account, in a sliding window. The login route has its own
 // limiter, but every other place that asks for this password went straight to
@@ -81,4 +83,21 @@ export async function proveProfile(
   }
   const ok = typeof proof.profilePin === "string" && (await verifyPassword(proof.profilePin, row.pinHash));
   return ok ? null : { error: "That profile PIN isn't right", code: "profile_pin_required" };
+}
+
+/**
+ * What any change to a profile — its names, the account's username, renaming
+ * or recolouring a profile — has to prove: either this session unlocked with
+ * Touch ID or the privacy password in the last few minutes, or the request
+ * carries the same proof as `proveProfile` (the account password for the
+ * owner, the profile PIN for anyone else). So someone at an unlocked screen
+ * cannot rename you, or the sign-in name, without being you.
+ */
+export async function proveIdentity(
+  request: FastifyRequest,
+  proof: { accountPassword?: unknown; profilePin?: unknown },
+): Promise<ProofFailure | null> {
+  const key = unlockKey(request);
+  if (key && isUnlocked(key)) return null;
+  return proveProfile(request, proof);
 }

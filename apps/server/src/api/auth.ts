@@ -4,7 +4,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { db } from "../db/client.js";
 import { profiles, sessions, users } from "../db/schema.js";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../auth/passwords.js";
-import { accountPasswordOk } from "../auth/profileProof.js";
+import { accountPasswordOk, proveIdentity } from "../auth/profileProof.js";
 import { serialized } from "../auth/serialize.js";
 import {
   autoSelectProfile,
@@ -116,6 +116,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         profile = {
           id: row.id,
           name: row.name,
+          firstName: row.firstName,
+          lastName: row.lastName,
           color: row.color,
           isOwner: row.isOwner,
           hasPin: row.pinHash !== null,
@@ -225,12 +227,18 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     })
   );
 
-  app.patch<{ Body: { username?: string } }>(
+  app.patch<{ Body: { username?: string; accountPassword?: unknown; profilePin?: unknown } }>(
     "/api/auth/account",
     async (request, reply) => {
       if (!request.user) {
         reply.code(401);
         return { error: "Authentication required" };
+      }
+      // Changing the sign-in name needs proof it's you (see proveIdentity).
+      const failure = await proveIdentity(request, request.body ?? {});
+      if (failure) {
+        reply.code(403);
+        return failure;
       }
 
       const username = typeof request.body.username === "string" ? request.body.username.trim() : "";
