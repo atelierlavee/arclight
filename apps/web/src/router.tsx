@@ -130,12 +130,12 @@ const performersRoute = createRoute({
   path: "/performers",
   // In the URL rather than state, so the network view survives a reload and
   // the back button returns to it from a profile opened there.
-  validateSearch: (search: Record<string, unknown>): { view?: "network" } & NetworkView => {
+  validateSearch: (search: Record<string, unknown>): { view?: "network" | "list" } & NetworkView => {
     const int = (value: unknown) =>
       value != null && Number.isInteger(Number(value)) ? Number(value) : undefined;
     const text = (value: unknown) => (typeof value === "string" && value ? value : undefined);
     return {
-      view: search.view === "network" ? "network" : undefined,
+      view: search.view === "network" ? "network" : search.view === "list" ? "list" : undefined,
       // What the network links performers by; absent means shared videos.
       // Studios is the default, so only "videos" needs saying.
       by: search.by === "videos" ? "videos" : undefined,

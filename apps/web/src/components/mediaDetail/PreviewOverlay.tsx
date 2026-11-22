@@ -49,12 +49,30 @@ export function PreviewOverlay({
 }) {
   return (
     <>
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
+      {/* Darkness pooled at the bottom and left, where the words sit, as on
+          the home page's opening shot. */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background via-background/30 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/70 via-black/20 to-transparent" />
 
-      <div className="absolute bottom-0 left-0 right-0 flex flex-col gap-2 p-3 sm:gap-4 sm:p-6">
-        <h2 className="sensitive line-clamp-2 max-w-2xl pr-12 text-base font-bold tracking-tight drop-shadow-md sm:pr-0 sm:text-2xl md:text-3xl">
+      <div className="absolute bottom-0 left-0 right-0 flex flex-col gap-3 p-4 sm:gap-5 sm:p-8 md:p-12">
+        <p className="hidden text-xs font-semibold uppercase tracking-[0.3em] text-primary sm:block">Now showing</p>
+        <h2 className="sensitive line-clamp-2 max-w-4xl pr-12 text-2xl font-black leading-[1.05] tracking-tight drop-shadow-md sm:pr-0 sm:text-4xl md:text-6xl">
           {item?.title ?? "Loading…"}
         </h2>
+        {item && (
+          <p className="sensitive text-[11px] uppercase tracking-[0.25em] text-white/75 sm:text-xs">
+            {[
+              item.performers
+                ?.slice(0, 3)
+                .map((performer) => performer.name)
+                .join(", "),
+              item.studio,
+              item.releaseDate?.slice(0, 4),
+            ]
+              .filter(Boolean)
+              .join("  ·  ")}
+          </p>
+        )}
 
         {item?.itemType === "video" && (
           <div
@@ -67,7 +85,7 @@ export function PreviewOverlay({
             <button
               type="button"
               onClick={() => onStartPlaying(0)}
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-black transition-transform hover:scale-[1.03] sm:gap-2 sm:px-5 sm:py-2 sm:text-base"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black transition-transform hover:scale-[1.03] sm:gap-2 sm:px-6 sm:py-2.5 sm:text-sm"
             >
               <RotateCcw className="size-4 sm:size-5" />
               Start Over
@@ -76,7 +94,7 @@ export function PreviewOverlay({
               <button
                 type="button"
                 onClick={() => onStartPlaying(item.lastPositionSeconds)}
-                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-white/20 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-white/30 sm:gap-2 sm:px-5 sm:py-2 sm:text-base"
+                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-white shadow-[0_0_24px_-6px_rgba(255,45,149,0.8)] transition-transform hover:scale-[1.03] sm:gap-2 sm:px-6 sm:py-2.5 sm:text-sm"
               >
                 <Play className="size-4 fill-current sm:size-5" />
                 {/* Shortened on a phone so it shares a line with
@@ -108,7 +126,7 @@ export function PreviewOverlay({
               <Heart
                 className={cn(
                   "size-4 transition-colors sm:size-5",
-                  item.isFavorite && "fill-red-500 text-red-500",
+                  item.isFavorite && "fill-primary text-primary",
                 )}
               />
             </button>

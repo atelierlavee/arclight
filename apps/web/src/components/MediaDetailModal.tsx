@@ -14,6 +14,7 @@ import { QueuePanel } from "./QueuePanel";
 import { SeekStrip } from "./SeekStrip";
 import { PlayerGestures } from "./PlayerGestures";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { XRayPanel } from "./mediaDetail/XRayPanel";
 import { DetailsPanel } from "./mediaDetail/DetailsPanel";
 import { MiniPlayerHandles } from "./mediaDetail/MiniPlayerHandles";
 import { PlayerControls } from "./mediaDetail/PlayerControls";
@@ -40,6 +41,24 @@ import { useVideoPlayback, type PlayerMode } from "./mediaDetail/useVideoPlaybac
 import { qk } from "@/lib/queryKeys";
 import { useIsOwner } from "@/lib/profile";
 import { adjacentPositionStart } from "@/lib/markerApi";
+
+/**
+ * A section of the watch page under the video: a short pink rule and its
+ * name in spaced capitals, then the content — the home page's chapter
+ * labels. `show` false renders the content alone, as it always was.
+ */
+function ModalSection({ label, show, children }: { label: string; show: boolean; children: React.ReactNode }) {
+  if (!show) return <>{children}</>;
+  return (
+    <section className="mt-12 space-y-4 first-of-type:mt-8">
+      <h2 className="flex items-center gap-3 px-4 text-xs font-semibold uppercase tracking-[0.3em] text-primary md:px-6">
+        <span className="h-px w-8 bg-primary/60" />
+        {label}
+      </h2>
+      {children}
+    </section>
+  );
+}
 
 export function MediaDetailModal({
   itemId,
@@ -250,6 +269,12 @@ export function MediaDetailModal({
       startPlaying(item ? leanBack.resolveStart(item, position) : position),
   });
   const { queueBeside, nextQueuedItem } = queue;
+  // The watch page, styled like the home page's opening shot: the video
+  // full-bleed at the top, then labelled sections below. Everything but the
+  // mini player and cinema.
+  const page = !mini && !cinema;
+  // The queue no longer floats over the video: on the page it has a section.
+  const queueOverVideo = queueBeside && !page;
   const leanBackDriver = useLeanBackDriver({
     session: leanBack.session,
     clipEnd: leanBack.clipEnd,
@@ -298,7 +323,7 @@ export function MediaDetailModal({
           "z-50",
           mini
             ? "pointer-events-none fixed inset-0 overflow-visible bg-transparent"
-            : "fixed inset-0 overflow-y-auto overscroll-contain bg-black/80 p-4 backdrop-blur-sm sm:p-8",
+            : "fixed inset-0 overflow-y-auto overscroll-contain bg-background",
         )}
         onClick={onClose}
       >
@@ -326,7 +351,7 @@ export function MediaDetailModal({
               ? "pointer-events-auto fixed z-50 w-[min(24rem,calc(100vw-2rem))] rounded-lg ring-1 ring-border"
               : cinema
                 ? "fixed inset-0 z-50 bg-black"
-                : "mx-auto w-full max-w-5xl animate-fade-up rounded-xl",
+                : "min-h-full w-full animate-fade-in bg-background pb-24",
           )}
           style={
             mini
@@ -366,6 +391,8 @@ export function MediaDetailModal({
             className={cn(
               "relative w-full overflow-hidden bg-black",
               cinema ? "h-screen" : "aspect-video",
+              // Full-bleed, as tall as the screen allows.
+              page && "max-h-[86vh]",
             )}
             onMouseMove={revealPlayerControls}
             onTouchStart={revealPlayerControls}
@@ -411,9 +438,14 @@ export function MediaDetailModal({
                   visible={showPlayerControls}
                   onSeek={seekTo}
                   onJumpToBest={jumpToBestPart}
-                  besidePanel={queueBeside}
+                  besidePanel={queueOverVideo}
                 />
               </>
+            )}
+
+            {/* Who's in it, over the video, with the controls. */}
+            {mode === "playing" && item?.itemType === "video" && !mini && (
+              <XRayPanel performers={item.performers} visible={showPlayerControls} />
             )}
 
             {queue.showUpNext && nextQueuedItem && !leanBack.session && (
@@ -508,7 +540,7 @@ export function MediaDetailModal({
                 className={cn(
                   "absolute top-4 z-40 flex size-9 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm transition-all hover:bg-black/80",
                   // Steps aside for the queue rather than hiding under it.
-                  queueBeside ? "right-[21.25rem]" : "right-4",
+                  queueOverVideo ? "right-[21.25rem]" : "right-4",
                 )}
               >
                 <X className="size-5" />
@@ -523,7 +555,7 @@ export function MediaDetailModal({
                 className={cn(
                   "absolute top-4 z-40 flex size-9 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm transition-all hover:bg-black/80",
                   // Steps aside for the queue rather than hiding under it.
-                  queueBeside ? "right-[21.25rem]" : "right-4",
+                  queueOverVideo ? "right-[21.25rem]" : "right-4",
                 )}
               >
                 <Maximize2 className="size-4" />
@@ -538,7 +570,7 @@ export function MediaDetailModal({
                 It covers the right of the frame while open, which is the
                 trade — but it is open because you are choosing what is next,
                 not because you are watching this one. */}
-            {queueBeside && (
+            {queueOverVideo && (
               <aside className="absolute inset-y-0 right-0 z-30 w-[min(20rem,85vw)] border-l border-white/10 bg-black/70 backdrop-blur-md">
                 <QueuePanel onPlay={showItem} variant="side" />
               </aside>
@@ -548,6 +580,7 @@ export function MediaDetailModal({
 
           {/* Details */}
           {item && !mini && (
+            <ModalSection label="Details" show={page}>
             <DetailsPanel
               item={item}
               isMobile={isMobile}
@@ -556,6 +589,7 @@ export function MediaDetailModal({
               accent={accent}
               categories={categories}
               bookmarks={bookmarks}
+              markers={markers}
               onJumpToBookmark={jumpTo}
               kindPending={updateKind.isPending}
               onChangeKind={(kind) => updateKind.mutate(kind)}
@@ -567,11 +601,16 @@ export function MediaDetailModal({
               framingSaving={saveFraming.isPending}
               onSaveFraming={(next) => saveFraming.mutate(next)}
             />
+            </ModalSection>
           )}
 
           {/* Above "More like this": the gallery belongs to this video, while
             related items lead away from it. */}
-          {item && !mini && <GalleryStrip itemId={item.id} />}
+          {item && !mini && (
+            <div className={cn(page && "mt-12")}>
+              <GalleryStrip itemId={item.id} />
+            </div>
+          )}
 
           {/* Only ever with something in it. An empty queue below the player
               was a heading and a line of instructions taking up the space
@@ -580,12 +619,26 @@ export function MediaDetailModal({
           {/* Cinema mode has no side column, so a queue with something in it
               falls back to the stack below. Empty, it stays hidden. */}
           {item?.itemType === "video" &&
-            !mini &&
-            !queueBeside &&
+            cinema &&
             queue.queueItems.length > 0 && <QueuePanel onPlay={showItem} />}
 
-          {item && !mini && (
-            <RelatedItems itemId={item.id} onSelect={showItem} />
+          {item && cinema && <RelatedItems itemId={item.id} onSelect={showItem} />}
+
+          {item?.itemType === "video" && page && queueBeside && queue.queueItems.length > 0 && (
+            <ModalSection label="Your queue" show>
+              <QueuePanel onPlay={showItem} />
+            </ModalSection>
+          )}
+
+          {item && page && (
+            <ModalSection label="Up next" show>
+              <RelatedItems
+                itemId={item.id}
+                onSelect={showItem}
+                variant="strip"
+                source={{ performers: item.performers, studio: item.studio, tags: item.tags }}
+              />
+            </ModalSection>
           )}
         </div>
       </div>

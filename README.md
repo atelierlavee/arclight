@@ -27,8 +27,12 @@ you tick what to keep.
 - **Streams** with HTTP range support, so seeking works
 - **Generates** poster frames and multi-segment hover previews with ffmpeg
 - **Organises** with tags, favourites, 1–5 star ratings, categories, manual
-  and rule-based collections, and saved searches
-  Ratings are set directly; there is no pairwise video-ranking feature.
+  and rule-based collections, and saved searches.
+  Ratings are set directly; there is no pairwise video-ranking feature
+- **Files videos into categories by studio**: each studio (or its network)
+  names a *Home tile* category — Glamour, Hardcore, Cinematic and so on — and
+  its videos are filed there as they're scanned. Changing a studio's tile
+  re-files its videos; a video you file by hand stays where you put it
 - **Edits in bulk**: select any number of tiles to favourite, rate, tag, set
   a studio, add or remove a performer, or file them into a collection
 - **Groups** by performer, studio, album and series, each with its own
@@ -41,12 +45,13 @@ you tick what to keep.
   more others ("Beach" under "Outdoor" and "Vacation"), and a studio under a
   network you create. Browsing, filtering and smart collections by a tag or
   studio include everything under it
-- **Draws a performer's career**: *Career* on their page lays their videos
-  out by release year, with their age each year, the gaps between, and a
-  one-line summary — first and last year, ages, busiest year
-- **Profiles performers**: birthdate (and their age in each video),
-  gender, country, height, measurements, hair and eyes, tattoos, piercings and
-  career years — typed in by you, or filled in from StashDB, all optional
+- **Gives each performer a page of their own** — see
+  [Performer pages](#performer-pages): a black-and-white banner you can
+  reposition, a fact sheet, *Roulette*, who they're *Often with*, and their
+  videos as a list, grid or timeline, grouped by studio or not
+- **Profiles performers**: gender, country, height, measurements, hair and
+  eyes, tattoos, piercings and career years — typed in by you, or filled in
+  from StashDB, all optional. Ages are never shown
 - **Holds new videos in an inbox**: nothing a scan finds is visible anywhere
   in the app until you approve it from the Inbox, where you review each video's
   title, description, cast, studio and tags, then mark it done
@@ -77,22 +82,30 @@ you tick what to keep.
   or the player, find it in the homepage row or the browse filter, and it
   drops off by itself once you've watched it
 - **Follows performers and studios**: the Follow button on their page
-  (per profile) feeds a *New from who you follow* home row, a *Following*
-  browse filter and the notification bell. Following a network takes in all
-  its sites. The *Following* page lists everyone you follow with
-  what's new from each, and suggests who else to follow from your own watch
-  time, plays, counts, favourites and stars. The Performers and Studios pages
-  put followed ones in a section of their own, with a *Following only* toggle
-- **Keeps a tier list** per profile — *Tier list* in the sidebar: drag
+  (per profile) feeds the home page, a *Following* browse filter and the
+  notification bell. Following a network takes in all its sites. The
+  Performers and Studios pages put followed ones in a section of their own
+- **Has a feed** of everyone you follow — *Feed* in the sidebar: a post per
+  new video, newest release first, with an autoplaying preview, description
+  and tags, and like, queue and watched buttons on the post. Story-style
+  avatars along the top narrow it to one performer or studio, and `J`/`K`
+  move through it, `L` likes and `Enter` opens. Its side panel holds
+  who you follow (with suggestions of who else to follow, drawn from your
+  own watch time, plays, counts, favourites and stars), what's coming up in
+  the inbox, and trending tags. `/following` opens that panel
+- **Keeps a tier list** per profile — Your stats → *Tier list*: drag
   performers or videos into S, A, B, C and D (or tap a tile, then a row, on
   a phone). Saved as you go
 - **Takes private notes** on any video or performer — visible only to the
   profile that wrote them, and searchable from that profile's search
 - **Has profiles**: one sign-in, then a *Who's watching?* picker. Each
-  profile can have a PIN and keeps its own watch history and stats,
-  favourites, ratings, bookmarks, vault, privacy password and appearance. The
-  library itself is shared, and only the owner profile can manage it
-- **Keeps a vault**: hide any item in your profile's vault and it disappears
+  profile has a first and last name of its own (shown in the welcome, the
+  picker and the menu), can have a PIN, and keeps its own watch history and
+  stats, favourites, ratings, bookmarks, vault, privacy password, appearance,
+  pins, saved searches and recents. The library itself is shared, and only
+  the owner profile can manage it. Changing a profile or the account asks for
+  the account password, the profile's PIN or Touch ID, checked on the server
+- **Keeps a vault** — in the account menu: hide any item in your profile's vault and it disappears
   from every page, search and count until you open the vault with its own
   PIN or a passkey. Leaving the vault page locks it again
 - **Locks on open**: once a privacy password or passkey is set, opening the
@@ -100,8 +113,8 @@ you tick what to keep.
 - **Lays a video out as a contact sheet** (`G`, or the grid button): 20,
   50 or every frame of the seek-bar preview in a grid, with the most-replayed
   stretch and your bookmarks marked. Click a frame to play from there
-- **Leans back**: *Lean back* beside Play All and Shuffle (on performer,
-  studio, album, series, collection and filtered browse pages) shuffles the
+- **Leans back**: *Lean back* beside Play All and Shuffle (on studio, album,
+  series, collection and filtered browse pages) shuffles the
   set into the queue and plays it hands-free in cinema mode — whole videos,
   or 5- or 2-minute clips that start at each video's most replayed part
 - **Remembers the best part**: the seek bar shows a heatmap of the parts you
@@ -122,25 +135,32 @@ you tick what to keep.
   your library after a few idle minutes (never over a playing video)
 - **Adapts** to how you like it drawn, without a rebuild — see
   [Appearance](#appearance)
-- **Fills the homepage's bottom backdrop** with a darkened collage of up to
-  48 newest video thumbnails, refreshed every 30 seconds while the page is open.
+- **Opens on a cinematic home** — see [Home](#home): full-bleed scenes
+  rather than rows of tiles, from the featured video to a mood picker that
+  plays a scene inside the word
+- **Plays on a page of its own** — see [The player](#the-player): the video
+  on top, then its details, positions, gallery, your queue and *Up next*,
+  with the cast shown over the video while it plays
 - **Casts** to a Chromecast or smart TV from Chrome, or AirPlay from Safari —
   see [Casting to a TV](#casting-to-a-tv)
-- **Shows where the space goes** — Site settings → Storage: the library's
+- **Shows where the space goes** — Settings → Library → Storage: the library's
   total and what it is made of, a studio donut, performers ranked by space,
   the largest files, space by release year, resolution, and scenes kept at
   more than one quality
-- **Looks after the library** — Site settings → Library: a health summary,
+- **Looks after the library** — Settings → Library: a health summary,
   duplicate files (same content under two names, with paths and sizes but
   no delete button — that belongs in your file manager), and a clean-up for
   performers and studios left behind by a removed folder. Videos whose files
   have gone are listed as posters on the Missing page, where you can forget
   them; nothing on disk is ever touched
-- **Logs activity** — Site settings → Activity: scans, new videos, edits,
+- **Logs activity** — Settings → Server → Activity history: scans, new videos, edits,
   tags, backups, watching and privacy changes, in one feed you can filter by
   kind and clear with the privacy credential. Events about vault items stay
   out of it while the vault is locked
-- **Backs up** the database and your uploaded artwork to a single archive
+- **Backs up** the database and your uploaded artwork to a single archive —
+  including what the browser remembers for each profile (pins, saved and
+  recent searches, recents, dismissed hints, view choices), which is kept on
+  the server too so a new browser or a restore brings it back
 - **Survives reorganisation**: files are matched by content hash, so moving or
   renaming one keeps its tags, framing and watch history
 
@@ -192,6 +212,7 @@ erDiagram
     collections ||--o{ collection_items : "manual membership"
     media_items ||--o{ collection_items : ""
 
+    categories ||--o{ studios : "default_category_id — home tile"
     users ||--o{ profiles : "who's watching"
     users ||--o{ sessions : ""
     sessions }o--o| profiles : "picked profile"
@@ -214,7 +235,8 @@ erDiagram
         text title_source "filename | user"
         text performers_source "scanner | user"
         text studio_source "scanner | user"
-        text kind "video | movie | series, set by hand"
+        text kind "category slug — filed by studio, or by hand"
+        text kind_source "scanner | user"
         int season_number
         int episode_number
         text episode_title
@@ -270,7 +292,8 @@ Four decisions worth knowing:
 Not shown, to keep the diagram readable: `scan_jobs`, `categories`,
 `app_settings` (a key/JSONB store for site-wide settings such as hero picks
 and the scan interval), `profile_settings` (the same per profile: appearance,
-privacy password, vault PIN), `profile_performer_state` (favourite
+privacy password, vault PIN, trophies seen, and the browser's kept data —
+pins, searches, recents, dismissed hints and view choices), `profile_performer_state` (favourite
 performers), `o_events` (each count with its time), `playback_heatmap` (what
 the seek bar's heatmap is drawn from) and `activity_events` (an append-only
 log of type/message/metadata rows behind the activity feed).
@@ -338,7 +361,7 @@ Open <http://localhost:3000> in your browser. Arc Light does not require a
 desktop launcher or an installed browser app. Use Chrome for Chromecast;
 Touch ID uses the browser's passkey support.
 Registered passkeys can also sign you in: choose **Sign in with passkey** on
-the login screen. Register one first under Site settings → Privacy while
+the login screen. Register one first under Settings → Privacy while
 signed in with your password. Passkeys require localhost or HTTPS; password
 sign-in remains available as a fallback.
 
@@ -356,7 +379,7 @@ committed, so you only run it after changing the design.
 
 ### Using it from a phone
 
-**Settings → Privacy → Local network access** decides whether other devices on
+**Settings → Server → Local network access** decides whether other devices on
 the wifi can open the server. Turning it on shows the address to type on the
 phone; turning it off makes every other device get a short "not available
 here" page instead. It applies immediately — nothing restarts.
@@ -403,7 +426,7 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml
 ```
 
 Everything else — which folders to scan, scan interval, categories, hero
-picks — is configured in the app under **Site settings**, not in env vars.
+picks — is configured in the app under **Settings**, not in env vars.
 
 ### Casting to a TV
 
@@ -540,11 +563,59 @@ Where two sources disagree, the more deliberate one wins:
 3. the `<Studio>/` folder
 4. a `[Bracket]` elsewhere in the filename
 
+## Home
+
+The home page is a run of full-bleed scenes rather than rows of tiles:
+
+- **Opening shot** — the featured video with parallax, film grain and a
+  welcome line by your profile's name
+- **Library** — your categories as tilted posters, black and white until you
+  hover, over slow silk waves
+- **Keep watching** — a cover carousel on the left and the video's details on
+  the right, with a few glowing hearts drifting behind
+- **Pick a mood** — a mood word set like a movie poster, with a scene playing
+  inside the letters and a tagline under it. Pick another mood from the line
+  below, or shuffle (top right)
+- **New from who you follow**, **Because you watched**, **Just added** as a
+  credits roll, a studio control room, and an end card
+
+Which scenes appear, and in what order, is set in Settings → Homepage.
+
+## Performer pages
+
+A performer's page is laid out centre stage:
+
+- **Header** — their cover as a black-and-white banner (add, change, drag to
+  reposition or remove it from the `⋯` menu), a round portrait, their name in
+  outlined capitals, and a fact sheet: country, height, hair, eyes, tattoos
+  and piercings. Favourite and Follow sit beneath it as two icons
+- **Roulette** — every video, shuffled and sliced into one strip. Hover along
+  it to bring a video up with its clip playing behind the section, or *Spin*
+  and the one it stops on plays
+- **Often with** — the performers they share the most videos with, in one
+  scrolling row
+- **Videos** — *All* (with a sort), *By studio* (the default, a sticky studio
+  name down the side) or *Timeline* (a centre line with the year on the
+  opposite side to its videos). List, two-column and grid views, and a
+  sparkles button that plays every preview on screen instead of on hover
+
+## The player
+
+Opening a video gives it a page of its own: the video large at the top, then
+its details — title, year, length, stars, counts, description, tags, the
+named *positions* as chips that jump to that moment, your bookmarks and your
+note — then the stills from its folder as a slider, your queue, and *Up next*:
+related videos, each saying why it's there (same performer, studio or tags).
+
+While it plays, **In this scene** runs down the left edge: each performer's
+full portrait with their country, height, hair and how many videos you have
+of them.
+
 ## Discreet mode
 
 `Ctrl/Cmd + Shift + H` blurs every image in the app, from any page, instantly.
 Press it again and it asks for proof before letting go — a **privacy password**
-or **Touch ID**, whichever you've set up under Site settings → Privacy.
+or **Touch ID**, whichever you've set up under Settings → Privacy.
 
 The asymmetry is the point: arming it is free and immediate, because you press
 it when someone walks in. Releasing it costs something, because otherwise
@@ -570,8 +641,9 @@ data, or anyone with real access to your unlocked machine.
 ## Appearance
 
 `Ctrl/Cmd + Shift + ,` opens a panel over whatever page you're on — tile size,
-tile shape, what a tile writes on itself, banner height, whether hovering
-expands a tile and whether it plays a preview clip. It's deliberately not a
+tile shape, what a tile writes on itself, whether hovering expands a tile and
+whether it plays a preview clip. The same controls are also a tab in
+Settings. It's deliberately not a
 settings page: these are choices you can only judge by looking at them, and the
 page behind the panel resizes as you drag.
 
@@ -592,8 +664,10 @@ Settings are stored server-side, so one look follows you between browsers. The
 browser keeps a copy too, read synchronously, so a reload paints correctly
 instead of flashing the defaults.
 
-Which sections the homepage has, and in what order, lives under Site settings →
-Homepage — it's a layout decision made once, not a slider.
+Which sections the homepage has, and in what order, lives in Settings →
+Homepage, with a
+reset back to the default — it's a layout decision made once, not a slider.
+Banners are a fixed 80% of the screen's height.
 
 Ambient light and the poster screensaver are here too. The screensaver's idle
 time, how long each poster stays up, what it shows (everything, favourites,
@@ -606,8 +680,8 @@ that has never been adjusted keeps using the tile's framing.
 
 ## Your stats
 
-*Your stats*, at the bottom of the sidebar (and linked from Profile), looks
-back on your watching as a year in review:
+*Your stats*, in the sidebar, has three tabs — **Stats**, **Activity** and
+**Tier list**. Stats looks back on your watching as a year in review:
 
 - **Opening** — total hours watched, with streaks, active days and your
   average day
@@ -625,9 +699,10 @@ back on your watching as a year in review:
   days — with an Unfollow beside each
 - **04 Trophies** — achievements unlocked and still to unlock
 
-The **Diary** (sidebar, under Your stats) reads the same log as a history:
-month by month, each day you watched something with what it was, for how
-long, whether you finished it, your stars, counts and your note beside it.
+**Activity** reads the same log as a history: month by month, each day you
+watched something with what it was, for how long, whether you finished it,
+your stars, counts and your note beside it — or, under *Everything*, every
+kind of event on one timeline. (`/diary` still opens it.)
 
 It is built from the watch log, which records how long you watched each video
 in hour-sized buckets. Only time watched since the log was added counts, so a
@@ -659,6 +734,8 @@ start from.
 | `Ctrl/Cmd + K` | Search anywhere — performers, studios, titles, as you type |
 | `Ctrl/Cmd + Shift + H` | Discreet mode on, or off with proof |
 | `Ctrl/Cmd + Shift + ,` | Appearance panel |
+| `Ctrl/Cmd + \` | Fold the sidebar to icons, and back |
+| `J` `K` / `L` / `Enter` | In the feed: next / previous post, like, open |
 | `1`–`5` / `0` | On a tile: rate it, or clear the rating |
 | `Space` / `K` | Play or pause |
 | `←` `→` | Skip 10 seconds |
@@ -678,8 +755,13 @@ space rather than pausing a video.
 
 ## Backups
 
-**Back up now** in Site settings writes a single `.tar.gz` containing a full
-`pg_dump` and every image you've uploaded. Posters, previews and generated
+**Back up now** in Settings writes a single `.tar.gz` containing a full
+`pg_dump` and every image you've uploaded. The dump holds everything that a
+rescan from scratch could not rebuild: your edits, tags, ratings, collections,
+watch history, categories and studio tiles, appearance, and each profile's
+pins, saved searches, recents and dismissed hints (the browser keeps those in
+its own storage for speed, and copies every change to the server a moment
+later). Posters, previews and generated
 thumbnails are deliberately excluded — they're regenerable from your videos,
 and including them would take a backup from a few MB to tens of GB, which in
 practice means it stops being run.
@@ -725,7 +807,7 @@ it's in that folder:
 2. Point `MEDIA_ROOT` at the videos and run `make up`.
 3. Create any account — it's thrown away in a moment — to get past the
    first-run screen.
-4. Site settings → Backup → **Restore** on that archive.
+4. Settings → Server → Backup → **Restore** on that archive.
 5. Sign in with the password you had when the backup was taken.
 6. Run a scan. Files are matched back to their existing records by content
    hash, not by path, so a different folder layout doesn't create duplicates —
@@ -739,6 +821,10 @@ same thing from outside the container, with Postgres up and the app stopped.
 
 A backup only protects you if it leaves the machine — point `BACKUP_DIR` at an
 external drive or a synced folder.
+
+Not in a backup: the videos themselves, `docker/.env` (API keys such as
+`TPDB_API_KEY` and `STASHDB_API_KEY`, and `WEBAUTHN_ORIGIN`), sign-in
+sessions, and generated artwork, which a scan rebuilds.
 
 ## Formats
 

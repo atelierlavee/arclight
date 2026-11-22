@@ -39,20 +39,18 @@ export function CategoryCoverEditor({
   });
 
   return (
-    <div className="mt-3">
+    <div className="mt-3 max-w-[15rem]">
       <FramingEditor
         src={src}
         value={{ x: category.coverPositionX, y: category.coverPositionY, scale: category.coverScale }}
-        // Matches the home-page tile's ratio (w-96 by h-44) so this preview
-        // and the real thing crop identically.
-        aspectClass="aspect-[96/44]"
+        // Matches the home page's category posters (2:3, portrait) so this
+        // preview and the real thing crop identically.
+        aspectClass="aspect-[2/3]"
         saving={save.isPending}
         onSave={(next) => save.mutate(next)}
         onCancel={onDone}
       />
-      {save.isError && (
-        <p className="mt-1 text-xs text-destructive">Could not save that framing.</p>
-      )}
+      {save.isError && <p className="mt-1 text-xs text-destructive">Could not save that framing.</p>}
     </div>
   );
 }

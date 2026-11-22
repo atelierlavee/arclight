@@ -27,11 +27,15 @@ import {
  * family. Keys are stored, not indexes, so inserting a section later doesn't
  * silently reshuffle somebody's saved order.
  */
+/**
+ * How tall a performer's or studio's cover is, as a share of the screen.
+ * Fixed: it used to be a slider, which made the header a thing to fiddle
+ * with rather than look at.
+ */
+export const BANNER_VH = 80;
+
 export const HOME_ROWS = [
-  { key: "categories", label: "Categories" },
-  { key: "streak", label: "Watch streak" },
   { key: "dailyPick", label: "Daily pick" },
-  { key: "tasteTwins", label: "You might like" },
   { key: "continue", label: "Continue watching" },
   { key: "watchLater", label: "Watch later" },
   { key: "following", label: "New from who you follow" },
@@ -84,7 +88,8 @@ function isUntouchedLegacyOrder(value: unknown[]): boolean {
     if (at < 0) continue;
     if (at < last) return false;
     last = at;
-    if (visible === false && key !== "streak") return false;
+    // The streak (no longer a row) was the one off in the old default.
+    if (visible === false && (key as string) !== "streak") return false;
   }
   return true;
 }
@@ -464,7 +469,7 @@ export const DEFAULTS: Appearance = {
   discreetBlurPercent: 45,
   discreetText: false,
   heroHeight: 70,
-  bannerHeight: 70,
+  bannerHeight: 80,
   autoplayNext: true,
   motion: "full",
   cardRadiusRem: 0.625,

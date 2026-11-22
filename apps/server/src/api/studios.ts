@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import {
   albums,
+  categories,
   mediaItemPerformers,
   mediaItems,
   mediaItemTypes,
@@ -13,6 +14,7 @@ import {
 import { visibleItems } from "../library/visibility.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { studioDescendantIds, studioIdsUnder } from "../library/hierarchy.js";
+import { refileStudio } from "../library/studioCategory.js";
 import { normalizeName } from "../scanner/performerNames.js";
 
 import { serialized } from "../auth/serialize.js";
@@ -144,7 +146,13 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
     const id = Number(request.params.id);
 
     const [studio] = await db
-      .select({ id: studios.id, name: studios.name, parentId: studios.parentId, origin: studios.origin })
+      .select({
+        id: studios.id,
+        name: studios.name,
+        parentId: studios.parentId,
+        origin: studios.origin,
+        defaultCategoryId: studios.defaultCategoryId,
+      })
       .from(studios)
       .where(eq(studios.id, id));
     if (!studio) {
@@ -277,6 +285,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
       id: studio.id,
       name: studio.name,
       origin: studio.origin,
+      defaultCategoryId: studio.defaultCategoryId,
       parent: parent ?? null,
       sites,
       videoCount: totals?.videoCount ?? 0,
@@ -337,8 +346,12 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  /** Which network a studio belongs to; null takes it out of one. */
-  app.patch<{ Params: { id: string }; Body: { parentId?: number | null } }>(
+  /**
+   * Which network a studio belongs to (null takes it out of one), and which
+   * home tile its videos are filed under (null defers to its network). Either
+   * change re-files the studio's videos — and its sites' — at once.
+   */
+  app.patch<{ Params: { id: string }; Body: { parentId?: number | null; defaultCategoryId?: number | null } }>(
     "/api/studios/:id",
     async (request, reply) => serialized("hierarchy", async () => {
       const id = Number(request.params.id);
@@ -373,13 +386,36 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      if (parentId === undefined) {
+      const defaultCategoryId = body.defaultCategoryId;
+      if (defaultCategoryId !== undefined && defaultCategoryId !== null) {
+        if (!isId(defaultCategoryId)) {
+          reply.code(400);
+          return { error: "defaultCategoryId must be a category id or null" };
+        }
+        const [category] = await db
+          .select({ id: categories.id })
+          .from(categories)
+          .where(eq(categories.id, defaultCategoryId));
+        if (!category) {
+          reply.code(400);
+          return { error: "That category does not exist" };
+        }
+      }
+
+      if (parentId === undefined && defaultCategoryId === undefined) {
         reply.code(400);
         return { error: "Nothing to update" };
       }
 
-      await db.update(studios).set({ parentId }).where(eq(studios.id, id));
-      return { ok: true };
+      await db
+        .update(studios)
+        .set({
+          ...(parentId !== undefined ? { parentId } : {}),
+          ...(defaultCategoryId !== undefined ? { defaultCategoryId } : {}),
+        })
+        .where(eq(studios.id, id));
+      const refiled = await refileStudio(id);
+      return { ok: true, refiled };
     }),
   );
 }

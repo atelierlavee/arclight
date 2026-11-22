@@ -688,6 +688,44 @@ video.custom-seek::-webkit-media-controls-timeline {
   animation: word-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+/* The mood poster: a new scene fading in over the last, and the old word
+   leaving as the new one arrives. */
+@keyframes scene-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-scene-in {
+  animation: scene-in 1s ease-out both;
+}
+@keyframes word-out {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-45%); opacity: 0; }
+}
+.animate-word-out {
+  animation: word-out 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+/* With less motion: no sliding or fading, the old word simply gone. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-scene-in,
+  .animate-word-in,
+  .animate-chain-flow { animation: none; }
+  .animate-word-out { animation: none; opacity: 0; }
+}
+
+/* Keep watching: little hearts drifting up behind the details and fading. */
+@keyframes heart-float {
+  0% { transform: translateY(0) scale(0.7); opacity: 0; }
+  20% { opacity: 0.9; }
+  70% { opacity: 0.6; }
+  100% { transform: translateY(-70px) scale(1.05); opacity: 0; }
+}
+.animate-heart-float {
+  animation: heart-float var(--heart-duration, 7s) ease-in-out var(--heart-delay, 0s) infinite both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-heart-float { animation: none; opacity: 0.45; }
+}
+
 /* "Because you watched": light running along a hovered branch. */
 @keyframes chain-flow {
   to { stroke-dashoffset: -24; }
@@ -708,21 +746,3 @@ video.custom-seek::-webkit-media-controls-timeline {
   .animate-ken-burns { animation: none; }
 }
 
-@keyframes marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-.animate-marquee {
-  animation: marquee var(--marquee-duration, 60s) linear infinite;
-}
-.animate-marquee-reverse {
-  animation: marquee var(--marquee-duration, 60s) linear infinite reverse;
-}
-.animate-marquee:hover,
-.animate-marquee-reverse:hover {
-  animation-play-state: paused;
-}
-@media (prefers-reduced-motion: reduce) {
-  .animate-marquee,
-  .animate-marquee-reverse { animation: none; }
-}

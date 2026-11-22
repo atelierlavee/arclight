@@ -21,11 +21,14 @@ export function PerformerImagePicker({
   hasImage,
   className,
   onUploaded,
+  iconOnly = false,
 }: {
   performerId: number;
   kind: PerformerImageKind;
   hasImage: boolean;
   className?: string;
+  /** Round icon buttons with no words, to sit in a row of other icons. */
+  iconOnly?: boolean;
   /**
    * Fired after a successful upload, so the caller can drop straight into
    * framing. A freshly uploaded picture is exactly when you know how you want
@@ -54,7 +57,13 @@ export function PerformerImagePicker({
 
   const remove = useMutation({
     mutationFn: () => deletePerformerImage(performerId, kind),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    // Said out loud: a failed removal used to leave the picture in place with
+    // no sign anything had gone wrong.
+    onError: (err: Error) => setError(err.message),
   });
 
   const busy = upload.isPending || remove.isPending;
@@ -79,14 +88,20 @@ export function PerformerImagePicker({
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        className="flex items-center gap-1.5 rounded-md bg-black/60 px-2.5 py-1.5 text-xs font-medium text-white ring-1 ring-white/20 backdrop-blur-sm transition-colors hover:bg-black/80 disabled:opacity-50"
+        aria-label={hasImage ? `Change ${label}` : `Add ${label}`}
+        title={hasImage ? `Change ${label}` : `Add ${label}`}
+        className={
+          iconOnly
+            ? "flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+            : "flex items-center gap-1.5 rounded-md bg-black/60 px-2.5 py-1.5 text-xs font-medium text-white ring-1 ring-white/20 backdrop-blur-sm transition-colors hover:bg-black/80 disabled:opacity-50"
+        }
       >
         {upload.isPending ? (
-          <Loader2 className="size-3.5 animate-spin" />
+          <Loader2 className={iconOnly ? "size-4 animate-spin" : "size-3.5 animate-spin"} />
         ) : (
-          <ImagePlus className="size-3.5" />
+          <ImagePlus className={iconOnly ? "size-4" : "size-3.5"} />
         )}
-        {hasImage ? `Change ${label}` : `Add ${label}`}
+        {!iconOnly && (hasImage ? `Change ${label}` : `Add ${label}`)}
       </button>
 
       {hasImage && (
@@ -96,9 +111,13 @@ export function PerformerImagePicker({
           disabled={busy}
           aria-label={`Remove ${label}`}
           title={`Remove ${label}`}
-          className="rounded-md bg-black/60 p-1.5 text-white ring-1 ring-white/20 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-destructive disabled:opacity-50"
+          className={
+            iconOnly
+              ? "flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive disabled:opacity-50"
+              : "rounded-md bg-black/60 p-1.5 text-white ring-1 ring-white/20 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-destructive disabled:opacity-50"
+          }
         >
-          <Trash2 className="size-3.5" />
+          <Trash2 className={iconOnly ? "size-4" : "size-3.5"} />
         </button>
       )}
 

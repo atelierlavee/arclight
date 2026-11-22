@@ -13,7 +13,8 @@ import { StarRating } from "../StarRating";
 import { BookmarkList } from "../BookmarkList";
 import { SeriesAssignment } from "../SeriesAssignment";
 import { NoteEditor } from "../NoteEditor";
-import type { Bookmark } from "@/lib/bookmarkApi";
+import { formatTimestamp, type Bookmark } from "@/lib/bookmarkApi";
+import type { Marker } from "@/lib/markerApi";
 import type { Category } from "@/lib/categoryApi";
 import { setItemNote, thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { useQueryClient } from "@tanstack/react-query";
@@ -40,20 +41,50 @@ function heroAspect(heroHeightPercent: number): string {
     : "16 / 5";
 }
 
-function FieldLabel({
-  children,
-  accent,
-}: {
-  children: React.ReactNode;
-  accent?: string | null;
-}) {
+function FieldLabel({ children }: { children: React.ReactNode; accent?: string | null }) {
   return (
-    <span
-      className="block text-xs font-medium uppercase tracking-wide text-muted-foreground transition-colors duration-500"
-      style={{ color: accent ?? undefined }}
-    >
-      {children}
-    </span>
+    <span className="block text-[11px] font-semibold uppercase tracking-[0.3em] text-primary">{children}</span>
+  );
+}
+
+/**
+ * The video's positions, its chapters, as a quiet wrap of chips — start
+ * time and name — where a click jumps the video there.
+ */
+function Positions({
+  markers,
+  duration,
+  onJump,
+}: {
+  markers: Marker[];
+  duration: number;
+  onJump: (seconds: number) => void;
+}) {
+  const sorted = [...markers].sort((a, b) => a.startSeconds - b.startSeconds);
+  // Where each ends: its own end, else where the next begins, else the end.
+  const spans = sorted.map((marker, index) => {
+    const end = marker.endSeconds ?? sorted[index + 1]?.startSeconds ?? duration;
+    return { marker, start: marker.startSeconds, end: Math.max(end, marker.startSeconds) };
+  });
+  return (
+    <div className="space-y-3">
+      <FieldLabel>Positions · {markers.length}</FieldLabel>
+      {/* One chip per position: when it starts, and its name. */}
+      <div className="flex flex-wrap gap-2">
+        {spans.map(({ marker, start }) => (
+          <button
+            key={marker.id}
+            type="button"
+            onClick={() => onJump(start)}
+            title={`Jump to ${marker.title}`}
+            className="flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs ring-1 ring-white/10 transition-colors hover:bg-white/[0.1] hover:ring-primary/60"
+          >
+            <span className="font-mono tabular-nums text-muted-foreground">{formatTimestamp(start)}</span>
+            <span className="font-medium">{marker.title}</span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -66,6 +97,7 @@ export function DetailsPanel({
   accent,
   categories,
   bookmarks,
+  markers = [],
   onJumpToBookmark,
   kindPending,
   onChangeKind,
@@ -84,6 +116,8 @@ export function DetailsPanel({
   accent: string | null;
   categories: Category[];
   bookmarks: Bookmark[];
+  /** The video's positions (chapters), from ThePornDB. */
+  markers?: Marker[];
   onJumpToBookmark: (seconds: number) => void;
   kindPending: boolean;
   onChangeKind: (kind: string) => void;
@@ -98,120 +132,113 @@ export function DetailsPanel({
   const { density, heroHeight } = useAppearance();
   const isOwner = useIsOwner();
   const queryClient = useQueryClient();
+  const released = item.releaseDate?.slice(0, 4) ?? null;
   return (
-    <div className="grid gap-6 p-4 sm:grid-cols-[1.6fr_1fr] sm:p-6">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <span>{new Date(item.createdAt).getFullYear()}</span>
-          {item.durationSeconds !== null && (
-            <>
-              <span>·</span>
-              <span>{formatDuration(item.durationSeconds)}</span>
-            </>
+    <div className="grid gap-10 px-4 md:px-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-16 xl:grid-cols-[minmax(0,1fr)_24rem]">
+      <div className="min-w-0 space-y-6">
+        {/* The title, then one quiet line of facts and the controls. */}
+        <div className="space-y-3">
+          {editing ? (
+            <EditableTitle
+              itemId={item.id}
+              title={item.title}
+              className="cursor-text text-3xl font-black tracking-tight hover:underline md:text-4xl"
+            />
+          ) : (
+            <h2 className="sensitive text-3xl font-black leading-tight tracking-tight md:text-4xl">{item.title}</h2>
           )}
-          <span>·</span>
-          <StarRating itemId={item.id} rating={item.rating} />
-          {item.itemType === "video" && (
-            <>
-              <span>·</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="text-xs uppercase tracking-[0.25em] text-white/60">
+              {[released, formatDuration(item.durationSeconds)].filter(Boolean).join("  ·  ")}
+            </span>
+            <StarRating itemId={item.id} rating={item.rating} />
+            {item.itemType === "video" && (
               <button
                 type="button"
                 onClick={onCountO}
                 aria-label={`Count one (${item.oCount} so far)`}
                 title="Count one"
-                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-accent hover:text-foreground"
+                className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
               >
                 <Droplets className="size-3.5" />
                 <span className="tabular-nums">{item.oCount}</span>
               </button>
-            </>
-          )}
-          {/* A judgement about the metadata, so the owner's to make. Anyone
-              else only sees the result. */}
-          {item.itemType === "video" && isOwner && (
-            <button
-              type="button"
-              onClick={() => onToggleOrganised(item.organisedAt === null)}
-              disabled={organisedPending}
-              aria-pressed={item.organisedAt !== null}
-              title={item.organisedAt === null ? "Mark organised" : "Mark not organised"}
-              className={cn(
-                "flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors disabled:opacity-50",
-                item.organisedAt !== null
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              <CircleCheck className="size-3.5" />
-              Organised
-            </button>
-          )}
-          {/* Nothing to toggle on a phone — the sheet is read-only
-              there, so the control that turns editing on goes too. */}
-          {!isMobile && isOwner && (
-            <div className="ml-auto flex items-center gap-1">
+            )}
+            {/* A judgement about the metadata, so the owner's to make. */}
+            {item.itemType === "video" && isOwner && (
+              <button
+                type="button"
+                onClick={() => onToggleOrganised(item.organisedAt === null)}
+                disabled={organisedPending}
+                aria-pressed={item.organisedAt !== null}
+                title={item.organisedAt === null ? "Mark organised" : "Mark not organised"}
+                className={cn(
+                  "flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-colors disabled:opacity-50",
+                  item.organisedAt !== null
+                    ? "text-primary"
+                    : "text-muted-foreground hover:bg-white/10 hover:text-foreground",
+                )}
+              >
+                <CircleCheck className="size-3.5" />
+                Organised
+              </button>
+            )}
+            {/* Nothing to toggle on a phone — the sheet is read-only there. */}
+            {!isMobile && isOwner && (
               <button
                 type="button"
                 onClick={onToggleEditing}
                 aria-pressed={editing}
-                aria-label={
-                  editing ? "Finish editing details" : "Edit details"
-                }
+                aria-label={editing ? "Finish editing details" : "Edit details"}
                 title={editing ? "Done editing" : "Edit details"}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors",
+                  "ml-auto flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
                   editing
-                    ? "bg-white text-black hover:bg-white/90"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    ? "bg-primary text-white"
+                    : "text-muted-foreground ring-1 ring-white/15 hover:text-foreground hover:ring-white/30",
                 )}
               >
-                {editing ? (
-                  <Check className="size-3.5" />
-                ) : (
-                  <Pencil className="size-3.5" />
-                )}
+                {editing ? <Check className="size-3.5" /> : <Pencil className="size-3.5" />}
                 {editing ? "Done" : "Edit"}
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {editing ? (
-          <>
-            <EditableTitle
-              itemId={item.id}
-              title={item.title}
-              className="cursor-text text-lg font-bold hover:underline"
-            />
-            <DescriptionEditor
-              itemId={item.id}
-              description={item.description}
-            />
-          </>
+          <DescriptionEditor itemId={item.id} description={item.description} />
         ) : (
-          <>
-            <h2 className="text-lg font-bold">{item.title}</h2>
-            {item.description && (
-              <ClampedText
-                text={item.description}
-                className="text-sm leading-relaxed text-muted-foreground"
-              />
-            )}
-          </>
+          item.description && (
+            <ClampedText
+              text={item.description}
+              className="sensitive max-w-3xl text-base leading-relaxed text-white/70"
+            />
+          )
         )}
 
-        <div className="space-y-1.5 pt-1">
-          <FieldLabel accent={accent}>Performers</FieldLabel>
-          <PerformerEditor
-            itemId={item.id}
-            performers={item.performers}
-            source={item.performersSource}
-            readOnly={!editing}
+        {/* Who's in it shows over the video while it plays; here only to edit. */}
+        {editing && (
+          <div className="space-y-3">
+            <FieldLabel accent={accent}>Starring</FieldLabel>
+            <PerformerEditor
+              itemId={item.id}
+              performers={item.performers}
+              source={item.performersSource}
+              readOnly={false}
+            />
+          </div>
+        )}
+
+        {item.itemType === "video" && markers.length > 0 && (
+          <Positions
+            markers={markers}
+            duration={item.durationSeconds ?? 0}
+            onJump={onJumpToBookmark}
           />
-        </div>
+        )}
 
         {item.itemType === "video" && (
-          <div className="space-y-1.5 pt-1">
+          <div className="space-y-3">
             <FieldLabel accent={accent}>
               Bookmarks{bookmarks.length > 0 && ` · ${bookmarks.length}`}
             </FieldLabel>
@@ -220,7 +247,7 @@ export function DetailsPanel({
         )}
 
         {item.itemType !== "folder" && (
-          <div className="space-y-1.5 pt-1">
+          <div className="space-y-3">
             <FieldLabel accent={accent}>Note</FieldLabel>
             <NoteEditor
               note={item.note ?? null}
@@ -242,8 +269,9 @@ export function DetailsPanel({
         )}
       </div>
 
-      <div className="space-y-4">
-        <div className="space-y-1.5">
+      {/* The facts: a column of labelled pieces, quiet beside the story. */}
+      <div className="min-w-0 space-y-6 lg:border-l lg:border-white/10 lg:pl-10">
+        <div className="space-y-2">
           <FieldLabel accent={accent}>Category</FieldLabel>
           {editing ? (
             <select
@@ -265,10 +293,7 @@ export function DetailsPanel({
               )}
             </select>
           ) : (
-            <span
-              className="text-sm font-medium transition-colors duration-500"
-              style={{ color: accent ?? undefined }}
-            >
+            <span className="text-base font-semibold text-white">
               {categories.find((c) => c.slug === item.kind)?.label ??
                 item.kind}
             </span>
@@ -276,7 +301,7 @@ export function DetailsPanel({
         </div>
 
         {editing && (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <FieldLabel accent={accent}>Thumbnail</FieldLabel>
             <ThumbnailPicker
               itemId={item.id}
@@ -329,7 +354,7 @@ export function DetailsPanel({
           </div>
         )}
 
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <FieldLabel accent={accent}>Studio</FieldLabel>
           <StudioEditor
             itemId={item.id}
@@ -338,17 +363,16 @@ export function DetailsPanel({
           />
         </div>
 
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <FieldLabel accent={accent}>Tags</FieldLabel>
           <TagEditor
             itemId={item.id}
             tags={item.tags}
             readOnly={!editing}
-            accent={accent}
           />
         </div>
 
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           <FieldLabel accent={accent}>Details</FieldLabel>
           <TechnicalInfoPanel item={item} />
         </div>

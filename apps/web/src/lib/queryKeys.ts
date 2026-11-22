@@ -157,7 +157,6 @@ export const qk = {
     all: ["performer-in-progress"] as const,
     forPerformer: (id: Id) => ["performer-in-progress", id] as const,
   },
-  tasteTwins: ["taste-twins"] as const,
 
   studios: {
     all: ["studios"] as const,
@@ -210,6 +209,8 @@ export const qk = {
   /** The signed-in account's profiles; survives a profile switch, like auth status. */
   profiles: ["profiles"] as const,
   privacy: ["privacy"] as const,
+  /** One restore of the browser's kept data per profile per page load (lib/browserState). */
+  browserState: (profileId: number | "single") => ["browser-state", profileId] as const,
   passkeys: ["passkeys"] as const,
   vault: ["vault"] as const,
   vaultItems: ["vault-items"] as const,

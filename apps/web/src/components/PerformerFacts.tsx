@@ -1,14 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Globe, Pencil } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { StashDbLookupDialog } from "./StashDbLookupDialog";
-import { fetchStashDbStatus } from "@/lib/stashdbApi";
-import { qk } from "@/lib/queryKeys";
 import { EditDialog, SaveButton } from "./EditDialog";
 import { EDIT_INPUT } from "@/lib/editForm";
 import {
-  ageToday,
   PERFORMER_GENDERS,
   savePerformerFacts,
   type PerformerDetail,
@@ -16,7 +10,6 @@ import {
   type PerformerGender,
 } from "@/lib/performerApi";
 import { invalidatePerformer } from "@/lib/invalidate";
-import { useIsOwner } from "@/lib/profile";
 
 function formatBirthdate(birthdate: string): string {
   // Built from the parts rather than parsed, so no time zone can move it a day.
@@ -33,21 +26,13 @@ type Fact = { label: string; value: string };
 /** The facts that are known, in reading order. */
 function knownFacts(performer: PerformerDetail): Fact[] {
   const facts: (Fact | null)[] = [
-    performer.birthdate ? { label: "Age", value: String(ageToday(performer.birthdate)) } : null,
     performer.birthdate ? { label: "Born", value: formatBirthdate(performer.birthdate) } : null,
     performer.gender ? { label: "Gender", value: PERFORMER_GENDERS[performer.gender] } : null,
     performer.country ? { label: "Country", value: performer.country } : null,
     performer.ethnicity ? { label: "Ethnicity", value: performer.ethnicity } : null,
     performer.heightCm ? { label: "Height", value: `${performer.heightCm} cm` } : null,
-    performer.measurements ? { label: "Measurements", value: performer.measurements } : null,
     performer.hairColor ? { label: "Hair", value: performer.hairColor } : null,
     performer.eyeColor ? { label: "Eyes", value: performer.eyeColor } : null,
-    performer.careerStart || performer.careerEnd
-      ? {
-          label: "Career",
-          value: `${performer.careerStart ?? "?"}–${performer.careerEnd ?? "present"}`,
-        }
-      : null,
   ];
   return facts.filter((fact): fact is Fact => fact !== null);
 }
@@ -74,88 +59,56 @@ function splitList(text: string): string[] {
   return parts.filter(Boolean);
 }
 
-/** A fact as a pill: its label muted, its value beside it. */
-const PILL = "inline-flex items-baseline gap-1.5 rounded-full bg-secondary/60 px-3.5 py-1.5 text-sm";
-
-/** Edit and look-up: the same shape as a fact, dashed, so they read as actions. */
-const ACTION =
-  "inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3.5 py-1.5 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent hover:text-foreground";
-
 /**
- * A performer's profile facts, as one wrapping cloud of pills under the stats strip.
- *
- * Only what is known is shown — a grid of "Hair: —" for a performer nobody
- * has filled in reads as a broken form. With nothing known, the owner gets a
- * single "Add details" button and everyone else gets nothing.
- *
- * A pill per fact, label muted and value beside it, wrapping as needed: the
- * whole profile takes a line or two instead of a table's worth of height, and
- * a fact never has a wide gap to cross between its label and its value. Each
- * tattoo and piercing is a pill of its own, so a long list wraps instead of
- * being cut off. Edit and look-up are dashed pills at the end of the same
- * cloud, rather than a header of their own.
+ * A performer's profile facts as a short, centred spec sheet: each fact a
+ * tiny spaced label over its value, laid out in a wrapping row with no
+ * boxes around them. Tattoos and piercings follow as one line each. Only
+ * what is known is shown; with nothing known, nothing at all.
  */
 export function PerformerFacts({ performer }: { performer: PerformerDetail }) {
-  const [editing, setEditing] = useState(false);
-  const [lookingUp, setLookingUp] = useState(false);
-  const isOwner = useIsOwner();
-  // Only asked of the owner, and the button only appears once a key is saved.
-  const { data: stashDb } = useQuery({
-    queryKey: qk.stashDbStatus,
-    queryFn: fetchStashDbStatus,
-    enabled: isOwner,
-  });
   const facts = knownFacts(performer);
   const empty = facts.length === 0 && !performer.tattoos && !performer.piercings;
 
-  if (empty && !isOwner) return null;
+  if (empty) return null;
 
   const tattoos = performer.tattoos ? splitList(performer.tattoos) : [];
   const piercings = performer.piercings ? splitList(performer.piercings) : [];
 
   return (
-    <section aria-label="Details">
-      <ul className="flex flex-wrap items-center gap-2">
-        {facts.map((fact) => (
-          <li key={fact.label} className={PILL}>
-            <span className="text-muted-foreground">{fact.label}</span>
-            <span className="font-medium">{fact.value}</span>
-          </li>
-        ))}
-        {tattoos.map((item) => (
-          <li key={`tattoo-${item}`} className={PILL}>
-            <span className="text-muted-foreground">Tattoo</span>
-            <span className="font-medium">{item}</span>
-          </li>
-        ))}
-        {piercings.map((item) => (
-          <li key={`piercing-${item}`} className={PILL}>
-            <span className="text-muted-foreground">Piercing</span>
-            <span className="font-medium">{item}</span>
-          </li>
-        ))}
-        {isOwner && (
-          <>
-            <li>
-              <button type="button" onClick={() => setEditing(true)} className={ACTION}>
-                <Pencil className="size-3.5" />
-                {empty ? "Add details" : "Edit details"}
-              </button>
-            </li>
-            {stashDb?.configured && (
-              <li>
-                <button type="button" onClick={() => setLookingUp(true)} className={ACTION}>
-                  <Globe className="size-3.5" />
-                  Look up on StashDB
-                </button>
-              </li>
-            )}
-          </>
-        )}
-      </ul>
+    <section aria-label="Details" className="flex flex-col items-center gap-3 text-center">
+      {facts.length > 0 && (
+        <dl className="flex flex-wrap justify-center gap-x-7 gap-y-3">
+          {facts.map((fact) => (
+            <div key={fact.label} className="flex flex-col-reverse items-center gap-1">
+              <dt className="text-[10px] font-semibold uppercase tracking-[0.3em] text-primary">
+                {fact.label}
+              </dt>
+              <dd className="text-sm font-semibold text-white">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
-      {lookingUp && <StashDbLookupDialog performer={performer} onClose={() => setLookingUp(false)} />}
-      {editing && <PerformerFactsDialog performer={performer} onClose={() => setEditing(false)} />}
+      {(tattoos.length > 0 || piercings.length > 0) && (
+        <div className="max-w-2xl space-y-1 text-sm text-foreground/80">
+          {tattoos.length > 0 && (
+            <p>
+              <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-primary">
+                Tattoos
+              </span>
+              {tattoos.join(" · ")}
+            </p>
+          )}
+          {piercings.length > 0 && (
+            <p>
+              <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-primary">
+                Piercings
+              </span>
+              {piercings.join(" · ")}
+            </p>
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -217,7 +170,7 @@ const FIELDS: { key: keyof Facts; label: string; placeholder?: string; type?: st
   { key: "piercings", label: "Piercings" },
 ];
 
-function PerformerFactsDialog({
+export function PerformerFactsDialog({
   performer,
   onClose,
 }: {

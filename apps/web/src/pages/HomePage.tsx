@@ -3,16 +3,13 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { EditorialHome, EndCard } from "@/components/home/EditorialHome";
-import { CastScene, LibraryScene, StudiosScene } from "@/components/home/LibraryScenes";
+import { CastScene, StudiosScene } from "@/components/home/LibraryScenes";
 import type { MediaCardItem } from "@/components/MediaCard";
 import { MediaDetailModal } from "@/components/MediaDetailModal";
-import { ClearContinueWatching } from "@/components/ClearContinueWatching";
 import { ROW_TILE_LIMIT } from "@/lib/rowLimits";
 import { MediaRow } from "@/components/MediaRow";
 import { useAppearance, PageScope, type HomeRowKey } from "@/lib/appearance";
 import { PinnedRow } from "@/components/PinnedRow";
-import { StreakWidget } from "@/components/StreakWidget";
-import { TasteTwinRow } from "@/components/TasteTwinRow";
 import { qk } from "@/lib/queryKeys";
 
 type Tag = { id: number; name: string; itemCount?: number };
@@ -208,7 +205,6 @@ export function HomePage() {
             tags={tagsData?.tags ?? []}
             loading={recentLoading || continueLoading || followingLoading}
             onOpen={openItem}
-            resumeAction={<ClearContinueWatching />}
           />
           {/* Rendered from the saved order rather than written out in sequence,
               so hiding or moving a section is a data change rather than an edit
@@ -218,12 +214,6 @@ export function HomePage() {
             .filter((row) => row.visible && !EDITORIAL_ROWS.has(row.key))
             .map(({ key }) => {
               switch (key) {
-                case "streak":
-                  return <StreakWidget key={key} />;
-                case "tasteTwins":
-                  return <TasteTwinRow key={key} />;
-                case "categories":
-                  return <LibraryScene key={key} />;
                 case "watchLater":
                   return (
                     <MediaRow

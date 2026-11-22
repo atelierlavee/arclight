@@ -27,7 +27,11 @@ describe("readHomeRows", () => {
   it("gives an untouched old default the new short one", () => {
     // Every row on but the streak, in the built-in order: the old default
     // saved back by an unrelated appearance change.
-    const legacy = HOME_ROWS.map((row) => ({ key: row.key, visible: row.key !== "streak" }));
+    // (The streak has since left Home, but old saved lists still carry it.)
+    const legacy = [
+      { key: "streak", visible: false },
+      ...HOME_ROWS.map((row) => ({ key: row.key, visible: true })),
+    ];
     expect(readHomeRows(legacy)).toEqual(readHomeRows(undefined));
   });
 
@@ -39,10 +43,10 @@ describe("readHomeRows", () => {
   });
 
   it("keeps the order you arranged", () => {
-    const order = readHomeRows(stored("tags", "categories", "continue"));
+    const order = readHomeRows(stored("tags", "dailyPick", "continue"));
     // The three stored rows keep their relative order, whatever else lands
     // between them.
-    const positions = ["tags", "categories", "continue"].map((key) =>
+    const positions = ["tags", "dailyPick", "continue"].map((key) =>
       keys(order).indexOf(key),
     );
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
@@ -50,10 +54,10 @@ describe("readHomeRows", () => {
 
   it("keeps the rows you hid hidden", () => {
     const order = readHomeRows([
-      { key: "categories", visible: false },
+      { key: "dailyPick", visible: false },
       { key: "continue", visible: true },
     ]);
-    expect(order.find((row) => row.key === "categories")?.visible).toBe(false);
+    expect(order.find((row) => row.key === "dailyPick")?.visible).toBe(false);
     expect(order.find((row) => row.key === "continue")?.visible).toBe(true);
   });
 
@@ -70,7 +74,7 @@ describe("readHomeRows", () => {
     const order = keys(
       readHomeRows(
         stored(
-          "categories",
+          "dailyPick",
           "continue",
           "favourites",
           "performers",
@@ -92,7 +96,7 @@ describe("readHomeRows", () => {
   });
 
   it("keeps several new rows in their own relative order", () => {
-    const order = keys(readHomeRows(stored("categories", "tags")));
+    const order = keys(readHomeRows(stored("dailyPick", "tags")));
     expect(order.indexOf("recentlyWatched")).toBeLessThan(
       order.indexOf("mostPlayed"),
     );
@@ -100,20 +104,20 @@ describe("readHomeRows", () => {
   });
 
   it("puts a new first row at the front", () => {
-    // "categories" leads HOME_ROWS, so a stored order lacking it should get
+    // "dailyPick" leads HOME_ROWS, so a stored order lacking it should get
     // it back at the top rather than wherever there was room.
-    expect(keys(readHomeRows(stored("tags")))[0]).toBe("categories");
+    expect(keys(readHomeRows(stored("tags")))[0]).toBe("dailyPick");
   });
 
   it("drops keys this build no longer has", () => {
-    const order = keys(readHomeRows(stored("categories", "cinematicRow")));
+    const order = keys(readHomeRows(stored("dailyPick", "cinematicRow")));
     expect(order).not.toContain("cinematicRow");
-    expect(order).toContain("categories");
+    expect(order).toContain("dailyPick");
   });
 
   it("ignores a duplicate rather than showing the row twice", () => {
-    const order = keys(readHomeRows(stored("categories", "categories")));
-    expect(order.filter((key) => key === "categories")).toHaveLength(1);
+    const order = keys(readHomeRows(stored("dailyPick", "dailyPick")));
+    expect(order.filter((key) => key === "dailyPick")).toHaveLength(1);
   });
 
   it("returns every row exactly once, whatever it is given", () => {
@@ -121,7 +125,7 @@ describe("readHomeRows", () => {
       undefined,
       [],
       stored("tags"),
-      stored("tags", "categories", "nonsense"),
+      stored("tags", "dailyPick", "nonsense"),
     ]) {
       const order = keys(readHomeRows(input));
       expect(new Set(order).size).toBe(HOME_ROWS.length);

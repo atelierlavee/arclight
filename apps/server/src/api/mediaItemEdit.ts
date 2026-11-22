@@ -7,6 +7,7 @@ import { parseNote, setItemState } from "../library/profileState.js";
 import { hiddenGate } from "../library/visibility.js";
 import { db } from "../db/client.js";
 import { mediaItems, series } from "../db/schema.js";
+import { categoryForStudio } from "../library/studioCategory.js";
 import {
   categorySlugs,
   clampPercent,
@@ -235,6 +236,8 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Unknown category" };
       }
       patch.kind = kind;
+      // Filed by hand: the studio's default category no longer moves it.
+      patch.kindSource = "user";
     }
     // Clamped rather than rejected: these come from a drag and a slider, so a
     // value a fraction outside the range is a rounding artefact, not a reason
@@ -289,6 +292,19 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       patch.seriesSource = "user";
     }
     if (episodeTitle !== undefined) patch.episodeTitle = episodeTitle?.trim() || null;
+
+    // A new studio brings its default category along — unless you also
+    // picked one just now, or filed this item by hand before.
+    if (studio !== undefined && kind === undefined) {
+      const [current] = await db
+        .select({ kindSource: mediaItems.kindSource })
+        .from(mediaItems)
+        .where(eq(mediaItems.id, id));
+      if (current?.kindSource === "scanner") {
+        const target = await categoryForStudio((patch.studioId as number | null | undefined) ?? null);
+        if (target) patch.kind = target;
+      }
+    }
 
     // Touched even when only personal fields changed: it is also what
     // tells a missing id from a real one.

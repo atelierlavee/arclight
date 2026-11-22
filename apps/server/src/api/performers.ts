@@ -12,6 +12,7 @@ import {
   playbackStates,
   profilePerformerState,
   studios,
+  watchLog,
 } from "../db/schema.js";
 import { affinityEdges } from "../library/affinity.js";
 import { logActivity } from "../activity/log.js";
@@ -141,6 +142,10 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         archivedAt: performers.archivedAt,
         hasImage: sql<boolean>`(${performers.imageFile} is not null)`,
         hasBanner: sql<boolean>`(${performers.bannerFile} is not null)`,
+        // The stored file names, which change with every upload: folded into
+        // the image URLs so a replaced picture is a new URL, not a cached one.
+        imageVersion: performers.imageFile,
+        bannerVersion: performers.bannerFile,
         imagePositionX: performers.imagePositionX,
         imagePositionY: performers.imagePositionY,
         imageScale: performers.imageScale,
@@ -151,6 +156,11 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         // count(*) counts the NULL-padded row and reports 1.
         videoCount: sql<number>`count(${mediaItems.id})::int`,
         representativeItemId: sql<number | null>`max(${mediaItems.id})`,
+        // For the page's sorts and "new faces": when they were added, when
+        // their newest video arrived, and the newest release date among them.
+        createdAt: performers.createdAt,
+        latestAddedAt: sql<string | null>`max(${mediaItems.createdAt})`,
+        latestReleaseDate: sql<string | null>`max(${mediaItems.releaseDate})`,
       })
       .from(performers)
       .leftJoin(mediaItemPerformers, eq(mediaItemPerformers.performerId, performers.id))
@@ -179,7 +189,47 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       // ordering is ASCII, which sorts "Zoe" before "alice".
       .orderBy(desc(performerIsFavorite(profile, performers.id)), sql`lower(${performers.name})`);
 
-    return { performers: rows };
+    // The studio each performer appears with most, for the card. Over the
+    // same visible videos as the counts above.
+    const studioCounts = await db
+      .select({
+        performerId: mediaItemPerformers.performerId,
+        studioId: mediaItems.studioId,
+        studioName: studios.name,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(mediaItemPerformers)
+      .innerJoin(mediaItems, eq(mediaItems.id, mediaItemPerformers.mediaItemId))
+      .innerJoin(studios, eq(studios.id, mediaItems.studioId))
+      .where(and(visibleItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds)))
+      .groupBy(mediaItemPerformers.performerId, mediaItems.studioId, studios.name);
+    const topStudioOf = new Map<number, { name: string; count: number }>();
+    for (const row of studioCounts) {
+      const top = topStudioOf.get(row.performerId);
+      if (!top || row.count > top.count) topStudioOf.set(row.performerId, { name: row.studioName, count: row.count });
+    }
+
+    // How long this profile has spent watching each performer, for "most
+    // watched".
+    const watched = await db
+      .select({
+        performerId: mediaItemPerformers.performerId,
+        seconds: sql<number>`coalesce(sum(${watchLog.seconds}), 0)::int`,
+      })
+      .from(watchLog)
+      .innerJoin(mediaItemPerformers, eq(mediaItemPerformers.mediaItemId, watchLog.mediaItemId))
+      .innerJoin(mediaItems, eq(mediaItems.id, watchLog.mediaItemId))
+      .where(and(eq(watchLog.profileId, profile), visibleItems(profile)))
+      .groupBy(mediaItemPerformers.performerId);
+    const watchedSeconds = new Map(watched.map((row) => [row.performerId, row.seconds]));
+
+    return {
+      performers: rows.map((row) => ({
+        ...row,
+        topStudio: topStudioOf.get(row.id)?.name ?? null,
+        watchSeconds: watchedSeconds.get(row.id) ?? 0,
+      })),
+    };
   });
 
   // The whole library as a graph: every performer with at least one video,
@@ -225,6 +275,8 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
           isFavorite: performerIsFavorite(profile, performers.id),
           hasImage: sql<boolean>`(${performers.imageFile} is not null)`,
           hasBanner: sql<boolean>`(${performers.bannerFile} is not null)`,
+          imageVersion: performers.imageFile,
+          bannerVersion: performers.bannerFile,
           imagePositionX: performers.imagePositionX,
           imagePositionY: performers.imagePositionY,
           imageScale: performers.imageScale,
@@ -435,6 +487,8 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         isFavorite: performerIsFavorite(profile, coPerformer.id),
         hasImage: sql<boolean>`(${coPerformer.imageFile} is not null)`,
         hasBanner: sql<boolean>`(${coPerformer.bannerFile} is not null)`,
+        imageVersion: coPerformer.imageFile,
+        bannerVersion: coPerformer.bannerFile,
         imagePositionX: coPerformer.imagePositionX,
         imagePositionY: coPerformer.imagePositionY,
         imageScale: coPerformer.imageScale,
@@ -519,6 +573,8 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       name: performer.name,
       hasImage: performer.imageFile !== null,
       hasBanner: performer.bannerFile !== null,
+      imageVersion: performer.imageFile,
+      bannerVersion: performer.bannerFile,
       isFavorite: personal.isFavorite,
       // This profile's private note, never another's.
       note: personal.note,

@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Info, Play, Shuffle } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Heart, Info, Play, Shuffle } from "lucide-react";
 import type { MediaCardItem } from "../MediaCard";
 import { PreviewClip } from "../PreviewClip";
 import { BecauseYouWatched, MoodPicker } from "./DiscoverScenes";
-import { ExploreTags } from "./ExploreTags";
+import { LibraryScene } from "./LibraryScenes";
 import { BrandLogo } from "../BrandLogo";
 import { useAppearance } from "@/lib/appearance";
 import { framingStyle, thumbnailUrl } from "@/lib/mediaItemApi";
-import { useScrubSprite } from "@/lib/bookmarkApi";
 import { useProfile } from "@/lib/profile";
 import { displayName } from "@/lib/profilesApi";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -103,12 +102,23 @@ export function EditorialHome({
           parallax={motion === "full" && !osReducedMotion}
         />
       )}
-      <div className="px-4 py-4 md:px-10">
-        <ExploreTags tags={tags} />
-      </div>
+      {/* The library's categories, straight under the hero. The scene bleeds
+          past the page's gutters itself, which this page already does, so
+          the padding here cancels that out. */}
+      <Reveal>
+        <div className="px-4 md:px-6">
+          <LibraryScene />
+        </div>
+      </Reveal>
       {resume.length > 0 && (
         <Reveal>
-          <KeepWatching items={resume} onOpen={onOpen} action={resumeAction} chapter={chapters.next()} />
+          <KeepWatching
+            items={resume}
+            onOpen={onOpen}
+            action={resumeAction}
+            chapter={chapters.next()}
+            preview={previews}
+          />
         </Reveal>
       )}
       {lastWatched && (
@@ -404,25 +414,100 @@ function OpeningShot({
   );
 }
 
+/** Where each little heart drifts from, and how big, slow and late it is. */
+const HEARTS = [
+  // A few on the left, by the text.
+  { left: 8, top: 18, size: 9, duration: 7, delay: 0 },
+  { left: 30, top: 88, size: 8, duration: 7.5, delay: 2.2 },
+  { left: 44, top: 30, size: 7, duration: 6, delay: 5 },
+  // Thicker towards the right edge.
+  { left: 62, top: 60, size: 10, duration: 8, delay: 0.8 },
+  { left: 68, top: 12, size: 12, duration: 9, delay: 1.5 },
+  { left: 72, top: 84, size: 9, duration: 7, delay: 3.6 },
+  { left: 76, top: 38, size: 14, duration: 8.5, delay: 0.3 },
+  { left: 80, top: 66, size: 8, duration: 6.5, delay: 4.4 },
+  { left: 84, top: 22, size: 10, duration: 7.5, delay: 2.6 },
+  { left: 86, top: 92, size: 12, duration: 9, delay: 1.1 },
+  { left: 88, top: 50, size: 9, duration: 6, delay: 5.2 },
+  { left: 91, top: 6, size: 8, duration: 7, delay: 3.1 },
+  { left: 93, top: 74, size: 13, duration: 8, delay: 2 },
+  { left: 95, top: 34, size: 7, duration: 6.5, delay: 0.6 },
+  { left: 97, top: 58, size: 10, duration: 9.5, delay: 4 },
+  { left: 99, top: 16, size: 9, duration: 7.5, delay: 5.8 },
+];
+
+/** Little glowing hearts drifting up behind the details, and fading. */
+function FloatingHearts() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute -inset-8 -z-10">
+      {HEARTS.map((heart, index) => (
+        <Heart
+          key={index}
+          className="animate-heart-float absolute fill-primary text-primary drop-shadow-[0_0_6px_var(--primary)]"
+          style={
+            {
+              left: `${heart.left}%`,
+              top: `${heart.top}%`,
+              width: heart.size,
+              height: heart.size,
+              "--heart-duration": `${heart.duration}s`,
+              "--heart-delay": `${heart.delay}s`,
+            } as React.CSSProperties
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Seconds as a clock: 14:32, or 1:02:09 past the hour. */
+function formatClock(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = String(total % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
 /**
- * Scene two: where you left off, as timeline rails. Each unfinished video is
- * one full-width rail — its frames laid end to end like a scrubber, the part
- * you watched tinted, and a bright marker where you stopped. A click resumes.
+ * Scene two: where you left off, as a cover carousel. The unfinished videos'
+ * covers stand in a row in perspective — the one in focus large and square
+ * on in the middle, the rest turned away on either side. Its title, time
+ * left and progress sit beneath. The arrows, or a click on a side cover,
+ * bring another to the middle; a click on the middle one resumes, and
+ * hovering it plays its clip.
  */
 function KeepWatching({
   items,
   onOpen,
   action,
   chapter,
+  preview,
 }: {
   items: MediaCardItem[];
   onOpen: Open;
   action?: React.ReactNode;
   chapter: string;
+  preview: boolean;
 }) {
+  const [index, setIndex] = useState(0);
+  const [hovered, setHovered] = useState(false);
+  const focus = Math.min(index, items.length - 1);
+  const current = items[focus];
+  if (!current) return null;
+
+  const go = (to: number) => {
+    setIndex(Math.max(0, Math.min(items.length - 1, to)));
+    setHovered(false);
+  };
+  const duration = current.durationSeconds ?? 0;
+  const position = current.lastPositionSeconds ?? 0;
+  const progress = duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
+  const left = duration > position ? Math.ceil((duration - position) / 60) : null;
+
   return (
-    <section className="relative px-6 py-14 md:px-14 md:py-16">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <section className="relative overflow-hidden px-6 py-14 md:px-14 md:py-20">
+      <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
           <Chapter n={chapter} label="Keep watching" />
           <h2 className="text-3xl font-black tracking-tight md:text-4xl">
@@ -431,124 +516,122 @@ function KeepWatching({
         </div>
         {action}
       </div>
-      <div className="space-y-3">
-        {items.map((item) => (
-          <TimelineRail key={item.id} item={item} onOpen={onOpen} />
-        ))}
+
+      <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-20">
+        <div className="relative flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => go(focus - 1)}
+            disabled={focus === 0}
+            aria-label="Previous"
+            className="z-20 hidden size-11 shrink-0 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-20 md:flex"
+          >
+            <ChevronLeft className="size-6" />
+          </button>
+
+          {/* The covers, in perspective. */}
+          <div className="relative aspect-video w-full max-w-xl [perspective:1600px]">
+            {items.map((item, i) => {
+              const offset = i - focus;
+              const distance = Math.abs(offset);
+              const centre = offset === 0;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  tabIndex={distance <= 1 ? 0 : -1}
+                  aria-label={centre ? `Resume ${item.title}` : `Show ${item.title}`}
+                  onClick={() => (centre ? onOpen(item.id, true) : go(i))}
+                  onMouseEnter={centre ? () => setHovered(true) : undefined}
+                  onMouseLeave={centre ? () => setHovered(false) : undefined}
+                  className="group absolute inset-0 overflow-hidden rounded-md bg-secondary shadow-[0_40px_80px_-30px_rgba(0,0,0,0.95)] ring-1 ring-white/10 transition-[transform,opacity] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+                  style={{
+                    zIndex: 10 - distance,
+                    opacity: distance > 2 ? 0 : 1,
+                    pointerEvents: distance > 2 ? "none" : undefined,
+                    transform: centre
+                      ? "none"
+                      : `translateX(${offset * 40}%) translateZ(${-distance * 180}px) rotateY(${offset > 0 ? -40 : 40}deg)`,
+                  }}
+                >
+                  <img
+                    src={thumbnailUrl(item)}
+                    alt=""
+                    loading="lazy"
+                    style={framingStyle(item)}
+                    className="sensitive size-full object-cover"
+                  />
+                  {centre && preview && hovered && <PreviewClip itemId={item.id} />}
+                  <span
+                    className={cn(
+                      "absolute inset-0 transition-colors duration-700",
+                      centre ? "bg-transparent" : "bg-black/55",
+                    )}
+                  />
+                  {centre && (
+                    <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                      <span className="flex size-14 items-center justify-center rounded-full bg-white/95 text-black shadow-lg">
+                        <Play className="ml-0.5 size-5 fill-current" />
+                      </span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => go(focus + 1)}
+            disabled={focus === items.length - 1}
+            aria-label="Next"
+            className="z-20 hidden size-11 shrink-0 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-20 md:flex"
+          >
+            <ChevronRight className="size-6" />
+          </button>
+        </div>
+
+        {/* The one in focus, in full. */}
+        <div className="relative isolate z-20">
+          <FloatingHearts />
+          <div key={current.id} className="relative animate-fade-in space-y-5">
+            <p className="sensitive text-3xl font-black leading-tight tracking-tight md:text-4xl">
+              {current.title}
+            </p>
+            <p className="sensitive text-sm text-white/80">
+              <Byline item={current} />
+            </p>
+            {current.description && (
+              <p className="sensitive line-clamp-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
+                {current.description}
+              </p>
+            )}
+            <div className="max-w-sm space-y-2">
+              <div className="flex justify-between font-mono text-xs tabular-nums text-muted-foreground">
+                <span>
+                  {formatClock(position)} / {formatClock(duration)}
+                </span>
+                <span className="text-primary">{left !== null ? `${left} min left` : "Pick up again"}</span>
+              </div>
+              <span className="block h-1 overflow-hidden rounded-full bg-white/10">
+                <span
+                  className="block h-full rounded-full bg-primary shadow-[0_0_8px_var(--primary)]"
+                  style={{ width: `${progress}%` }}
+                />
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpen(current.id, true)}
+              className="flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-sm font-bold text-black transition-transform hover:scale-105"
+            >
+              <Play className="size-4 fill-current" />
+              Resume
+            </button>
+          </div>
+        </div>
       </div>
     </section>
-  );
-}
-
-/** One rail: title on the left, the video's frames, where you stopped, the time. */
-function TimelineRail({ item, onOpen }: { item: MediaCardItem; onOpen: Open }) {
-  const { data: sprite } = useScrubSprite(item.id, true);
-  const duration = item.durationSeconds ?? 0;
-  const position = item.lastPositionSeconds ?? 0;
-  const progress = duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
-  const left = duration > position ? Math.ceil((duration - position) / 60) : null;
-  const performers = item.performers
-    ?.slice(0, 2)
-    .map((performer) => performer.name)
-    .join(", ");
-
-  // As many frames as fit, each at its true shape: the rail's height, and the
-  // width that keeps the frame's own proportions. So it is measured, and the
-  // count follows the rail's width rather than squeezing a fixed number in.
-  const railRef = useRef<HTMLSpanElement>(null);
-  const [box, setBox] = useState({ width: 0, height: 0 });
-  useEffect(() => {
-    const node = railRef.current;
-    if (!node) return;
-    const measure = () => setBox({ width: node.clientWidth, height: node.clientHeight });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-  const rows = sprite ? Math.ceil(sprite.count / sprite.columns) : 0;
-  const cellWidth = sprite && box.height ? box.height * (sprite.tileWidth / sprite.tileHeight) : 0;
-  const frameCount = cellWidth ? Math.max(1, Math.ceil(box.width / cellWidth)) : 0;
-  const frames =
-    sprite && duration > 0 && frameCount
-      ? Array.from({ length: frameCount }, (_, n) => {
-          const seconds = ((n + 0.5) / frameCount) * duration;
-          const index = Math.min(sprite.count - 1, Math.floor(seconds / sprite.interval));
-          const column = index % sprite.columns;
-          const row = Math.floor(index / sprite.columns);
-          return {
-            x: sprite.columns > 1 ? (column / (sprite.columns - 1)) * 100 : 0,
-            y: rows > 1 ? (row / (rows - 1)) * 100 : 0,
-          };
-        })
-      : null;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(item.id, true)}
-      aria-label={`Resume ${item.title}${left !== null ? `, ${left} minutes left` : ""}`}
-      className="group flex w-full items-center gap-5 rounded-xl p-2 text-left transition-colors hover:bg-white/[0.04]"
-    >
-      <span className="w-40 shrink-0 md:w-56">
-        <span className="sensitive line-clamp-2 text-sm font-bold leading-snug md:text-base">
-          {item.title}
-        </span>
-        {performers && (
-          <span className="sensitive mt-0.5 block truncate text-xs text-muted-foreground">{performers}</span>
-        )}
-        <span className="mt-1 block text-xs font-semibold text-primary">
-          {left !== null ? `${left} min left` : "Pick up again"}
-        </span>
-      </span>
-
-      <span
-        ref={railRef}
-        className="relative block h-14 min-w-0 flex-1 overflow-hidden rounded-md bg-secondary md:h-20"
-      >
-        {frames ? (
-          <span className="flex h-full">
-            {frames.map((frame, n) => (
-              <span
-                key={n}
-                className="sensitive h-full shrink-0 border-r border-black/40 last:border-r-0"
-                style={{
-                  width: cellWidth,
-                  backgroundImage: `url(${sprite!.url})`,
-                  backgroundSize: `${sprite!.columns * 100}% ${rows * 100}%`,
-                  backgroundPosition: `${frame.x}% ${frame.y}%`,
-                }}
-              />
-            ))}
-          </span>
-        ) : (
-          // No frames yet (or the drive is away): the poster, across the rail.
-          <img
-            src={thumbnailUrl(item)}
-            alt=""
-            loading="lazy"
-            style={framingStyle(item)}
-            className="sensitive size-full object-cover opacity-60"
-          />
-        )}
-        {/* Watched: a pink tint. Still to come: darkened. */}
-        <span className="absolute inset-y-0 left-0 bg-primary/25" style={{ width: `${progress}%` }} />
-        <span className="absolute inset-y-0 right-0 bg-black/55" style={{ width: `${100 - progress}%` }} />
-        {/* Where you stopped. */}
-        <span
-          className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary shadow-[0_0_10px_var(--primary)]"
-          style={{ left: `${progress}%` }}
-        >
-          <span className="absolute left-1/2 top-1/2 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-black opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-            <Play className="ml-0.5 size-3.5 fill-current" />
-          </span>
-        </span>
-      </span>
-
-      <span className="hidden w-28 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground md:block">
-        {formatDuration(position) ?? "0:00"} / {formatDuration(item.durationSeconds) ?? "—"}
-      </span>
-    </button>
   );
 }
 
@@ -633,9 +716,8 @@ function NewArrivals({
   );
 }
 
-/** Scene five: just added, rolled like closing credits over the newest arrival. */
+/** Scene five: just added, rolled like closing credits; a hovered title's clip plays behind. */
 function Credits({ items, onOpen, preview }: { items: MediaCardItem[]; onOpen: Open; preview: boolean }) {
-  const [first] = items;
   // The title under the pointer: its clip plays behind the credits.
   const [hovered, setHovered] = useState<MediaCardItem | null>(null);
   return (
@@ -644,17 +726,6 @@ function Credits({ items, onOpen, preview }: { items: MediaCardItem[]; onOpen: O
       <div
         aria-hidden
         className="pointer-events-none absolute left-1/2 top-0 z-10 h-px w-2/3 -translate-x-1/2 bg-gradient-to-r from-transparent via-primary/60 to-transparent"
-      />
-      <Backdrop
-        item={first}
-        className={cn("grayscale transition-opacity duration-700", hovered ? "opacity-0" : "opacity-25")}
-      />
-      {/* Colour over the grey: a duotone of the brand's pink and violet. */}
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,45,149,0.35),rgba(176,38,255,0.30))] mix-blend-color transition-opacity duration-700",
-          hovered ? "opacity-0" : "opacity-100",
-        )}
       />
       {/* Keyed by the hovered video, so moving between titles fades one
           clip out and the next one in rather than swapping in place. */}

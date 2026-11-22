@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { qk } from "@/lib/queryKeys";
@@ -9,7 +9,7 @@ import { qk } from "@/lib/queryKeys";
 type GalleryImage = { id: number; title: string; thumbnailFile: string | null };
 
 async function fetchGallery(
-  itemId: number
+  itemId: number,
 ): Promise<{ albumId: number | null; total: number; images: GalleryImage[] }> {
   const res = await fetch(`/api/media-items/${itemId}/gallery`);
   if (!res.ok) throw new Error(`Failed to load gallery: ${res.status}`);
@@ -17,11 +17,11 @@ async function fetchGallery(
 }
 
 /**
- * A preview of the stills that live in the same folder as this video.
+ * A preview of the stills that live in the same folder as this video, as a
+ * simple slider: one row of photos, scrolled sideways or with the arrows.
  *
- * The server caps what comes back, so this is a taste rather than the set —
- * the album page is where you actually look through 121 photos, and the tile
- * at the end of the row is how you get there.
+ * A taste rather than the set — the album page is where you look through
+ * all 121 photos, and "See all" is how you get there.
  */
 export function GalleryStrip({ itemId }: { itemId: number }) {
   const { data } = useQuery({
@@ -32,62 +32,86 @@ export function GalleryStrip({ itemId }: { itemId: number }) {
   // Older responses had no `total`; falling back to what we were given keeps
   // the count honest rather than reading "See all 0".
   const total = data?.total ?? images.length;
-  const hidden = total - images.length;
+  const hidden = total - Math.min(images.length, 20);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   // Reset when the modal swaps to another item, or the lightbox would reopen
   // on an index belonging to the previous video's gallery.
   useEffect(() => setOpenIndex(null), [itemId]);
 
   if (images.length === 0) return null;
+  // A slideshow's worth; the rest is the album's.
+  const wall = images.slice(0, 20);
 
   return (
-    <div className="space-y-2 px-4 pb-6 md:px-6">
+    <div className="space-y-4 px-4 pb-6 md:px-6">
       <div className="flex items-baseline gap-2">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <h3 className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+          <span className="h-px w-8 bg-primary/60" />
           Gallery
         </h3>
         <span className="text-[11px] text-muted-foreground/70">{total} images</span>
       </div>
 
-      <ul className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
-        {images.map((image, index) => (
-          <li key={image.id} className="w-48 shrink-0 snap-start sm:w-56">
+      {/* A simple slider: the photos in a row, scrolled with the arrows. */}
+      <div className="group/slider relative">
+        <div
+          ref={rowRef}
+          className="scrollbar-hide flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth"
+        >
+          {wall.map((image, index) => (
             <button
+              key={image.id}
               type="button"
               onClick={() => setOpenIndex(index)}
-              // Counts the previewed set, not the album — that's what the
-              // lightbox actually pages through from here.
               aria-label={`Open image ${index + 1} of ${images.length}`}
-              className="group w-full"
+              className="h-56 shrink-0 snap-start overflow-hidden rounded-sm bg-secondary ring-1 ring-white/5 transition-all hover:ring-2 hover:ring-primary md:h-72"
             >
               <img
                 src={thumbnailUrl(image)}
                 alt=""
                 loading="lazy"
-                className="aspect-[3/2] w-full rounded object-cover ring-1 ring-border transition-all group-hover:ring-white/40"
+                className="sensitive h-full w-auto max-w-none"
               />
             </button>
-          </li>
-        ))}
-
-        {/* Only worth a tile when there's genuinely more behind it. */}
-        {hidden > 0 && data?.albumId != null && (
-          <li className="w-48 shrink-0 snap-start sm:w-56">
-            <Link
-              to="/album/$albumId"
-              params={{ albumId: String(data.albumId) }}
-              className="group flex aspect-[3/2] w-full flex-col items-center justify-center gap-1 rounded bg-secondary/60 ring-1 ring-border transition-colors hover:bg-secondary"
+          ))}
+        </div>
+        {wall.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={() => rowRef.current?.scrollBy({ left: -rowRef.current.clientWidth * 0.8 })}
+              aria-label="Previous photos"
+              className="absolute left-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover/slider:opacity-100"
             >
-              <span className="text-sm font-medium">See all {total}</span>
-              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                {hidden} more
-                <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" />
-              </span>
-            </Link>
-          </li>
+              <ChevronLeft className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => rowRef.current?.scrollBy({ left: rowRef.current.clientWidth * 0.8 })}
+              aria-label="Next photos"
+              className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover/slider:opacity-100"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+          </>
         )}
-      </ul>
+      </div>
+
+      {/* The whole set lives on its album page. */}
+      {data?.albumId != null && hidden > 0 && (
+        <div className="flex justify-center">
+          <Link
+            to="/album/$albumId"
+            params={{ albumId: String(data.albumId) }}
+            className="group flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground transition-colors hover:text-primary"
+          >
+            See all {total}
+            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
+      )}
 
       {openIndex !== null && (
         <PhotoLightbox

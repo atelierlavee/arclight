@@ -19,16 +19,107 @@ function Kicker({ n, label }: { n: string; label: string }) {
   );
 }
 
-/** How many moods to offer, and how many videos each fills in. */
+/** How many moods to offer, and how many videos each deals. */
 const MOODS = 8;
 const MOOD_PICKS = 4;
 
+const newSeed = () => Math.floor(Math.random() * 1_000_000);
+
+/** A line under each mood, chosen by its name so a mood always says the same thing. */
+const TAGLINES = [
+  "Slow, close and very, very warm.",
+  "Turn the lights down. Turn it up.",
+  "Exactly what you came here for.",
+  "No rush. No limits. No regrets.",
+  "The kind of night you don’t tell anyone about.",
+  "Bold, bare and impossible to look away from.",
+  "Some cravings don’t wait.",
+  "Soft hands. Hard to forget.",
+  "Give in. You know you want to.",
+  "Heat that lingers long after the credits.",
+  "Tonight, indulge a little more.",
+  "Dangerously easy to lose an hour in.",
+];
+
+/** Lines written for particular moods, by name in lower case. */
+const MOOD_TAGLINES: Record<string, string> = {
+  blowjob: "Dirty lips. Filthy fantasies.",
+  missionary: "Classic position. No innocent intentions.",
+  "doggy style": "Raw passion. Wild intentions.",
+  "reverse cowgirl": "Take the reins. Ride wild.",
+  facial: "Messy moments. Zero apologies.",
+  "pussy licking": "Slow teasing. Wicked pleasure.",
+  "brown hair": "Sweet looks. Naughty desires.",
+  riding: "Take control. Ride hard.",
+};
+
+function taglineFor(name: string): string {
+  const own =
+    MOOD_TAGLINES[
+      name
+        .toLowerCase()
+        .replace(/[-_\s]+/g, " ")
+        .trim()
+    ];
+  if (own) return own;
+  let hash = 0;
+  for (const char of name.toLowerCase()) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return TAGLINES[hash % TAGLINES.length];
+}
+
+/** The last two of something that changes: the current one, and the one it replaced. */
+function useLastTwo<T extends { id: number }>(current: T | undefined): T[] {
+  const [pair, setPair] = useState<T[]>(current ? [current] : []);
+  if (current && pair[pair.length - 1]?.id !== current.id) setPair([...pair.slice(-1), current]);
+  return pair;
+}
+
 /**
- * "What's the mood tonight?" as a full-bleed scene. Your biggest tags stack
- * down the left in big type; picking one deals four of its videos, shuffled.
- * The video in focus fills the whole section behind everything (its clip
- * plays while you hover it), with its title and a Play button on the right
- * above a slim strip of the four. Shuffle deals four more.
+ * A size that fits the word across its scene: huge for a short one, scaled
+ * down for a long one so it never runs off the sides. In container units, so
+ * it is the scene's width that counts, not the window's.
+ */
+function fitted(word: string): string {
+  // A heavy capital, tightly tracked, is about 0.72em wide on average.
+  return `min(15cqw, calc(92cqw / ${Math.max(word.length, 1) * 0.72}))`;
+}
+
+/** The mood word, poster-size: the new one rising in, the one it replaced leaving. */
+function PosterWords({
+  words,
+  className,
+  style,
+}: {
+  words: { id: number; name: string }[];
+  className: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div className="grid place-items-center">
+      {words.map((word, index) => (
+        <span
+          key={word.id}
+          aria-hidden={index < words.length - 1}
+          className={cn(
+            "sensitive whitespace-nowrap text-center font-black uppercase leading-none tracking-[-0.04em] [grid-area:1/1]",
+            index < words.length - 1 ? "animate-word-out" : "animate-word-in",
+            className,
+          )}
+          style={{ ...style, fontSize: fitted(word.name) }}
+        >
+          {word.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * "What's the mood tonight?" as a movie poster: the mood (one of your
+ * biggest tags) set enormous across the full width, with one of its videos
+ * seen through the letters — bright inside them, barely there around them.
+ * Its clip plays while you hover. Changing the mood or dealing another fades
+ * one scene into the next. The other moods run small along the bottom.
  */
 export function MoodPicker({
   tags,
@@ -46,9 +137,9 @@ export function MoodPicker({
     .sort((a, b) => (b.itemCount ?? 0) - (a.itemCount ?? 0))
     .slice(0, MOODS);
   const [pickedId, setPickedId] = useState<number | null>(null);
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1_000_000));
-  const [focusedId, setFocusedId] = useState<number | null>(null);
-  const [playing, setPlaying] = useState(false);
+  const [seed, setSeed] = useState(newSeed);
+  const [shown, setShown] = useState(0);
+  const [hovering, setHovering] = useState(false);
   const mood = moods.find((tag) => tag.id === pickedId) ?? moods[0];
 
   const { data, isFetching } = useQuery({
@@ -70,152 +161,139 @@ export function MoodPicker({
     placeholderData: (previous) => previous,
   });
 
-  if (moods.length < 3) return null;
-
   const picks = data ?? [];
-  const focused = picks.find((item) => item.id === focusedId) ?? picks[0];
+  const feature = picks[shown % Math.max(picks.length, 1)];
+  const scenes = useLastTwo(feature);
+  const words = useLastTwo(mood);
+
+  if (moods.length < 3 || !mood) return null;
+
+  function another() {
+    // Through this mood's four, then a fresh four.
+    if (shown + 1 < picks.length) setShown(shown + 1);
+    else {
+      setShown(0);
+      setSeed(newSeed());
+    }
+  }
 
   return (
-    <section className="relative isolate overflow-hidden" onMouseLeave={() => setPlaying(false)}>
-      {/* The video in focus, filling the scene. All four are stacked and
-          cross-fade, so switching never flashes black. */}
-      <div aria-hidden className="absolute inset-0 -z-10 bg-black">
-        {picks.map((item) => (
-          <img
-            key={item.id}
-            src={thumbnailUrl(item)}
-            alt=""
-            style={framingStyle(item)}
-            className={cn(
-              "sensitive absolute inset-0 size-full object-cover transition-opacity duration-700",
-              item.id === focused?.id ? "opacity-100" : "opacity-0",
-            )}
-          />
-        ))}
-        {preview && playing && focused && <PreviewClip key={focused.id} itemId={focused.id} />}
-        <div className="absolute inset-0 bg-black/55" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background via-background/75 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
-        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background to-transparent" />
+    <section
+      className="relative isolate flex h-[80vh] min-h-[560px] flex-col overflow-hidden bg-black [container-type:inline-size]"
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+    >
+      {/* The scene, at full brightness; a click opens it. Each new one
+          fades in over the last. */}
+      {feature && (
+        <button
+          type="button"
+          onClick={() => onOpen(feature.id, false)}
+          aria-label={feature.title}
+          className="absolute inset-0 overflow-hidden"
+        >
+          {scenes.map((scene, index) => (
+            <div
+              key={scene.id}
+              className={cn("absolute inset-0", index === scenes.length - 1 && "animate-scene-in")}
+            >
+              <img
+                src={thumbnailUrl(scene)}
+                alt=""
+                style={framingStyle(scene)}
+                className="sensitive size-full object-cover animate-ken-burns"
+              />
+            </div>
+          ))}
+          {preview && hovering && <PreviewClip key={feature.id} itemId={feature.id} />}
+        </button>
+      )}
+
+      {/* The mask: near-black everywhere but the letters, which are white,
+          so multiplying lets the scene through only inside the word. */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden bg-[rgb(46,40,48)] mix-blend-multiply [container-type:inline-size]">
+        <PosterWords words={words} className="text-white" />
+      </div>
+      {/* A fine pink edge to the letters, over the mask. */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden [container-type:inline-size]">
+        <PosterWords
+          words={words}
+          className="text-transparent"
+          style={{ WebkitTextStroke: "1px color-mix(in oklab, var(--primary) 70%, transparent)" }}
+        />
       </div>
 
-      <div className="grid min-h-[36rem] gap-10 px-6 py-16 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:px-14 md:py-20">
-        {/* The moods: a stacked list of words, the chosen one lit. */}
-        <div className="flex flex-col justify-center">
-          <Kicker n={chapter} label="Pick a mood" />
-          <h2 className="mt-3 mb-6 text-lg font-semibold text-muted-foreground">
-            What’s the <span className="text-primary">mood</span> tonight?
-          </h2>
-          <ul className="space-y-1">
-            {moods.map((tag) => {
-              const active = tag.id === mood.id;
-              return (
-                <li key={tag.id}>
-                  <button
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => {
-                      setPickedId(tag.id);
-                      setFocusedId(null);
-                    }}
-                    className={cn(
-                      "sensitive group flex items-baseline gap-3 text-left text-3xl font-black capitalize leading-tight tracking-tight transition-all duration-300 md:text-5xl",
-                      active
-                        ? "translate-x-3 text-white"
-                        : "text-white/25 hover:translate-x-1 hover:text-white/60",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "h-[0.12em] self-center bg-primary transition-all duration-300",
-                        active ? "w-8 md:w-12" : "w-0",
-                      )}
-                    />
-                    {tag.name}
-                    <sup
-                      className={cn(
-                        "font-mono text-xs font-medium tabular-nums transition-opacity",
-                        active ? "text-primary opacity-100" : "opacity-0 group-hover:opacity-60",
-                      )}
-                    >
-                      {tag.itemCount}
-                    </sup>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-background to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-background via-background/70 to-transparent" />
+      <div className="film-grain pointer-events-none absolute inset-0" />
 
-        {/* The video in focus: its title and Play, over the strip of four. */}
-        <div className={cn("flex flex-col justify-end gap-6 transition-opacity", isFetching && "opacity-60")}>
-          {focused && (
-            <div key={focused.id} className="max-w-lg space-y-3 motion-safe:animate-word-in">
-              <h3 className="sensitive line-clamp-2 text-2xl font-black leading-tight tracking-tight md:text-4xl">
-                {focused.title}
-              </h3>
-              <p className="sensitive text-sm text-white/70">
-                {[
-                  (focused.performers ?? [])
-                    .slice(0, 3)
-                    .map((performer) => performer.name)
-                    .join(", "),
-                  formatDuration(focused.durationSeconds),
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-              <div className="flex items-center gap-4 pt-1">
-                <button
-                  type="button"
-                  onClick={() => onOpen(focused.id, true)}
-                  className="flex items-center gap-2 rounded-full bg-white px-5 py-2 text-sm font-bold text-black transition-transform hover:scale-105"
-                >
-                  <Play className="size-4 fill-current" />
-                  Play
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSeed(Math.floor(Math.random() * 1_000_000))}
-                  className="flex items-center gap-1.5 text-sm font-medium text-white/70 transition-colors hover:text-white"
-                >
-                  <Shuffle className={cn("size-4", isFetching && "animate-spin")} />
-                  Deal four more
-                </button>
-              </div>
-            </div>
-          )}
+      {/* Another video in this mood: through its four, then a fresh four. */}
+      <button
+        type="button"
+        onClick={another}
+        aria-label="Another video"
+        title="Another video"
+        className="absolute right-6 top-16 z-10 flex size-10 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white md:right-14 md:top-20"
+      >
+        <Shuffle className={cn("size-5", isFetching && "animate-spin")} />
+      </button>
 
-          <div className="grid grid-cols-4 gap-3">
-            {picks.map((item) => {
-              const active = item.id === focused?.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-label={item.title}
-                  onMouseEnter={() => {
-                    setFocusedId(item.id);
-                    setPlaying(true);
-                  }}
-                  onFocus={() => setFocusedId(item.id)}
-                  onClick={() => onOpen(item.id, false)}
+      <div className="pointer-events-none relative px-6 pt-16 md:px-14 md:pt-20">
+        <Kicker n={chapter} label="Pick a mood" />
+        <p className="mt-2 text-lg font-semibold text-white/70">What’s the mood tonight?</p>
+      </div>
+
+      {/* The mood's line, tucked just under the word (which sits at the
+          scene's middle, its size fitted to its length), so the two read
+          as one title. */}
+      <div className="pointer-events-none flex-1">
+        <p
+          key={mood.id}
+          className="absolute inset-x-0 px-6 text-center text-sm font-semibold uppercase tracking-[0.4em] text-white/85 animate-word-in md:text-base"
+          style={{ top: `calc(50% + ${fitted(mood.name)} / 2 + 1.25rem)` }}
+        >
+          {/* Set like a title card: the first sentence white, the rest pink. */}
+          {(() => {
+            const [first, ...rest] = taglineFor(mood.name).split(/(?<=\.)\s+/);
+            return (
+              <>
+                {first}
+                {rest.length > 0 && <span className="text-primary"> {rest.join(" ")}</span>}
+              </>
+            );
+          })()}
+        </p>
+      </div>
+
+      {/* The moods, on one centred line. */}
+      <div className="relative flex justify-center px-6 pb-10 md:px-14 md:pb-12">
+        <div className="flex max-w-full gap-x-6 overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
+          {moods.map((tag) => {
+            const active = tag.id === mood.id;
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  setPickedId(tag.id);
+                  setShown(0);
+                }}
+                className={cn(
+                  "sensitive relative shrink-0 pb-1 text-xs font-semibold uppercase tracking-[0.25em] transition-colors",
+                  active ? "text-primary" : "text-white/45 hover:text-white",
+                )}
+              >
+                {tag.name}
+                <span
                   className={cn(
-                    "relative aspect-video overflow-hidden rounded-sm transition-all duration-300",
-                    active ? "opacity-100 ring-2 ring-primary" : "opacity-50 hover:opacity-90",
+                    "absolute bottom-0 left-0 h-px bg-primary transition-all duration-300",
+                    active ? "w-full" : "w-0",
                   )}
-                >
-                  <img
-                    src={thumbnailUrl(item)}
-                    alt=""
-                    loading="lazy"
-                    style={framingStyle(item)}
-                    className="sensitive size-full object-cover"
-                  />
-                </button>
-              );
-            })}
-          </div>
+                />
+              </button>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -353,7 +431,7 @@ export function BecauseYouWatched({
                 strokeWidth={lit ? 3 : 1.5}
                 strokeLinecap="round"
                 strokeDasharray={lit ? "6 6" : undefined}
-                className={cn("transition-all duration-300", lit && "motion-safe:animate-chain-flow")}
+                className={cn("transition-all duration-300", lit && "animate-chain-flow")}
                 opacity={hovered === null ? 0.55 : lit ? 1 : 0.2}
                 style={lit ? { filter: "drop-shadow(0 0 4px #ff2d95)" } : undefined}
               />

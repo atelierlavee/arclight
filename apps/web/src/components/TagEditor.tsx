@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
@@ -63,7 +64,11 @@ export function TagEditor({
       {pending.map((name) => (
         <span
           key={name}
-          className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-colors duration-500"
+          className={cn(
+            "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-colors duration-500",
+            // Without an accent, the site's quiet chip: a faint fill and edge.
+            !accent && "bg-white/[0.06] text-white/85 ring-1 ring-white/10",
+          )}
           style={{
             backgroundColor: accent ? `color-mix(in oklab, ${accent} 18%, transparent)` : undefined,
             color: accent ?? undefined,

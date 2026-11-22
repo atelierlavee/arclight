@@ -407,6 +407,13 @@
       "when": 1795232733296,
       "tag": "0057_profile_person_names",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1795257757537,
+      "tag": "0058_studio_default_category",
+      "breakpoints": true
     }
   ]
 }

@@ -34,25 +34,23 @@ function Kicker({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** A full-bleed image behind a scene, crossfading as it changes. */
-function SceneBackdrop({ src, className }: { src: string | null; className?: string }) {
-  if (!src) return null;
-  return (
-    <img
-      key={src}
-      src={src}
-      alt=""
-      className={cn("sensitive animate-fade-in absolute inset-0 size-full object-cover", className)}
-    />
-  );
-}
+/** Each poster's resting tilt and drop, so the wall looks hung by hand. */
+const POSTER_TILT = [
+  { rotate: -6, y: 10 },
+  { rotate: 3, y: -8 },
+  { rotate: -2.5, y: 14 },
+  { rotate: 5, y: -4 },
+];
 
-/** The library's categories as huge words; hovering one shows its cover behind. */
+/**
+ * The library's categories as movie posters on a wall: tall frames side by
+ * side, tilted and overlapping a little as if pinned up by hand. Hovering
+ * one straightens it and lifts it forward; a click opens Browse there.
+ * Empty categories keep their poster, greyed, so the library's shape is clear.
+ */
 export function LibraryScene() {
   const { data } = useQuery({ queryKey: qk.categories, queryFn: fetchCategories });
-  const categories = (data?.categories ?? []).filter((category) => category.total > 0);
-  const [hovered, setHovered] = useState<number | null>(null);
-  // One category is just a link, not a scene.
+  const categories = data?.categories ?? [];
   if (categories.length < 2) return null;
 
   const coverOf = (index: number) => {
@@ -60,43 +58,68 @@ export function LibraryScene() {
     if (category.cover) return `${category.cover}&e=${IMAGE_EPOCH}`;
     return category.representativeItemId != null ? thumbnailUrl({ id: category.representativeItemId }) : null;
   };
-  const shown = hovered ?? 0;
 
   return (
-    <section className="relative -mx-4 overflow-hidden px-6 py-20 md:-mx-6 md:px-14 md:py-28">
-      <SceneBackdrop
-        src={coverOf(shown)}
-        className={hovered === null ? "opacity-15 grayscale" : "opacity-40"}
-      />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-background via-background/70 to-background/20" />
-      <div className="relative space-y-6">
+    <section className="relative isolate -mx-4 overflow-hidden px-6 py-16 md:-mx-6 md:px-14 md:py-24">
+      {/* The Studios heading's silk, here wide and faint behind the wall:
+          the pink runs out to the left from the box on the right, so the
+          ribbons cross the whole scene. */}
+      <SilkWaves className="absolute right-0 top-1/2 -z-10 h-[75%] w-[45%] -translate-y-1/2 opacity-50" />
+
+      <div className="mb-12 flex justify-center md:mb-16">
         <Kicker>In the library</Kicker>
-        <ul className="space-y-1">
-          {categories.map((category, index) => (
-            <li key={category.slug}>
+      </div>
+
+      <ul className="grid grid-cols-2 justify-items-center gap-6 sm:flex sm:justify-center sm:gap-0">
+        {categories.map((category, index) => {
+          const tilt = POSTER_TILT[index % POSTER_TILT.length];
+          const empty = category.total === 0;
+          const cover = coverOf(index);
+          return (
+            <li
+              key={category.slug}
+              // The tilt lives in custom properties so hover can override it
+              // from CSS alone: transform-only, so it stays smooth.
+              style={{ "--tilt": `${tilt.rotate}deg`, "--drop": `${tilt.y}px` } as React.CSSProperties}
+              className="relative z-0 w-full max-w-[15rem] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] [transform:rotate(var(--tilt))_translateY(var(--drop))] will-change-transform hover:z-10 hover:[transform:rotate(0deg)_translateY(-18px)_scale(1.06)] sm:w-[min(22vw,15rem)] sm:[&:not(:first-child)]:-ml-6"
+            >
               <Link
                 to="/browse"
                 search={{ kind: category.slug }}
-                onMouseEnter={() => setHovered(index)}
-                onMouseLeave={() => setHovered(null)}
-                className="group flex items-baseline gap-4"
+                className="group relative block aspect-[2/3] overflow-hidden rounded-sm bg-secondary shadow-[0_24px_50px_-18px_rgba(0,0,0,0.9)] ring-1 ring-white/10 transition-shadow duration-500 hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.95)] hover:ring-primary/60"
               >
-                <span
-                  className={cn(
-                    "text-5xl font-black tracking-tighter transition-colors md:text-7xl",
-                    hovered === index ? "text-primary" : "text-foreground/80 group-hover:text-primary",
-                  )}
-                >
-                  {category.label}
+                {cover && (
+                  <img
+                    src={cover}
+                    alt=""
+                    loading="lazy"
+                    style={{
+                      objectPosition: `${category.coverPositionX}% ${category.coverPositionY}%`,
+                      transform: `scale(${category.coverScale / 100})`,
+                      transformOrigin: `${category.coverPositionX}% ${category.coverPositionY}%`,
+                    }}
+                    className={cn(
+                      // Black and white at rest; colour comes up on hover.
+                      "sensitive absolute inset-0 size-full object-cover grayscale transition-[filter] duration-500 group-hover:grayscale-0",
+                    )}
+                  />
+                )}
+                <span className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-black/40" />
+                {/* Poster furniture: the count up top, the title below. */}
+                <span className="absolute inset-x-0 top-0 p-4 text-center font-mono text-[10px] uppercase tracking-[0.3em] text-white/70">
+                  {empty ? "Coming soon" : `${category.total.toLocaleString()} titles`}
                 </span>
-                <span className="text-sm tabular-nums text-muted-foreground">
-                  {category.total.toLocaleString()}
+                <span className="absolute inset-x-0 bottom-0 p-4 text-center md:p-5">
+                  <span className="block text-base font-semibold uppercase leading-none tracking-[0.3em] text-white md:text-lg">
+                    {category.label}
+                  </span>
+                  <span className="mx-auto mt-3 block h-px w-10 bg-primary transition-all duration-500 group-hover:w-20" />
                 </span>
               </Link>
             </li>
-          ))}
-        </ul>
-      </div>
+          );
+        })}
+      </ul>
     </section>
   );
 }

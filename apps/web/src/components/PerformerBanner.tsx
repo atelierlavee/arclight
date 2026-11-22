@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Pencil, X } from "lucide-react";
 import { saveBannerPosition } from "@/lib/performerApi";
-import { useAppearance } from "@/lib/appearance";
+import { BANNER_VH } from "@/lib/appearance";
 import { framingAfterDrag } from "@/lib/reposition";
 import { cn } from "@/lib/utils";
 import { qk } from "@/lib/queryKeys";
@@ -39,7 +39,6 @@ export function PerformerBanner({
   editRequest?: number;
   children?: React.ReactNode;
 }) {
-  const { bannerHeight } = useAppearance();
   const [editing, setEditing] = useState(false);
   // Banner images are library management: the owner profile's.
   const isOwner = useIsOwner();
@@ -108,7 +107,7 @@ export function PerformerBanner({
   return (
     <div
       ref={containerRef}
-      style={{ height: `${bannerHeight}vh` }}
+      style={{ height: `${BANNER_VH}vh` }}
       className="group relative w-full overflow-hidden"
     >
       {src ? (

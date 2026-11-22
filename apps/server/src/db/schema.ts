@@ -112,6 +112,10 @@ export const mediaItems = pgTable("media_items", {
   // "movie" and "series" are set by hand, since nothing in a filename can
   // reliably tell them apart.
   kind: text("kind").notNull().default("video"),
+  // Who decided the category: 'scanner' while it follows the studio's
+  // default category (library/studioCategory.ts), 'user' once you pick one by
+  // hand — after which nothing moves it again. Same contract as studioSource.
+  kindSource: text("kind_source").notNull().default("scanner"),
   seasonNumber: integer("season_number"),
   episodeNumber: integer("episode_number"),
   episodeTitle: text("episode_title"),
@@ -337,6 +341,12 @@ export const studios = pgTable(
     // by hand — usually a network, which has no videos of its own and would
     // otherwise be purged as empty after every scan.
     origin: text("origin").notNull().default("scanner"),
+    // The home tile (category) this studio's videos are filed under. Null
+    // defers to the network above it; with none anywhere up the chain they go
+    // to the first category. Set null if the category is deleted.
+    defaultCategoryId: integer("default_category_id").references((): AnyPgColumn => categories.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   // Case-insensitive, same reasoning as performers: "[Vixen]" and a typed

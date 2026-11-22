@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { mediaItems } from "../db/schema.js";
+import { categories, mediaItems } from "../db/schema.js";
 import { resetDatabase, signIn, testApp } from "../test/harness.js";
 import {
   linkPerformer,
@@ -206,5 +206,62 @@ describe("GET /api/studios/:id", () => {
 
   it("404s for a studio that doesn't exist", async () => {
     expect((await get("/api/studios/9999")).statusCode).toBe(404);
+  });
+});
+
+describe("a studio's default category", () => {
+  const patch = (id: number, body: object) =>
+    app.inject({ method: "PATCH", url: `/api/studios/${id}`, headers: { cookie }, payload: body });
+  const kindOf = async (id: number) =>
+    (await db.select({ kind: mediaItems.kind }).from(mediaItems).where(eq(mediaItems.id, id)))[0].kind;
+  const makeCategory = async (slug: string, position: number) =>
+    (await db.insert(categories).values({ slug, label: slug, position }).returning())[0].id;
+
+  it("files the studio's videos there, but not one filed by hand", async () => {
+    const glamour = await makeCategory("glamour", 50);
+    const studio = await makeStudio("X-Art");
+    const auto = await makeItem(libraryId, { title: "Auto", studioId: studio });
+    const byHand = await makeItem(libraryId, { title: "Mine", studioId: studio });
+    await db.update(mediaItems).set({ kind: "movie", kindSource: "user" }).where(eq(mediaItems.id, byHand));
+
+    const res = await patch(studio, { defaultCategoryId: glamour });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().refiled).toBe(1);
+    expect(await kindOf(auto)).toBe("glamour");
+    expect(await kindOf(byHand)).toBe("movie");
+    expect((await get(`/api/studios/${studio}`)).json().defaultCategoryId).toBe(glamour);
+  });
+
+  it("lets a site without one take its network's", async () => {
+    const hardcore = await makeCategory("hardcore", 50);
+    const network = await makeStudio("Vixen Media");
+    const site = await makeStudio("Blacked");
+    await patch(site, { parentId: network });
+    const video = await makeItem(libraryId, { title: "Scene", studioId: site });
+
+    await patch(network, { defaultCategoryId: hardcore });
+    expect(await kindOf(video)).toBe("hardcore");
+  });
+
+  it("rejects a category that doesn't exist", async () => {
+    const studio = await makeStudio("Colette");
+    const res = await patch(studio, { defaultCategoryId: 999999 });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("files an item into its new studio's category when you change the studio", async () => {
+    const glamour = await makeCategory("glamour", 50);
+    const studio = await makeStudio("X-Art");
+    await patch(studio, { defaultCategoryId: glamour });
+    const item = await makeItem(libraryId, { title: "Loose" });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/media-items/${item}`,
+      headers: { cookie },
+      payload: { studio: "X-Art" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(await kindOf(item)).toBe("glamour");
   });
 });

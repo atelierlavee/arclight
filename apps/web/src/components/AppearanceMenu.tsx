@@ -142,7 +142,6 @@ export function AppearancePanel({ onClose, inline = false }: { onClose?: () => v
     discreetBlurPercent,
     discreetText,
     heroHeight,
-    bannerHeight,
     set,
     reset,
   } = appearance;
@@ -469,15 +468,6 @@ export function AppearancePanel({ onClose, inline = false }: { onClose?: () => v
             onChange={(next) => set({ heroHeight: next })}
           />
 
-          <Slider
-            label="Banner height"
-            value={bannerHeight}
-            min={BANNER_MIN}
-            max={BANNER_MAX}
-            suffix="%"
-            hint="The performer and studio headers."
-            onChange={(next) => set({ bannerHeight: next })}
-          />
           {/* Both are held off while discreet mode is on, and shown that
               way rather than left looking live but inert. The stored values
               are untouched, so turning discreet off restores whatever you

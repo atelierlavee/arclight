@@ -59,6 +59,8 @@ export type StudioDetail = {
   name: string;
   /** "user" for one made by hand, which is usually a network. */
   origin: "scanner" | "user";
+  /** The home tile its videos are filed under; null defers to its network. */
+  defaultCategoryId: number | null;
   parent: StudioRef | null;
   /** Its direct sites. */
   sites: StudioRef[];
@@ -115,10 +117,13 @@ export async function createStudio(name: string): Promise<StudioRef> {
   return (await res.json()).studio;
 }
 
-/** Sets the network a studio belongs to; null takes it out of one. */
+/**
+ * Sets the network a studio belongs to (null takes it out of one) and the
+ * home tile its videos are filed under (null defers to the network).
+ */
 export async function saveStudio(
   id: number,
-  patch: { parentId: number | null },
+  patch: { parentId?: number | null; defaultCategoryId?: number | null },
 ): Promise<void> {
   await send(`/api/studios/${id}`, "PATCH", patch);
 }

@@ -12,6 +12,9 @@ import { profileSettings } from "../db/schema.js";
  *     privacy       discreet-mode password hash
  *     vault         vault PIN hash
  *     achievements  which trophies this profile has seen unlocked
+ *     browser       what the web app keeps in the browser that a rescan
+ *                   could never bring back: pins, saved searches, recents,
+ *                   dismissed hints, a few view choices (api/browserState.ts)
  *
  *   global (app_settings) — the library's, managed by the owner
  *     hero, kindCovers, scan, network, categories_seeded
@@ -19,7 +22,7 @@ import { profileSettings } from "../db/schema.js";
  * A new setting has to land in one list or the other; the migration copies
  * exactly PROFILE_SETTING_KEYS into the owner's profile.
  */
-export const PROFILE_SETTING_KEYS = ["appearance", "privacy", "vault", "achievements"] as const;
+export const PROFILE_SETTING_KEYS = ["appearance", "privacy", "vault", "achievements", "browser"] as const;
 export type ProfileSettingKey = (typeof PROFILE_SETTING_KEYS)[number];
 
 export async function getProfileSetting(profileId: number, key: ProfileSettingKey): Promise<unknown> {

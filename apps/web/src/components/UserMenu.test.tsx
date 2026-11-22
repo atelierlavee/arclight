@@ -47,7 +47,7 @@ describe("UserMenu logout", () => {
     const client = renderAccount();
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Account" }));
+    await user.click(await screen.findByRole("button", { name: "Account" }));
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
 
     await screen.findByRole("heading", { name: "Sign in" });
@@ -66,7 +66,7 @@ describe("UserMenu logout", () => {
     const client = renderAccount();
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Account" }));
+    await user.click(await screen.findByRole("button", { name: "Account" }));
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
 
     await screen.findByText("Could not sign out");

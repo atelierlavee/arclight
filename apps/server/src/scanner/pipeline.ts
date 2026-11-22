@@ -16,6 +16,7 @@ import {
   series,
   studios,
 } from "../db/schema.js";
+import { fileByStudio } from "../library/studioCategory.js";
 import { probeMetadata, probeVideo } from "../metadata/videoProbe.js";
 import { probePhoto } from "../metadata/photoExif.js";
 import { ensurePosterFrame, generatePosterFrame } from "../media/poster.js";
@@ -442,6 +443,8 @@ async function processFile(
 
   await syncPerformersWithPath(item.id, filePath, root.path);
   await syncStudioWithFilename(item.id, filePath, root.path);
+  // A new video goes straight into its studio's home tile (or the first).
+  await fileByStudio([item.id]);
   await syncReleaseDateWithFilename(item.id, filePath);
 
   if (kind === "video") {
@@ -751,6 +754,8 @@ async function syncStudioWithFilename(
     .where(
       and(eq(mediaItems.id, mediaItemId), eq(mediaItems.studioSource, "scanner")),
     );
+  // A different studio may mean a different home tile.
+  await fileByStudio([mediaItemId]);
 }
 
 /**

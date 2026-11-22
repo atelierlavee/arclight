@@ -48,7 +48,6 @@ export function PerformerEditor({
     (allPerformers?.performers ?? []).map((p) => [p.name.toLowerCase(), p])
   );
   // Only for saved credits: a name just typed has no release to be aged at.
-  const ageByName = new Map(performers.map((p) => [p.name.toLowerCase(), p.ageAtRelease]));
 
   const mutation = useMutation({
     mutationFn: (performerNames: string[]) => savePerformers(itemId, performerNames),
@@ -84,7 +83,6 @@ export function PerformerEditor({
       <div className="flex flex-wrap items-start gap-4">
         {pending.map((name) => {
           const summary = summaryByName.get(name.toLowerCase());
-          const age = ageByName.get(name.toLowerCase());
           return (
             <div key={name} className="group relative w-20">
               <button
@@ -115,14 +113,6 @@ export function PerformerEditor({
                 >
                   {name}
                 </span>
-                {age != null && (
-                  <span
-                    className="block text-center text-[10px] leading-tight text-muted-foreground"
-                    title="Age when this was released"
-                  >
-                    Age {age}
-                  </span>
-                )}
               </button>
 
               {!readOnly && (

@@ -81,6 +81,10 @@ function sweep(storage: Storage, match: (key: string) => boolean) {
  * a target key that already exists wins over the old bare one.
  */
 export function migrateBareKeysToOwner(ownerId: number): void {
+  asHousekeeping(() => migrate(ownerId));
+}
+
+function migrate(ownerId: number): void {
   try {
     if (localStorage.getItem(MIGRATED_KEY) === "1") return;
     const move = (storage: Storage, area: "local" | "session") => {
@@ -116,8 +120,31 @@ export function clearProfileSession(id: number | null): void {
   }
 }
 
+/**
+ * Whether storage writes are this module's housekeeping — signing out, the
+ * move to the owner — rather than the person changing something. The
+ * server copy (lib/browserState) ignores those: signing out must clear the
+ * browser without erasing the backed-up pins and searches with it.
+ */
+let housekeeping = 0;
+export function isStorageHousekeeping(): boolean {
+  return housekeeping > 0;
+}
+function asHousekeeping(work: () => void): void {
+  housekeeping++;
+  try {
+    work();
+  } finally {
+    housekeeping--;
+  }
+}
+
 /** Every profile's per-person keys, and the bare ones — for signing out. */
 export function clearAllProfileData(): void {
+  asHousekeeping(clearEverything);
+}
+
+function clearEverything(): void {
   const personal = (key: string, area: "local" | "session") =>
     isPersonal(key.replace(NAMESPACED, ""), area);
   try {

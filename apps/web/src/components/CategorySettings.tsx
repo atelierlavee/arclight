@@ -128,7 +128,7 @@ function CategoryRow({
         </button>
       </div>
 
-      <div className="h-9 w-14 shrink-0 overflow-hidden rounded bg-secondary ring-1 ring-border sm:h-10 sm:w-20">
+      <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-secondary ring-1 ring-border sm:h-14 sm:w-[2.33rem]">
         {preview && (
           <img
             src={preview}

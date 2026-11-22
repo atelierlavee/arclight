@@ -9,6 +9,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import { albumRoutes } from "./api/albums.js";
 import { activityRoutes } from "./api/activity.js";
 import { appearanceRoutes } from "./api/appearance.js";
+import { browserStateRoutes } from "./api/browserState.js";
 import { backupRoutes } from "./api/backups.js";
 import { categoryRoutes } from "./api/categories.js";
 import { collectionRoutes } from "./api/collections.js";
@@ -223,6 +224,7 @@ export async function buildApp({
   await app.register(mediaRoutes);
   await app.register(tagRoutes);
   await app.register(appearanceRoutes);
+  await app.register(browserStateRoutes);
   await app.register(performerRoutes);
   await app.register(privacyRoutes);
   await app.register(webauthnRoutes);

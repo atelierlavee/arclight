@@ -5,6 +5,9 @@ export type PerformerSummary = {
   name: string;
   hasImage: boolean;
   hasBanner: boolean;
+  /** Change with every upload; folded into the image URLs so they refresh. */
+  imageVersion?: string | null;
+  bannerVersion?: string | null;
   /** Pins them to the top of the performers page. */
   isFavorite: boolean;
   /** Followed by the current profile: their own section, above favourites. */
@@ -14,6 +17,12 @@ export type PerformerSummary = {
   archivedAt?: string | null;
   videoCount: number;
   representativeItemId: number | null;
+  /** The performers page's sorts and card details. */
+  createdAt?: string;
+  latestAddedAt?: string | null;
+  latestReleaseDate?: string | null;
+  topStudio?: string | null;
+  watchSeconds?: number;
   /** Portrait framing. Defaults are 50 / 0 / 100 — centred, top-aligned. */
   imagePositionX: number;
   imagePositionY: number;
@@ -40,6 +49,8 @@ export type CoPerformer = {
   isFavorite: boolean;
   hasImage: boolean;
   hasBanner: boolean;
+  imageVersion?: string | null;
+  bannerVersion?: string | null;
   representativeItemId: number | null;
   imagePositionX: number;
   imagePositionY: number;
@@ -106,16 +117,28 @@ export type PerformerImageKind = "avatar" | "banner";
  */
 import { IMAGE_EPOCH } from "./mediaItemApi";
 
+/** The `&v=` part of an uploaded image's URL: its file name, so a new upload is a new URL. */
+function versionParam(version: string | null | undefined): string {
+  return version ? `&v=${encodeURIComponent(version)}` : "";
+}
+
 export function performerImageUrl(
-  performer: { id: number; hasImage: boolean; hasBanner: boolean },
+  performer: {
+    id: number;
+    hasImage: boolean;
+    hasBanner: boolean;
+    imageVersion?: string | null;
+    bannerVersion?: string | null;
+  },
   kind: PerformerImageKind
 ): string | null {
   const present = kind === "banner" ? performer.hasBanner : performer.hasImage;
+  const version = kind === "banner" ? performer.bannerVersion : performer.imageVersion;
   // The filename already carries a random suffix, so a replaced image is a new
   // URL — but the filename isn't exposed here, so the epoch is what retires a
   // cached failure for this one.
   return present
-    ? `/api/performers/${performer.id}/image?kind=${kind}&e=${IMAGE_EPOCH}`
+    ? `/api/performers/${performer.id}/image?kind=${kind}&e=${IMAGE_EPOCH}${versionParam(version)}`
     : null;
 }
 
@@ -131,11 +154,12 @@ export function performerImageUrl(
 export function performerBannerUrl(performer: {
   id: number;
   hasBanner: boolean;
+  bannerVersion?: string | null;
   bannerItemId?: number | null;
   representativeItemId: number | null;
 }): string | null {
   if (performer.hasBanner) {
-    return `/api/performers/${performer.id}/image?kind=banner&e=${IMAGE_EPOCH}`;
+    return `/api/performers/${performer.id}/image?kind=banner&e=${IMAGE_EPOCH}${versionParam(performer.bannerVersion)}`;
   }
   const frame = performer.bannerItemId ?? performer.representativeItemId;
   return frame != null ? `/api/media-items/${frame}/thumbnail` : null;
@@ -154,10 +178,16 @@ export function performerPortraitUrl(performer: {
   id: number;
   hasImage: boolean;
   hasBanner: boolean;
+  imageVersion?: string | null;
+  bannerVersion?: string | null;
   representativeItemId: number | null;
 }): string | null {
-  if (performer.hasImage) return `/api/performers/${performer.id}/image?kind=avatar`;
-  if (performer.hasBanner) return `/api/performers/${performer.id}/image?kind=banner`;
+  if (performer.hasImage) {
+    return `/api/performers/${performer.id}/image?kind=avatar${versionParam(performer.imageVersion)}`;
+  }
+  if (performer.hasBanner) {
+    return `/api/performers/${performer.id}/image?kind=banner${versionParam(performer.bannerVersion)}`;
+  }
   if (performer.representativeItemId != null) {
     return `/api/media-items/${performer.representativeItemId}/thumbnail`;
   }

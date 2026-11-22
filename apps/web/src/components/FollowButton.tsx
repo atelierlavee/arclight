@@ -18,12 +18,15 @@ export function FollowButton({
   name,
   onToggle,
   tone = "default",
+  iconOnly = false,
 }: {
   followed: boolean;
   name: string;
   onToggle: (next: boolean) => Promise<void>;
   /** "overlay" for a button drawn on a banner image. */
   tone?: "default" | "overlay";
+  /** Just the icon, round, pink once followed. */
+  iconOnly?: boolean;
 }) {
   const [pending, setPending] = useState(false);
   const queryClient = useQueryClient();
@@ -54,6 +57,24 @@ export function FollowButton({
   }
 
   const Icon = followed ? UserCheck : UserPlus;
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        onClick={() => void toggle()}
+        disabled={pending}
+        aria-pressed={followed}
+        aria-label={followed ? `Unfollow ${name}` : `Follow ${name}`}
+        title={followed ? `Following — click to unfollow` : `Follow ${name} for their new videos`}
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-secondary disabled:opacity-50",
+          followed ? "text-primary" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <Icon className="size-4" />
+      </button>
+    );
+  }
   return (
     <button
       type="button"

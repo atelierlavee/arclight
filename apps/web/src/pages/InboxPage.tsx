@@ -429,6 +429,9 @@ function InboxPageContent() {
   return (
     <AppShell
       title="Inbox"
+      // Centred, title and all: a single item being reviewed reads best in
+      // the middle of a wide screen, not against its left edge.
+      centeredHeader
       subtitle={
         isLoading || isError
           ? "Tag each new item, then mark it done."
@@ -453,7 +456,7 @@ function InboxPageContent() {
         </>
       }
     >
-      <PageBody width="wide">
+      <PageBody width="wide" className="mx-auto">
         {isLoading && (
           <div role="status" aria-label="Loading inbox" className="space-y-4">
             <div className="aspect-video w-full animate-pulse rounded-lg bg-muted" />
