@@ -115,6 +115,7 @@ export const PROFILE_ROUTES: Readonly<Record<string, string>> = {
   "PATCH /api/profiles/:id": "self may rename/recolour; anyone else's is checked in the handler (owner)",
   "PUT /api/profiles/:id/pin": "self with current PIN, or owner with the account password",
   "PUT /api/appearance": "per-profile appearance",
+  "PUT /api/browser-state": "per-profile copy of the browser's pins, searches and recents",
   "PUT /api/privacy/password": "per-profile privacy password",
   "POST /api/privacy/unlock": "per-profile privacy unlock",
   "PUT /api/vault/pin": "per-profile vault PIN",
