@@ -88,8 +88,10 @@ videos and `docker/.env` aren't included in backups.
 ## More
 
 - Keyboard shortcuts are listed in the app at `/help`.
-- Architecture and development notes are in
-  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- [Architecture](docs/ARCHITECTURE.md): how the code is put together.
+- [Contributing](CONTRIBUTING.md): setup, conventions, tests and pull requests.
+- [Security](SECURITY.md): the security model and how to report a problem.
+- [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## License
 
