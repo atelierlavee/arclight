@@ -1,4 +1,4 @@
-// Copyright 2026 Vivek Jaiswal
+// Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
 /** The id a settings section is reachable by, so settings search can jump to it. */

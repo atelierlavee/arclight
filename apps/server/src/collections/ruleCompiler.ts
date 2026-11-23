@@ -1,4 +1,4 @@
-// Copyright 2026 Vivek Jaiswal
+// Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
 import { and, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";

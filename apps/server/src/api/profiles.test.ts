@@ -1,4 +1,4 @@
-// Copyright 2026 Vivek Jaiswal
+// Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -252,13 +252,13 @@ describe("profile isolation", () => {
 describe("profiles API", () => {
   it("first-run setup creates the owner profile and lands on it", async () => {
     const setup = await app.inject({
-      method: "POST", url: "/api/auth/setup", payload: { username: "vivek", password: "long-enough-pw" },
+      method: "POST", url: "/api/auth/setup", payload: { username: "alex", password: "long-enough-pw" },
     });
     expect(setup.statusCode).toBe(200);
     const cookie = String(setup.headers["set-cookie"]).split(";")[0];
     const status = (await call(cookie, "GET", "/api/auth/status")).json();
-    expect(status.profile).toMatchObject({ name: "vivek", isOwner: true, hasPin: false });
-    expect(status.user).toMatchObject({ username: "vivek" });
+    expect(status.profile).toMatchObject({ name: "alex", isOwner: true, hasPin: false });
+    expect(status.user).toMatchObject({ username: "alex" });
   });
 
   it("login auto-selects a sole PIN-less profile, and sends anything else to the picker", async () => {
@@ -368,12 +368,12 @@ describe("profiles API", () => {
     const url = `/api/profiles/${ownerProfileId}`;
 
     const proof = { accountPassword: "test-password" };
-    const saved = await call(owner, "PATCH", url, { firstName: "  Vivek ", lastName: "Jaiswal", ...proof });
+    const saved = await call(owner, "PATCH", url, { firstName: "  Alex ", lastName: "Doe", ...proof });
     expect(saved.statusCode).toBe(200);
-    expect(saved.json().profile).toMatchObject({ firstName: "Vivek", lastName: "Jaiswal" });
+    expect(saved.json().profile).toMatchObject({ firstName: "Alex", lastName: "Doe" });
     expect((await call(owner, "GET", "/api/auth/status")).json().profile).toMatchObject({
-      firstName: "Vivek",
-      lastName: "Jaiswal",
+      firstName: "Alex",
+      lastName: "Doe",
     });
 
     const cleared = await call(owner, "PATCH", url, { firstName: "", lastName: null, ...proof });
@@ -395,7 +395,7 @@ describe("profiles API", () => {
     const wrong = await call(owner, "PATCH", url, { firstName: "Mallory", accountPassword: "nope" });
     expect(wrong.statusCode).toBe(403);
 
-    const right = await call(owner, "PATCH", url, { firstName: "Vivek", accountPassword: "test-password" });
+    const right = await call(owner, "PATCH", url, { firstName: "Alex", accountPassword: "test-password" });
     expect(right.statusCode).toBe(200);
   });
 

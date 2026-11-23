@@ -1,4 +1,4 @@
-// Copyright 2026 Vivek Jaiswal
+// Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
 // Renders the app icon in every size it is needed at.

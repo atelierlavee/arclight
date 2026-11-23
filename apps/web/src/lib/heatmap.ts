@@ -1,4 +1,4 @@
-// Copyright 2026 Vivek Jaiswal
+// Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
 /** A replay count has to reach this before the seek bar draws it as a peak. */

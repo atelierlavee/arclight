@@ -1,4 +1,4 @@
-// Copyright 2026 Vivek Jaiswal
+// Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -69,7 +69,7 @@ describe("migration 0047 backfill", () => {
     // A single-user library as it stood before profiles.
     const q = (text: string, values: unknown[] = []) => pool.query(text, values);
     const [{ id: userId }] = (
-      await q(`insert into users (username, password_hash) values ('vivek', 'x:y') returning id`)
+      await q(`insert into users (username, password_hash) values ('alex', 'x:y') returning id`)
     ).rows;
     await q(`insert into sessions (id, user_id, expires_at) values ('s1', $1, now() + interval '1 day')`, [userId]);
     await q(
@@ -104,7 +104,7 @@ describe("migration 0047 backfill", () => {
 
     const profiles = (await q(`select * from profiles`)).rows;
     expect(profiles).toHaveLength(1);
-    expect(profiles[0]).toMatchObject({ user_id: userId, name: "vivek", is_owner: true, pin_hash: null });
+    expect(profiles[0]).toMatchObject({ user_id: userId, name: "alex", is_owner: true, pin_hash: null });
     const owner = profiles[0].id;
 
     // Signed-in sessions carry on as the owner; passkeys are the owner's.

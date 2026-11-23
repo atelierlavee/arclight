@@ -1,4 +1,4 @@
-// Copyright 2026 Vivek Jaiswal
+// Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
 const COMPATIBLE_CODECS = new Set(["h264", "vp8", "vp9", "av1"]);
