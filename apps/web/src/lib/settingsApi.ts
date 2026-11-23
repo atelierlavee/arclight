@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 export type HeroSource = "recent" | "favorites" | "manual";
 export type HeroSettings = { source: HeroSource; itemIds: number[] };
 export type ScanSettings = { intervalMinutes: number };

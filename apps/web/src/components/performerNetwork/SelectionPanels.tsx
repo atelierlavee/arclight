@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { NetworkEdge, NetworkMode, NetworkNode, SharedVideo } from "@/lib/performerApi";
 import { PairPanel, PerformerPanel, StudioPanel } from "../PerformerNetworkPanels";
 import type { NetworkGraph } from "./graph";

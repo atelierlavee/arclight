@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { pkey } from "./profileStorage";
 
 /** How long each photo can hold during a slideshow, in seconds; the button steps through them. */

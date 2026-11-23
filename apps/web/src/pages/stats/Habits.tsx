@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { formatWatchTime, type Insights } from "@/lib/insights";
 import { Bars } from "./Bars";
 import { hourName, watchHistograms, WEEKDAY_NAMES, WEEKDAYS } from "./statsData";

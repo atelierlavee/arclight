@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useState } from "react";
 import { Bookmark as BookmarkIcon, Check, FileText, Trash2, X } from "lucide-react";
 import { formatTimestamp, useBookmarkMutations, type Bookmark } from "@/lib/bookmarkApi";

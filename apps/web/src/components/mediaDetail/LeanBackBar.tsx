@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { Armchair, SkipForward, Square } from "lucide-react";
 import type { LeanBackSession } from "@/lib/leanBack";
 import { cn } from "@/lib/utils";

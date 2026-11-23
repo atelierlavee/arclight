@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Links performers by what they have in common — such as studios — rather
  * than by videos they appear in together.

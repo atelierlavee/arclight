@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useRef, useState } from "react";
 import { Fingerprint, Loader2 } from "lucide-react";
 import { unlockPrivacy } from "@/lib/privacyApi";

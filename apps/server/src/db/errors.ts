@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Whether an error is Postgres' unique-constraint violation (SQLSTATE 23505).
  *

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useState } from "react";
 import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { formatBytes, type BackupFile } from "@/lib/backupApi";

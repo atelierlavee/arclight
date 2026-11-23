@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * libpq environment variables for pg_dump and psql, parsed from DATABASE_URL.
  *

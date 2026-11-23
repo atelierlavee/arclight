@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { and, asc, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { hiddenGate, visibleItems } from "../library/visibility.js";
 import type { FastifyInstance } from "fastify";

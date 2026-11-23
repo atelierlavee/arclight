@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { randomBytes } from "node:crypto";
 import { and, eq, ne, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";

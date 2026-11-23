@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { FastifyRequest } from "fastify";
 
 /** The profile a session is acting as — see sessions.profile_id. */

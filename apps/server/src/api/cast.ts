@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { signCastToken } from "../auth/castTokens.js";

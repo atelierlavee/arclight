@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { activityEvents } from "../db/schema.js";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { bounds, type Simulation } from "@/lib/forceLayout";
 import type { NetworkNode } from "@/lib/performerApi";
 import type { View } from "./graph";

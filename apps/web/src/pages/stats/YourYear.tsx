@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useMemo, useState } from "react";
 import { calendarMonths, formatWatchTime, monthRecap, type Insights } from "@/lib/insights";
 import { thumbnailUrl } from "@/lib/mediaItemApi";

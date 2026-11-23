@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Thrown when the server says this session has not proved the privacy
  * credential. Its own class so callers can offer the unlock instead of

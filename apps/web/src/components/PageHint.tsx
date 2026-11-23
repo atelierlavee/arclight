@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { Lightbulb, X } from "lucide-react";
 import { useState } from "react";
 import { pkey } from "@/lib/profileStorage";

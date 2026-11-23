@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type React from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";

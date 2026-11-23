@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import * as cache from "./cache.js";

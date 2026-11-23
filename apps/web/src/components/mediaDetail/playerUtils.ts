@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 // Only offer "Continue Watching" for meaningful progress: not basically the
 // start (nothing to resume) or basically the end (same as starting over).
 export const MIN_RESUMABLE_SECONDS = 15;

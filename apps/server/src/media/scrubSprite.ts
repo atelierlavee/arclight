@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { access, readFile, rename, unlink, writeFile } from "node:fs/promises";

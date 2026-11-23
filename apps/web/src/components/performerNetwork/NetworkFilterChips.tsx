@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { X } from "lucide-react";
 import type { NetworkNode } from "@/lib/performerApi";
 import { cn } from "@/lib/utils";

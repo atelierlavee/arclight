@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { STYLE } from "./style";
 
 /** Over the graph: "Loading…" while a mode loads, or why there's nothing to draw. */

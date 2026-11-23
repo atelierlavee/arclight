@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { and, eq, isNotNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { profilePerformerState, profileStudioState } from "../db/schema.js";

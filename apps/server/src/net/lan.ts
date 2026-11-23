@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { existsSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import type { FastifyInstance } from "fastify";

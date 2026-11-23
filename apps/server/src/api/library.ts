@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { readdir, stat } from "node:fs/promises";
 import { logActivity } from "../activity/log.js";
 import { serialized } from "../auth/serialize.js";

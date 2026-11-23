@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Appearance } from "./appearance";
 
 /** The server stores a partial: only what's been changed from the defaults. */

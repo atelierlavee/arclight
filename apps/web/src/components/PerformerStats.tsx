@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { Building2, CalendarRange, Clock, Eye, Film } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PerformerDetail } from "@/lib/performerApi";

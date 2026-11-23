@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { ChevronDown, ChevronUp, List, Play, X } from "lucide-react";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { useQueue } from "@/lib/queue";

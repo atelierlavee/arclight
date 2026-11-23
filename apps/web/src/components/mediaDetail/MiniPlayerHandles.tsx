@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MiniPointerHandlers } from "./useMiniPlayerFrame";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { and, eq } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { autoSelectProfile, createSession } from "../auth/sessions.js";

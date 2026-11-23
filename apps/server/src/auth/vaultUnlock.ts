@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { getProfileSetting } from "../library/profileSettings.js";
 import { forgetSession } from "./profileContext.js";
 import { sweeper } from "./sweep.js";

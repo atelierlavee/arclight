@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { AlertCircle, CheckCircle2, Info, Trophy, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Portal } from "./Portal";

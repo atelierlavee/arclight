@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { AppShell } from "@/components/AppShell";
 import { PageBody } from "@/components/PageBody";
 import { APPEARANCE_SHORTCUT, DISCREET_SHORTCUT, SEARCH_SHORTCUT, SIDEBAR_SHORTCUT } from "@/lib/appearance";

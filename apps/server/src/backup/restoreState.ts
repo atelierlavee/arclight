@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { APP_DATA_ROOT } from "../media/cache.js";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useState } from "react";
 import { useQueue } from "@/lib/queue";
 import { fetchLatestVideos, fetchVideosWhere, type NetworkNode, type SharedVideo } from "@/lib/performerApi";

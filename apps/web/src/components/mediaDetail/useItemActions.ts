@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FramingValue } from "../FramingEditor";
 import { addO, removeO, setOrganised, setWatched, updateItem } from "@/lib/mediaItemApi";

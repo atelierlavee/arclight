@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useRef } from "react";
 import { savePlaybackPosition, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { SAVE_INTERVAL_MS } from "./playerUtils";

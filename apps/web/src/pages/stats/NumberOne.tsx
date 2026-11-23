@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { useQuery } from "@tanstack/react-query";

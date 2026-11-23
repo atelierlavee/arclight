@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { afterEach, describe, expect, it } from "vitest";
 import { setStorageProfile } from "./profileStorage";
 import { storageKeyFor, syncedName } from "./browserState";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { createContext, useContext } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import type { AuthStatus } from "./authApi";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { serialized } from "../auth/serialize.js";
 import { aliasedTable, and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";

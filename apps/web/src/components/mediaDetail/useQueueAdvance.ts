@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useRef, useState } from "react";
 import type { MediaItemDetail } from "@/lib/mediaItemApi";
 import { useQueue } from "@/lib/queue";

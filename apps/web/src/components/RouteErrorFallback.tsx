@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { ErrorFallback } from "@/components/ErrorBoundary";

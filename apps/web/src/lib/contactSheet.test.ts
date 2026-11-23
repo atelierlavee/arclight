@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { describe, expect, it } from "vitest";
 import { pickFrames } from "./contactSheet";
 import type { ScrubSprite } from "./bookmarkApi";

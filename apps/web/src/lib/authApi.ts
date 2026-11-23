@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { proofBody, type CurrentProfile, type Proof } from "./profilesApi";
 
 export type AuthUser = { id: number; username: string };

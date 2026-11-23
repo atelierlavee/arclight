@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PLAYBACK_RATES, readRate, readVolume, writeRate, writeVolume } from "./playerPrefs.js";
 

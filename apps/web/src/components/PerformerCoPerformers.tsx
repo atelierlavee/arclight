@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useNavigate } from "@tanstack/react-router";
 import { PerformerCard } from "./PerformerCard";
 import type { CoPerformer } from "@/lib/performerApi";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 

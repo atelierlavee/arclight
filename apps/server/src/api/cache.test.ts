@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";

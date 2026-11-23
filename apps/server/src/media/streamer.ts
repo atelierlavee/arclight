@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { createReadStream, type ReadStream } from "node:fs";
 import type { OutgoingHttpHeaders } from "node:http";
 import { pipeline } from "node:stream";

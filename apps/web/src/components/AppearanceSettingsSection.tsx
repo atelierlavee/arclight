@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { HOME_ROWS, readHomeRows, useAppearance } from "@/lib/appearance";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, Eye, EyeOff, RotateCcw } from "lucide-react";

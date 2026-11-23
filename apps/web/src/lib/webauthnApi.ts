@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { proofBody, type Proof } from "./profilesApi";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { throwIfNotOk } from "./privacyLock";

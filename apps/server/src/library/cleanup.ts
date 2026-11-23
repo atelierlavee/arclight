@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { count, eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { mediaItems, mediaItemTypes } from "../db/schema.js";

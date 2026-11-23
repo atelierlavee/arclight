@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The zoom-and-pan maths for the photo viewer, kept out of the component.
  *

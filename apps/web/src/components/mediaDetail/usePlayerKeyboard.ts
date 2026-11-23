@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { isDigitKey, isTypingTarget } from "./playerUtils";
 

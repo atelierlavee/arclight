@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { renderHook, act } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { useSubtitles, type SubtitleTrack } from "./useSubtitles";

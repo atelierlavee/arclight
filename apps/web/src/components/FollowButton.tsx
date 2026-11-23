@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useState } from "react";
 import { UserCheck, UserPlus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";

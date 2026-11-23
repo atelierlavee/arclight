@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { and, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import { studioIdsUnderName, taggedUnder } from "../library/hierarchy.js";
 import {

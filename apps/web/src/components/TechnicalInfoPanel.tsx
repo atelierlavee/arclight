@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { MediaItemDetail, PhotoMetadata } from "@/lib/mediaItemApi";
 
 function formatCoords(gps: { latitude: number; longitude: number }): string {

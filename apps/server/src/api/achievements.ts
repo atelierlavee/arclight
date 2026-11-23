@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { FastifyInstance } from "fastify";
 import { profileId } from "../auth/profileContext.js";
 import { getProfileSetting, setProfileSetting } from "../library/profileSettings.js";

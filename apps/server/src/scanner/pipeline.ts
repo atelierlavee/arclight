@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { basename } from "node:path";
 import { stat } from "node:fs/promises";
 import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { and, eq, isNotNull } from "drizzle-orm";
 import { anyInt } from "../db/anyOf.js";
 import { db } from "../db/client.js";

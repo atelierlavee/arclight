@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /** Studio colours, for the styles that use them; the rest share `OTHER`. */
 export const STUDIO_COLOURS = ["#60a5fa", "#f472b6", "#34d399", "#fbbf24", "#a78bfa", "#f87171", "#22d3ee", "#fb923c"];
 export const OTHER = "#8a8a8a";

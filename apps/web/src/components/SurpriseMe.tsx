@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useRef, useState } from "react";
 import { Dices, Loader2, X } from "lucide-react";
 import { DURATION_OPTIONS, filterParams, type Filters } from "@/lib/filters";

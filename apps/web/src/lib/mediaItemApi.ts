@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type React from "react";
 import { focalStyle } from "./reposition";
 export type Tag = { id: number; name: string; color: string | null };

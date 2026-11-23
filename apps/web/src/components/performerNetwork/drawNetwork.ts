@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Simulation } from "@/lib/forceLayout";
 import { circleFraming, unit, type NetworkEdge, type NetworkNode } from "@/lib/performerApi";
 import { colourIn, sameEdge, type Hover, type NetworkGraph, type View } from "./graph";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { PrivacyLockedError } from "./privacyLock";
 
 // Shared with every other guarded call, so one `instanceof` check covers

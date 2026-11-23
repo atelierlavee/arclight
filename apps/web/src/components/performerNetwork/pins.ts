@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Where you've dragged people, per view, kept in this browser only — a
  * display preference, not library data. Wrapped in try/catch because

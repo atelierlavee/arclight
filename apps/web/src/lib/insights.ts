@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The Stats page's arithmetic: calendar, streaks, monthly recap, hall of fame
  * and achievements, all worked out from `/api/insights`.

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { isStorageHousekeeping, pkey, storageProfile, PROFILE_LOCAL_KEYS } from "./profileStorage";
 
 /**

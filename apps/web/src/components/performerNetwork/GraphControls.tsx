@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { Expand, LayoutGrid, Maximize2, Shrink } from "lucide-react";
 
 /** The buttons in the graph's corner: fit, full screen, and un-place everyone. */

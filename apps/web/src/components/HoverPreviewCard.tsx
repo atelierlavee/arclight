@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useRef, useState } from "react";
 import { EXPANDED_SCALE, hoverCardBox } from "@/lib/hoverCard";
 import { createPortal } from "react-dom";

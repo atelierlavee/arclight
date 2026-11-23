@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { Link } from "@tanstack/react-router";
 import { Pin } from "lucide-react";
 import { useState } from "react";

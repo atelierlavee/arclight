@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { parseOrigins } from "../api/webauthn.js";
 import { isAuthorisedCastStream } from "./castTokens.js";

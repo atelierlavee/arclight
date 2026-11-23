@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { Check } from "lucide-react";
 import { settingsAnchor } from "@/lib/settingsAnchor";
 

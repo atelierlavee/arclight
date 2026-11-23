@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { describe, expect, it, vi } from "vitest";
 import { partialMatchKey, QueryClient, type QueryKey } from "@tanstack/react-query";
 import { itemScopedKeys, qk } from "./queryKeys";

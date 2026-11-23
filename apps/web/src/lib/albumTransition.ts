@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Which album the user just left, so the albums page can name that card's
  * photos for the view transition back and the stack folds up again.

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { loginWithPasskey, registerPasskey, unlockVaultWithPasskey } from "./webauthnApi";

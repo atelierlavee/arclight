@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { proofBody, type Proof } from "./profilesApi";
 export type VaultStatus = { hasPin: boolean; unlocked: boolean; count: number | null };
 

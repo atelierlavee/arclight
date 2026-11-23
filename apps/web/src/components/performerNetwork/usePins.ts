@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useRef, useState } from "react";
 import { readPins, writePins, type Pins } from "./pins";
 

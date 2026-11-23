@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Insights } from "./insights";
 
 /** Everything the Stats page works from; see `api/insights.ts`. */

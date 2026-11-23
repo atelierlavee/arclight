@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { QueueItem } from "./queue";
 
 /** Here rather than in queue.tsx so signing out can clear it from outside the provider. */

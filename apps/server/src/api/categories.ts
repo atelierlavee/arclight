@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { serialized } from "../auth/serialize.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { and, asc, eq, ne, sql } from "drizzle-orm";

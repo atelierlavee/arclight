@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bookmark as BookmarkIcon, Flame, LayoutGrid, Loader2, X } from "lucide-react";
 import { Portal } from "./Portal";

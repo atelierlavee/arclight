@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useState } from "react";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import {

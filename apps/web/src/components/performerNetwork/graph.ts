@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { SimNode } from "@/lib/forceLayout";
 import type { NetworkEdge, NetworkNode } from "@/lib/performerApi";
 import { OTHER, STUDIO_COLOURS } from "./style";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { Crosshair, ExternalLink, EyeOff, Pin, Play, Route } from "lucide-react";
 import type { ContextMenuState } from "@/components/ContextMenu";
 import type { NetworkNode } from "@/lib/performerApi";

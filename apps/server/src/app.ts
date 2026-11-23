@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import "dotenv/config";
 import { buildApp } from "./buildApp.js";
 import { purgeExpiredSessions } from "./auth/sessions.js";

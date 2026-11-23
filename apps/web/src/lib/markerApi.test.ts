@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { describe, expect, it } from "vitest";
 import { adjacentPositionStart, layoutMarkers, markerAt, markerColor, markerKey, MAX_MARKER_ROWS, type Marker } from "./markerApi";
 

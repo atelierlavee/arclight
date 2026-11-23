@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Remembers which artwork builds just failed, so a file ffmpeg can't decode
  * isn't re-encoded on every scan.

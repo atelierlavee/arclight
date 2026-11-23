@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { Check, CircleCheck, Droplets, Move, Pencil } from "lucide-react";
 import { PerformerEditor } from "../PerformerEditor";
 import { ClampedText } from "../ClampedText";

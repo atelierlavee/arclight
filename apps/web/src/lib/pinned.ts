@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { pkey } from "./profileStorage";
 export type Pin =
   | { id: string; type: "performer"; label: string; performerId: number }

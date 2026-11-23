@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import type { LucideIcon } from "lucide-react";

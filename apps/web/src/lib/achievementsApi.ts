@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /** When each badge was first unlocked; see `api/achievements.ts`. */
 export type AchievementRecord = { unlocked: Record<string, string>; seeded: boolean };
 

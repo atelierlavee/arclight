@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useMemo } from "react";
 import { tallySummary, type Insights, type TallyRow } from "@/lib/insights";
 

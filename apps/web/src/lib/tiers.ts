@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 export const TIERS = ["S", "A", "B", "C", "D"] as const;
 export type Tier = (typeof TIERS)[number];
 export type TierKind = "performer" | "video";

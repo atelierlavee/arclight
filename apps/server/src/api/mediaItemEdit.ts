@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { and, eq, sql } from "drizzle-orm";
 import { type FastifyInstance } from "fastify";
 import { logActivity } from "../activity/log.js";

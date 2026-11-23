@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { Images } from "lucide-react";
 import { coverFramingStyle, type AlbumSummary } from "@/lib/albumApi";
 import { thumbnailUrl } from "@/lib/mediaItemApi";

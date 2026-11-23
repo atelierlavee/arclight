@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { markFailed, recentlyFailed } from "./failedArtwork.js";
 import { execFile } from "node:child_process";
 import { access, rename, rm } from "node:fs/promises";

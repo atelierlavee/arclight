@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useRef, useState } from "react";
 
 /** The mini player's position and width, and the pointer handlers that drag and resize it. */

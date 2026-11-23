@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /** A slice of a part-to-whole chart. */
 export type DonutSlice = {
   name: string;

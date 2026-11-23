@@ -181,3 +181,8 @@ docker stop media-test-pg
 Built for one person's collection and used daily. One account, with profiles
 for the people who share it. No transcoding, by design, and no native app:
 the web app is laid out for phones instead.
+
+## License
+
+Copyright 2026 Vivek Jaiswal. Licensed under the [Apache License 2.0](LICENSE).
+Redistributions must keep the [NOTICE](NOTICE) file and attribution.

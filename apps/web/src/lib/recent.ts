@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { pkey } from "./profileStorage";
 /**
  * What you have recently looked at, played, edited and favourited (§3).

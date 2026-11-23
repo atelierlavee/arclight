@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import type { MediaCardItem } from "@/components/MediaCard";
 import { setPerformerFollowed } from "./performerApi";
 import { setStudioFollowed } from "./studioApi";

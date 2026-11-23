@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useEffect, useState } from "react";
 import { Eye, Heart, History, Pencil, Play } from "lucide-react";
 import { localDay } from "@/lib/insights";

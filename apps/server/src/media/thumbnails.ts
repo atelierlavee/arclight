@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { access, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";

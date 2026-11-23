@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Placed<T> = Rect & { item: T };
 

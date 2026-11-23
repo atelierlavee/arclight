@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { useNavigate } from "@tanstack/react-router";
 import { Medal, Repeat, Star, type LucideIcon } from "lucide-react";
 import { useAppearance } from "@/lib/appearance";

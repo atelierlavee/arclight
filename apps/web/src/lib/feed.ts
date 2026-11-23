@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /** "Alice", "Alice and Bea", "Alice, Bea and 2 others". */
 export function joinNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "";

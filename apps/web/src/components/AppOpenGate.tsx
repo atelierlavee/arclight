@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { pkey } from "@/lib/profileStorage";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useState } from "react";

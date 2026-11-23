@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 /** A replay count has to reach this before the seek bar draws it as a peak. */
 export const HEATMAP_MIN_PEAK = 2;
 

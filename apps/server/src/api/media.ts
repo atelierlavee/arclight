@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import path from "node:path";
 import { serialized } from "../auth/serialize.js";
 import { and, eq, isNull, sql } from "drizzle-orm";

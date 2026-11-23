@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { parsePage } from "./mediaItemQueries.js";
 import { serialized } from "../auth/serialize.js";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";

@@ -1,3 +1,6 @@
+// Copyright 2026 Vivek Jaiswal
+// SPDX-License-Identifier: Apache-2.0
+
 import { MediaCard, type MediaCardItem } from "./MediaCard";
 import { ContextMenu } from "./ContextMenu";
 import { ScrollRow } from "./ScrollRow";
