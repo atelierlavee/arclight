@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Move,
   Play,
+  RefreshCw,
   Rows3,
   Sparkles,
   Trash2,
@@ -28,6 +29,8 @@ import { PerformerContinueWatching } from "@/components/PerformerContinueWatchin
 import { AlbumRow } from "@/components/AlbumRow";
 import { PerformerCareer } from "@/components/PerformerCareer";
 import { PerformerFacts } from "@/components/PerformerFacts";
+import { StashDbLookupDialog } from "@/components/StashDbLookupDialog";
+import { fetchStashDbStatus } from "@/lib/stashdbApi";
 import { FollowButton } from "@/components/FollowButton";
 import { PerformerImageMenu } from "@/components/PerformerImageMenu";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -891,6 +894,7 @@ export function PerformerPage() {
   const id = Number(performerId);
   // Which crop is being adjusted: the tiles' 2:3, or the round picture here.
   const [reframing, setReframing] = useState<"tile" | "circle" | null>(null);
+  const [syncing, setSyncing] = useState(false);
   // The cover's position while you drag it; null when not repositioning.
   const [bannerDraft, setBannerDraft] = useState<number | null>(null);
   const bannerDrag = useRef<{ startY: number; start: number; height: number } | null>(null);
@@ -952,6 +956,12 @@ export function PerformerPage() {
       }),
   });
   const isOwner = useIsOwner();
+  // The sync button needs a StashDB key; only the owner is ever asked.
+  const { data: stashDb } = useQuery({
+    queryKey: qk.stashDbStatus,
+    queryFn: fetchStashDbStatus,
+    enabled: isOwner,
+  });
   const archive = useMutation({
     mutationFn: (next: boolean) => setPerformerArchived(id, next),
     onSuccess: (_, next) => {
@@ -1174,7 +1184,19 @@ export function PerformerPage() {
                   invalidatePerformer(queryClient, performer.id);
                 }}
               />
+              {isOwner && stashDb?.configured && (
+                <button
+                  type="button"
+                  onClick={() => setSyncing(true)}
+                  aria-label="Sync details from StashDB"
+                  title="Sync details from StashDB"
+                  className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+                >
+                  <RefreshCw className="size-5" />
+                </button>
+              )}
             </div>
+            {syncing && <StashDbLookupDialog performer={performer} onClose={() => setSyncing(false)} />}
 
             {reframing === "circle" && avatarSrc && (
               <div className="relative w-full max-w-xs space-y-1.5 text-left">
