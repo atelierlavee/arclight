@@ -90,29 +90,41 @@ run only when you ask for them.
 
 ## Architecture
 
-```
-            Browser (desktop · phone · TV)
-                         │  HTTP on port 3000
-┌────────────────────────▼─────────────────────────┐
-│ app container                                    │
-│                                                  │
-│  React web app (built static files)              │
-│  Fastify API server (Node 22, TypeScript)        │
-│    ├─ auth      sessions, passwords, passkeys,   │
-│    │            profiles, vault, cast links      │
-│    ├─ scanner   walk → hash → classify → import  │
-│    ├─ media     posters, previews, sprites,      │
-│    │            thumbnails, MP4 streaming        │
-│    ├─ metadata  ffprobe, EXIF, StashDB, TPDB     │
-│    ├─ library   visibility, categories, follows  │
-│    └─ backup    scheduled dump, verify, restore  │
-│  ffmpeg / ffprobe · sharp                        │
-└───────┬───────────────────────────┬──────────────┘
-        │ SQL                       │ read-only mount
-┌───────▼──────────┐        ┌───────▼──────────┐
-│ db container     │        │ Your video       │
-│ PostgreSQL 17    │        │ folders          │
-└──────────────────┘        └──────────────────┘
+```mermaid
+flowchart TB
+    browser["Browser<br/>desktop · phone · TV"]
+    tv["Chromecast / AirPlay"]
+
+    subgraph app["app container"]
+        web["React web app<br/>(built static files)"]
+        subgraph api["Fastify API server · Node 22"]
+            auth["auth<br/>sessions · passkeys · profiles · vault"]
+            scanner["scanner<br/>walk → hash → classify → import"]
+            media["media<br/>posters · previews · sprites · streaming"]
+            metadata["metadata<br/>ffprobe · EXIF"]
+            library["library<br/>visibility · categories · following"]
+            backup["backup<br/>dump · verify · restore"]
+        end
+        ffmpeg["ffmpeg · ffprobe · sharp"]
+        cache[("generated cache<br/>posters · previews")]
+    end
+
+    db[("db container<br/>PostgreSQL 17")]
+    files[("Your video folders<br/>read-only")]
+    ext["StashDB · ThePornDB<br/>(optional)"]
+
+    browser -->|HTTP :3000| web
+    browser -->|REST /api| auth
+    tv -->|signed 6-hour link| media
+    auth --> library
+    scanner --> files
+    scanner --> metadata
+    media --> files
+    media --> ffmpeg
+    media --> cache
+    metadata --> ext
+    api -->|SQL via Drizzle| db
+    backup --> db
 ```
 
 ### Repository layout
@@ -160,6 +172,127 @@ scripts/           Icon generation, restore helper
   network access is turned on. Casting gives the TV a signed link that works
   for six hours and only for that one video.
 - **API.** A REST API with OpenAPI documentation, served at `/api/docs`.
+
+### Data model
+
+The core tables and how they relate. Per-profile tables keep each person's
+history and preferences separate from the shared library.
+
+```mermaid
+erDiagram
+    users ||--o{ profiles : owns
+    users ||--o{ sessions : "signs in with"
+    users ||--o{ webauthn_credentials : "has passkeys"
+    libraries ||--o{ library_roots : "scans folders"
+    libraries ||--o{ media_items : contains
+    media_items ||--o{ media_files : "stored as"
+    media_items }o--o{ performers : "media_item_performers"
+    media_items }o--o{ tags : "media_item_tags"
+    tags ||--o{ tag_parents : "nested under"
+    media_items }o--|| studios : "released by"
+    media_items }o--o| series : "episode of"
+    media_items ||--o{ media_item_markers : "positions"
+    collections ||--o{ collection_items : holds
+    collection_items }o--|| media_items : references
+    profiles ||--o{ profile_item_state : "rates · favourites · hides"
+    profiles ||--o{ playback_states : "resume points"
+    profiles ||--o{ watch_log : history
+    profiles ||--o{ bookmarks : saves
+    profiles ||--o{ o_events : counts
+    profiles ||--o{ profile_performer_state : follows
+    profiles ||--o{ profile_studio_state : follows
+    scan_jobs }o--|| libraries : "runs over"
+
+    media_items {
+        int id
+        text title
+        text title_source
+        timestamp triaged_at
+        timestamp organised_at
+        int duration_seconds
+        text tpdb_scene_id
+        timestamp missing_since
+    }
+```
+
+### Scanning a folder
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Scan schedule / Rescan button
+    participant P as Scanner pipeline
+    participant FS as Video folders (read-only)
+    participant FF as ffprobe / ffmpeg
+    participant DB as PostgreSQL
+
+    S->>P: start scan job
+    P->>DB: insert scan_job (running)
+    P->>FS: walk library roots
+    loop each video file
+        P->>FS: read and hash contents
+        P->>DB: look up hash
+        alt known hash at a new path
+            P->>DB: update path (moved or renamed)
+        else new file
+            P->>P: parse performer, studio, date, title from path
+            P->>FF: probe duration and streams
+            P->>DB: insert media_item (waits in Inbox)
+        end
+    end
+    P->>DB: mark files that weren't found as missing
+    P->>FF: generate posters, previews, seek sprites
+    P->>DB: scan_job completed
+```
+
+### Playing and casting a video
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as You
+    participant W as Web app
+    participant A as API server
+    participant DB as PostgreSQL
+    participant FS as Video file
+    participant TV as Chromecast / AirPlay
+
+    U->>W: open a video
+    W->>A: GET item details (session cookie)
+    A->>DB: check profile visibility and vault lock
+    A-->>W: details, positions, resume point
+    W->>A: GET stream (Range: bytes=…)
+    A->>FS: read the requested byte range
+    A-->>W: 206 Partial Content (MP4, no transcoding)
+    loop while playing
+        W->>A: save progress
+        A->>DB: playback_states, watch_log, heatmap
+    end
+    opt cast to TV
+        W->>A: request a cast link
+        A-->>W: signed URL (one video, 6 hours)
+        W->>TV: hand over the URL
+        TV->>A: GET stream with token
+        A->>FS: read byte range
+        A-->>TV: 206 Partial Content
+    end
+```
+
+### A video's life in the library
+
+```mermaid
+stateDiagram-v2
+    [*] --> Inbox: found by a scan
+    Inbox --> Library: approved (triaged)
+    Library --> Organised: marked organised
+    Organised --> Library: edited again
+    Library --> Hidden: moved to a vault
+    Hidden --> Library: removed from the vault
+    Library --> Missing: file not found on a scan
+    Organised --> Missing: file not found on a scan
+    Missing --> Library: file found again (same hash)
+    Missing --> [*]: forgotten in cleanup
+```
 
 ### Tech stack
 
