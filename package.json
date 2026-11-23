@@ -9,11 +9,11 @@
     "coverage": "npm run coverage --workspaces --if-present"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^5.0.0",
-    "vitest": "^5.0.0"
+    "@vitest/coverage-v8": "^5.1.1",
+    "vitest": "^5.1.1"
   },
   "optionalDependencies": {
-    "@rolldown/binding-linux-arm64-gnu": "1.2.13"
+    "@rolldown/binding-linux-arm64-gnu": "1.2.19"
   },
   "license": "Apache-2.0",
   "author": "atelierlavee"
