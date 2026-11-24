@@ -152,8 +152,11 @@ export function parseDeclaredName(filePath: string): DeclaredName | null {
 
   // The cast ends at the FIRST " - "; titles legitimately contain dashes
   // ("Girls - Girls - Girls"), so nothing after that point is split blindly.
+  // With no " - " at all there is no cast slot, only a name: a scene-release
+  // style "[18]Hustler.4 Eyes, 3 Holes.2018-07-01" is a title whose comma
+  // would otherwise invent two performers out of it.
   const separator = rest.indexOf(" - ");
-  const namePart = separator === -1 ? rest : rest.slice(0, separator);
+  const namePart = separator === -1 ? "" : rest.slice(0, separator);
   let titlePart = separator === -1 ? rest : rest.slice(separator + 3);
 
   // The date segment is optional, and is only consumed when it actually
@@ -180,7 +183,8 @@ export function parseDeclaredName(filePath: string): DeclaredName | null {
 
   return {
     // `[]` is a legitimate way to say "no studio" while still opting in.
-    studio: studio && !/^\d{3,4}p?$/i.test(studio) ? studio : null,
+    // A bare number ("[18]", "[1080p]") is a release tag, not a studio.
+    studio: studio && !/^\d+p?$/i.test(studio) ? studio : null,
     performerNames,
     releaseDate,
     title: normalizeName(titlePart) || normalizeName(namePart),

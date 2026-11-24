@@ -214,7 +214,7 @@ export function DetailsPanel({
           item.description && (
             <ClampedText
               text={item.description}
-              className="sensitive max-w-3xl text-base leading-relaxed text-white/70"
+              className="sensitive text-base leading-relaxed text-white/70"
             />
           )
         )}
@@ -369,9 +369,12 @@ export function DetailsPanel({
         <div className="space-y-2">
           <FieldLabel accent={accent}>Tags</FieldLabel>
           <TagEditor
+            // A fresh pick, and the "+N more" folded again, for each video.
+            key={item.id}
             itemId={item.id}
             tags={item.tags}
             readOnly={!editing}
+            sample={8}
           />
         </div>
 

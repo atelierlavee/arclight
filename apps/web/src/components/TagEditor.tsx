@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { saveTags, type Tag } from "@/lib/mediaItemApi";
@@ -10,11 +10,33 @@ import { useToast } from "@/lib/toast";
 import { qk } from "@/lib/queryKeys";
 import { invalidateItem } from "@/lib/invalidate";
 
+/** A random number generator from a seed, so one visit keeps one pick. */
+function seeded(seed: number): () => number {
+  let a = Math.floor(seed * 2 ** 32);
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 2 ** 32;
+  };
+}
+
+/** `count` of `names`, picked at random by `seed`, in their original order. */
+function pick(names: string[], count: number, seed: number): string[] {
+  const random = seeded(seed);
+  const order = names.map((name) => ({ name, at: random() }));
+  const chosen = new Set(
+    [...order].sort((a, b) => a.at - b.at).slice(0, count).map((entry) => entry.name),
+  );
+  return names.filter((name) => chosen.has(name));
+}
+
 export function TagEditor({
   itemId,
   tags,
   readOnly = false,
   accent,
+  sample,
 }: {
   itemId: number;
   tags: Tag[];
@@ -22,8 +44,20 @@ export function TagEditor({
   readOnly?: boolean;
   /** Sampled from the item's artwork, so chips match the rest of the modal. */
   accent?: string | null;
+  /**
+   * Read-only only: show this many tags, picked at random each time it
+   * opens, with a "+N more" chip that shows the rest.
+   */
+  sample?: number;
 }) {
   const [pending, setPending] = useState<string[]>(tags.map((t) => t.name));
+  const [seed] = useState(() => Math.random());
+  const [showAll, setShowAll] = useState(false);
+  const sampling = readOnly && sample !== undefined && !showAll && pending.length > sample;
+  const shown = useMemo(
+    () => (sampling ? pick(pending, sample, seed) : pending),
+    [sampling, pending, sample, seed],
+  );
   const [input, setInput] = useState("");
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -64,7 +98,7 @@ export function TagEditor({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {pending.map((name) => (
+      {shown.map((name) => (
         <span
           key={name}
           className={cn(
@@ -89,6 +123,15 @@ export function TagEditor({
           )}
         </span>
       ))}
+      {sampling && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="rounded-full px-2.5 py-1 text-xs text-primary ring-1 ring-primary/40 transition-colors hover:bg-primary/10"
+        >
+          +{pending.length - shown.length} more
+        </button>
+      )}
       {readOnly && pending.length === 0 && (
         <span className="text-xs text-muted-foreground/60">—</span>
       )}

@@ -133,6 +133,14 @@ describe("releaseDateFromFilename", () => {
 });
 
 describe("parseDeclaredName", () => {
+  // Scene-release names start with a bracket too, but have no " - " cast
+  // slot; their commas are part of the title.
+  it("takes no cast from a name with no ' - ' in it", () => {
+    const parsed = parseDeclaredName("/m/[18]Hustler.4 Eyes, 3 Holes.2018-07-01.mp4");
+    expect(parsed?.performerNames).toEqual([]);
+    expect(parsed?.studio).toBeNull();
+  });
+
   it("returns null unless the filename opts in with a leading bracket", () => {
     expect(parseDeclaredName("/m/Alice - [Vixen] - Title.mp4")).toBeNull();
     expect(parseDeclaredName("/m/Alice.mp4")).toBeNull();

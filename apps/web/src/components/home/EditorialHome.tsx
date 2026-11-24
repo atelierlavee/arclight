@@ -375,7 +375,7 @@ function OpeningShot({
           <p className="mt-1.5 text-sm text-white/70 md:text-base">{rundown(toFinish, newCount)}</p>
         </div>
 
-        <div className="relative w-full max-w-4xl space-y-5 px-6 pb-16 md:px-14 md:pb-24">
+        <div className="relative w-full max-w-4xl space-y-5 px-6 pb-10 md:px-14 md:pb-14">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">Tonight's feature</p>
           <h1 className="sensitive line-clamp-3 text-5xl font-black leading-[0.95] tracking-tighter text-primary drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] md:text-7xl lg:text-8xl">
             {item.title}
@@ -480,6 +480,36 @@ function formatClock(seconds: number): string {
  * bring another to the middle; a click on the middle one resumes, and
  * hovering it plays its clip.
  */
+/** Covers on show at once. */
+const COVERS_SHOWN = 5;
+/**
+ * Where a cover sits beside the one in focus, by how many steps away: each
+ * further step slides out a little less, turns further and sits deeper, so
+ * a stack of them still peeks out one behind another.
+ */
+const COVER_SLIDE = [0, 40, 72, 100, 124];
+const COVER_DEPTH = [0, 150, 300, 430, 540];
+const COVER_TURN = [0, 35, 50, 58, 62];
+/** A table's value at a fractional step, so covers glide between places. */
+function at(table: number[], step: number): number {
+  const d = Math.min(step, table.length - 1);
+  const i = Math.min(Math.floor(d), table.length - 2);
+  return table[i] + (table[i + 1] - table[i]) * (d - i);
+}
+
+/** Where a cover sits, `offset` steps (fractional mid-scroll) from the focus. */
+function coverTransform(offset: number): string {
+  const d = Math.abs(offset);
+  const side = Math.sign(offset);
+  return `translateX(${side * at(COVER_SLIDE, d)}%) translateZ(${-at(COVER_DEPTH, d)}px) rotateY(${-side * at(COVER_TURN, d)}deg)`;
+}
+
+/** How long after the last scroll event the carousel settles on a cover. */
+const SETTLE_MS = 140;
+
+/** How far a sideways scroll travels, in pixels, to turn the carousel one cover. */
+const WHEEL_STEP = 70;
+
 function KeepWatching({
   items,
   onOpen,
@@ -495,7 +525,47 @@ function KeepWatching({
 }) {
   const [index, setIndex] = useState(0);
   const [hovered, setHovered] = useState(false);
-  const focus = Math.min(index, items.length - 1);
+  const stage = useRef<HTMLDivElement>(null);
+  const touchX = useRef<number | null>(null);
+  const count = items.length;
+
+  // Mid-scroll, where the carousel is, between covers; null at rest.
+  const [scrolled, setScrolled] = useState<number | null>(null);
+
+  // A sideways swipe on a trackpad (or a tilt wheel) moves the covers with
+  // your fingers, continuously, and settles on the nearest one when you stop:
+  // a short flick moves one, a long or held swipe runs on to either end. Not
+  // passive, so the swipe doesn't also send the browser back a page.
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    let place: number | null = null;
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
+      event.preventDefault();
+      const from = place ?? Math.min(index, count - 1);
+      place = Math.max(0, Math.min(count - 1, from + event.deltaX / WHEEL_STEP));
+      setScrolled(place);
+      setHovered(false);
+      clearTimeout(settle);
+      settle = setTimeout(() => {
+        if (place !== null) setIndex(Math.round(place));
+        place = null;
+        setScrolled(null);
+      }, SETTLE_MS);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      clearTimeout(settle);
+    };
+    // The index changes only as a scroll settles, so re-listening then is free.
+  }, [count, index]);
+
+  const scrolling = scrolled !== null;
+  const place = scrolled ?? Math.min(index, items.length - 1);
+  const focus = Math.round(place);
   const current = items[focus];
   if (!current) return null;
 
@@ -503,6 +573,9 @@ function KeepWatching({
     setIndex(Math.max(0, Math.min(items.length - 1, to)));
     setHovered(false);
   };
+  // Up to five covers, the focused one as near the middle as the ends allow.
+  // It stays put; a lopsided stack runs on under the text beside it.
+  const windowStart = Math.max(0, Math.min(focus - 2, items.length - COVERS_SHOWN));
   const duration = current.durationSeconds ?? 0;
   const position = current.lastPositionSeconds ?? 0;
   const progress = duration > 0 ? Math.min(100, (position / duration) * 100) : 0;
@@ -521,7 +594,20 @@ function KeepWatching({
       </div>
 
       <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-20">
-        <div className="relative flex items-center justify-center gap-3">
+        <div
+          ref={stage}
+          onTouchStart={(event) => (touchX.current = event.touches[0]?.clientX ?? null)}
+          onTouchEnd={(event) => {
+            const start = touchX.current;
+            const end = event.changedTouches[0]?.clientX;
+            touchX.current = null;
+            if (start === null || end === undefined || Math.abs(end - start) < 40) return;
+            // Like the trackpad: the further the swipe, the more covers it turns.
+            const steps = Math.max(1, Math.round(Math.abs(end - start) / 80));
+            go(focus + (end < start ? steps : -steps));
+          }}
+          className="relative flex touch-pan-y items-center justify-center gap-3"
+        >
           <button
             type="button"
             onClick={() => go(focus - 1)}
@@ -533,11 +619,12 @@ function KeepWatching({
           </button>
 
           {/* The covers, in perspective. */}
-          <div className="relative aspect-video w-full max-w-xl [perspective:1600px]">
+          <div className="relative aspect-video w-full max-w-md [perspective:1600px]">
             {items.map((item, i) => {
-              const offset = i - focus;
-              const distance = Math.abs(offset);
-              const centre = offset === 0;
+              const offset = i - place;
+              const distance = Math.abs(i - focus);
+              const centre = i === focus;
+              const shown = i >= windowStart && i < windowStart + COVERS_SHOWN;
               return (
                 <button
                   key={item.id}
@@ -547,14 +634,19 @@ function KeepWatching({
                   onClick={() => (centre ? onOpen(item.id, true) : go(i))}
                   onMouseEnter={centre ? () => setHovered(true) : undefined}
                   onMouseLeave={centre ? () => setHovered(false) : undefined}
-                  className="group absolute inset-0 overflow-hidden rounded-md bg-secondary shadow-[0_40px_80px_-30px_rgba(0,0,0,0.95)] ring-1 ring-white/10 transition-[transform,opacity] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+                  className={cn(
+                    "group absolute inset-0 overflow-hidden rounded-md bg-secondary shadow-[0_40px_80px_-30px_rgba(0,0,0,0.95)] ring-1 ring-white/10 will-change-transform",
+                    // Mid-scroll the covers follow the fingers exactly; at
+                    // rest they ease into place.
+                    scrolling
+                      ? "transition-opacity duration-300"
+                      : "transition-[transform,opacity] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                  )}
                   style={{
                     zIndex: 10 - distance,
-                    opacity: distance > 2 ? 0 : 1,
-                    pointerEvents: distance > 2 ? "none" : undefined,
-                    transform: centre
-                      ? "none"
-                      : `translateX(${offset * 40}%) translateZ(${-distance * 180}px) rotateY(${offset > 0 ? -40 : 40}deg)`,
+                    opacity: shown ? 1 : 0,
+                    pointerEvents: shown ? undefined : "none",
+                    transform: offset === 0 ? "none" : coverTransform(offset),
                   }}
                 >
                   <img
@@ -568,7 +660,7 @@ function KeepWatching({
                   <span
                     className={cn(
                       "absolute inset-0 transition-colors duration-700",
-                      centre ? "bg-transparent" : "bg-black/55",
+                      centre ? "bg-transparent" : distance === 1 ? "bg-black/50" : "bg-black/70",
                     )}
                   />
                   {centre && (
@@ -596,6 +688,11 @@ function KeepWatching({
 
         {/* The one in focus, in full. */}
         <div className="relative isolate z-20">
+          {/* The stack fades away under the text rather than cutting off. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -inset-y-16 -left-32 right-0 -z-10 bg-gradient-to-r from-transparent via-background/85 to-background"
+          />
           <FloatingHearts />
           <div key={current.id} className="relative animate-fade-in space-y-5">
             <p className="sensitive text-3xl font-black leading-tight tracking-tight md:text-4xl">

@@ -63,13 +63,13 @@ export function LibraryScene() {
   };
 
   return (
-    <section className="relative isolate -mx-4 overflow-hidden px-6 py-16 md:-mx-6 md:px-14 md:py-24">
+    <section className="relative isolate -mx-4 overflow-hidden px-6 pb-16 pt-4 md:-mx-6 md:px-14 md:pb-24 md:pt-6">
       {/* The Studios heading's silk, here wide and faint behind the wall:
           the pink runs out to the left from the box on the right, so the
           ribbons cross the whole scene. */}
       <SilkWaves className="absolute right-0 top-1/2 -z-10 h-[75%] w-[45%] -translate-y-1/2 opacity-50" />
 
-      <div className="mb-12 flex justify-center md:mb-16">
+      <div className="mb-10 flex justify-center md:mb-12">
         <Kicker>In the library</Kicker>
       </div>
 

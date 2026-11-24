@@ -217,19 +217,37 @@ export function SettingsPage() {
           active === "appearance" && !terms.length ? "max-w-4xl" : "max-w-2xl",
         )}
       >
-        <div className="relative mx-auto mb-4 max-w-2xl">
+        {/* A form of its own, so a browser never takes this box for the
+            username belonging to a password field elsewhere on the page. */}
+        <form
+          role="search"
+          autoComplete="off"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (results[0]) open(results[0]);
+          }}
+          className="relative mx-auto mb-4 max-w-2xl"
+        >
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
+            // Not a username: with password fields further down the page,
+            // browsers and password managers otherwise fill your username in.
+            name="settings-search"
+            autoComplete="off"
+            spellCheck={false}
+            data-1p-ignore
+            data-lpignore="true"
+            data-form-type="other"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && results[0]) open(results[0]);
               if (event.key === "Escape") setQuery("");
             }}
             placeholder="Search settings — try “password”, “tile size” or “backup”"
             aria-label="Search settings"
-            className={cn(settingsInputClass, "pl-9 pr-9")}
+            // It draws its own clear button; the browser's would be a second ✕.
+            className={cn(settingsInputClass, "pl-9 pr-9 [&::-webkit-search-cancel-button]:appearance-none")}
           />
           {query && (
             <button
@@ -241,7 +259,7 @@ export function SettingsPage() {
               <X className="size-3.5" />
             </button>
           )}
-        </div>
+        </form>
 
         {terms.length > 0 ? (
           <ul className="divide-y divide-border/60 rounded-lg border border-border bg-card/40">
