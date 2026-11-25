@@ -4,7 +4,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAppearance } from "@/lib/appearance";
-import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { ContextMenu, type ContextMenuState } from "@/components/ContextMenu";
 import {
   fetchPerformerNetwork,
@@ -123,7 +122,7 @@ export function PerformerNetwork({
     [allNodes],
   );
   const { openProfile, openStudioVideos } = useNetworkNavigation(nodesById);
-  const { playing, stopPlaying, play, playAll, playLatest } = useNetworkPlayback();
+  const { play, playAll, playLatest } = useNetworkPlayback();
 
   const graph = useMemo(
     () => buildGraph({ allNodes, allEdges, hidden, focus, showIsolated, pathEnds }),
@@ -476,9 +475,6 @@ export function PerformerNetwork({
         neighbours, Enter opens, F focuses, H hides and Esc backs out. A red dot marks a favourite.
       </p>
 
-      {playing != null && (
-        <MediaDetailModal itemId={playing} autoPlay onClose={stopPlaying} />
-      )}
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
     </div>
   );

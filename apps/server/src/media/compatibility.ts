@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 const COMPATIBLE_CODECS = new Set(["h264", "vp8", "vp9", "av1"]);
+const COMPATIBLE_AUDIO_CODECS = new Set(["aac", "mp3", "opus", "vorbis"]);
 
 // ffprobe reports `format_name` as a comma-joined list of every format the
 // demuxer matched — an MP4 comes back as "mov,mp4,m4a,3gp,3g2,mj2". So the
@@ -47,10 +48,8 @@ function containerIsPlayable(containerFormat: string, codec: string | null): boo
 /**
  * A message explaining why a file won't direct-play, or null when it will.
  *
- * Names the actual problem — container or codec — because they need different
- * fixes and the wrong one sends you down the wrong path. A container problem
- * is solved by remuxing (fast, lossless); a codec problem needs a full
- * re-encode.
+ * Names the actual problem — container or codec — so the playback fallback
+ * can explain why a file needs transcoding.
  */
 export function playbackWarningFor(
   itemType: string,
@@ -66,14 +65,25 @@ export function playbackWarningFor(
 
   const codecOk = codec === null || COMPATIBLE_CODECS.has(codec);
   const containerOk = container === null || containerIsPlayable(container, codec);
+  const rawAudioCodec = extraMetadata?.audioCodec;
+  const audioCodec = typeof rawAudioCodec === "string" ? rawAudioCodec.toLowerCase() : null;
+  const audioCodecKnown = audioCodec !== null;
+  const audioCodecOk = audioCodecKnown
+    ? audioCodec === "none" || COMPATIBLE_AUDIO_CODECS.has(audioCodec)
+    : codec === null && container === null;
 
-  if (codecOk && containerOk) return null;
+  if (codecOk && containerOk && audioCodecOk) return null;
 
+  if (!audioCodecOk) {
+    return audioCodec
+      ? `This video's audio codec (${audioCodec}) needs transcoding for browser playback.`
+      : "This video's audio codec is unknown and needs transcoding for browser playback.";
+  }
   if (!codecOk && !containerOk) {
-    return `This video's format (${codec} in ${container}) can't play in a browser. Converting it to H.264 in an MP4 would fix it.`;
+    return `This video's format (${codec} in ${container}) needs transcoding for browser playback.`;
   }
   if (!codecOk) {
-    return `This video's codec (${codec}) can't play in a browser. Converting it to H.264 would fix it.`;
+    return `This video's codec (${codec}) needs transcoding for browser playback.`;
   }
-  return `This video's container (${container}) can't play in a browser, though its codec is fine — repackaging it as MP4 would fix it without re-encoding.`;
+  return `This video's container (${container}) needs transcoding for browser playback.`;
 }

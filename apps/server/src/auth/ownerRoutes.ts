@@ -132,6 +132,8 @@ export const PROFILE_ROUTES: Readonly<Record<string, string>> = {
   "PUT /api/tiers/:kind": "per-profile tier list",
   "DELETE /api/continue-watching": "per-profile history",
   "POST /api/media-items/:id/bookmarks": "per-profile bookmarks",
+  "POST /api/media-items/:id/transcodes": "per-profile on-demand video playback",
+  "DELETE /api/transcodes/:sessionId": "stops this profile's temporary video transcode",
   "PATCH /api/bookmarks/:id": "per-profile bookmarks",
   "DELETE /api/bookmarks/:id": "per-profile bookmarks",
   "POST /api/achievements/unlock": "per-profile trophies",

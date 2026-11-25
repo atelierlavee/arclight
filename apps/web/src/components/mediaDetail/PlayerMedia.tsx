@@ -1,6 +1,8 @@
 // Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
+import { useEffect, useState } from "react";
+import type Hls from "hls.js";
 import { framingStyle, thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { cn } from "@/lib/utils";
 import type { SubtitleTrack } from "./useSubtitles";
@@ -38,6 +40,108 @@ export function PlayerMedia({
   onEnded: () => void;
   onVolumeChange: () => void;
 }) {
+  const [transcodeError, setTranscodeError] = useState<string | null>(null);
+  const transcodeRequired =
+    mode === "playing" &&
+    item?.itemType === "video" &&
+    Boolean(item.playbackWarning) &&
+    !castSrc;
+
+  useEffect(() => {
+    if (!transcodeRequired || !item) return;
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    let cancelled = false;
+    let sessionId: string | null = null;
+    let hls: Hls | null = null;
+
+    const stopSession = async (id: string) => {
+      try {
+        await fetch(`/api/transcodes/${id}`, {
+          method: "DELETE",
+          keepalive: true,
+        });
+      } catch (error) {
+        console.warn("transcode: could not stop playback session:", error);
+      }
+    };
+
+    const start = async () => {
+      setTranscodeError(null);
+      const nativeHls = Boolean(video.canPlayType("application/vnd.apple.mpegurl"));
+      let HlsPlayer: typeof import("hls.js").default | null = null;
+      if (!nativeHls) {
+        HlsPlayer = (await import("hls.js")).default;
+        if (!HlsPlayer.isSupported()) {
+          setTranscodeError("This browser does not support the transcoded video stream.");
+          return;
+        }
+      }
+
+      const response = await fetch(`/api/media-items/${item.id}/transcodes`, {
+        method: "POST",
+      });
+      const body = (await response.json()) as {
+        sessionId?: unknown;
+        error?: unknown;
+      };
+      if (!response.ok) {
+        throw new Error(
+          typeof body.error === "string" ? body.error : `Request failed (${response.status})`,
+        );
+      }
+      if (typeof body.sessionId !== "string") {
+        throw new Error("The server did not create a transcode session");
+      }
+
+      sessionId = body.sessionId;
+      if (cancelled) {
+        await stopSession(sessionId);
+        return;
+      }
+
+      const source = `/api/transcodes/${sessionId}/index.m3u8`;
+      if (nativeHls) {
+        video.src = source;
+        video.load();
+        void video.play().catch(() => {});
+      } else {
+        if (!HlsPlayer) throw new Error("HLS playback is unavailable");
+        hls = new HlsPlayer();
+        hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
+          if (data.fatal) {
+            setTranscodeError("The video could not be transcoded for playback.");
+            if (sessionId) void stopSession(sessionId);
+          }
+        });
+        hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
+          void video.play().catch(() => {});
+        });
+        hls.loadSource(source);
+        hls.attachMedia(video);
+      }
+    };
+
+    void start().catch((error: unknown) => {
+      if (!cancelled) {
+        setTranscodeError(
+          error instanceof Error ? error.message : "The video could not be transcoded.",
+        );
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      hls?.destroy();
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      if (sessionId) void stopSession(sessionId);
+    };
+  }, [item, mode, transcodeRequired, videoRef]);
+
   return (
     <>
       {item?.itemType === "video" && (
@@ -71,7 +175,9 @@ export function PlayerMedia({
           // appearance panel's "Play preview when opened" turned off.
           src={
             mode === "playing"
-              ? castSrc?.id === item.id
+              ? transcodeRequired
+                ? undefined
+                : castSrc?.id === item.id
                 ? castSrc.url
                 : `/api/stream/${item.id}`
               : stillOnly
@@ -130,6 +236,14 @@ export function PlayerMedia({
           className="h-full w-full object-contain"
         />
       ) : null}
+      {transcodeError && (
+        <div
+          role="alert"
+          className="absolute inset-x-4 bottom-16 z-20 rounded-lg bg-black/85 p-4 text-sm text-white"
+        >
+          {transcodeError}
+        </div>
+      )}
     </>
   );
 }

@@ -11,6 +11,7 @@ export type VideoProbeResult = {
   width: number | null;
   height: number | null;
   codec: string | null;
+  audioCodec: string | null;
   containerFormat: string | null;
   embeddedTitle: string | null;
   /** Overall bitrate in kilobits per second, container-reported. */
@@ -46,6 +47,7 @@ const EMPTY_RESULT: VideoProbeResult = {
   width: null,
   height: null,
   codec: null,
+  audioCodec: null,
   containerFormat: null,
   embeddedTitle: null,
   bitrateKbps: null,
@@ -57,6 +59,7 @@ export function probeMetadata(probe: VideoProbeResult) {
     width: probe.width,
     height: probe.height,
     codec: probe.codec,
+    audioCodec: probe.audioCodec,
     containerFormat: probe.containerFormat,
     embeddedTitle: probe.embeddedTitle,
     // Always present once probed, null when the container doesn't say, so
@@ -79,6 +82,7 @@ export async function probeVideo(filePath: string): Promise<VideoProbeResult> {
 
     const data = JSON.parse(stdout) as FfprobeOutput;
     const videoStream = data.streams?.find((s) => s.codec_type === "video");
+    const audioStream = data.streams?.find((s) => s.codec_type === "audio");
     const duration = data.format?.duration ? Number(data.format.duration) : null;
 
     return {
@@ -86,6 +90,7 @@ export async function probeVideo(filePath: string): Promise<VideoProbeResult> {
       width: videoStream?.width ?? null,
       height: videoStream?.height ?? null,
       codec: videoStream?.codec_name ?? null,
+      audioCodec: audioStream ? audioStream.codec_name ?? "unknown" : "none",
       containerFormat: data.format?.format_name ?? null,
       embeddedTitle: data.format?.tags?.title ?? null,
       bitrateKbps: parseBitrateKbps(data.format?.bit_rate),

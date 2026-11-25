@@ -1049,44 +1049,33 @@ async function ensureArtworkForItem(
     .where(eq(mediaItems.id, mediaItemId));
   if (!item) return;
 
-  // A video scanned while ffprobe was missing was stored with no duration and
-  // never probed again. Fill it in once the tool is available, so installing
-  // ffmpeg is enough to repair those items on the next scan.
+  const extraMetadata =
+    item.extraMetadata !== null && typeof item.extraMetadata === "object"
+      ? (item.extraMetadata as Record<string, unknown>)
+      : {};
+
+  // Fill missing probe fields on the next scan. This also backfills audio
+  // codecs for existing libraries so direct-play decisions can include audio.
   let durationSeconds = item.durationSeconds;
-  if (durationSeconds === null) {
+  const needsProbe =
+    durationSeconds === null ||
+    !("audioCodec" in extraMetadata) ||
+    ("codec" in extraMetadata && !("bitrateKbps" in extraMetadata));
+  if (needsProbe) {
     const probe = await probeVideo(filePath);
-    if (probe.durationSeconds !== null) {
-      durationSeconds = probe.durationSeconds;
+    if (probe.durationSeconds !== null) durationSeconds = probe.durationSeconds;
+    if (probe.durationSeconds !== null || probe.codec !== null || probe.audioCodec !== null) {
       await db
         .update(mediaItems)
         .set({
           durationSeconds,
           extraMetadata: {
-            ...((item.extraMetadata as Record<string, unknown> | null) ?? {}),
+            ...extraMetadata,
             ...probeMetadata(probe),
           },
         })
         .where(eq(mediaItems.id, mediaItemId));
     }
-  } else if (
-    item.extraMetadata !== null &&
-    typeof item.extraMetadata === "object" &&
-    "codec" in item.extraMetadata &&
-    !("bitrateKbps" in item.extraMetadata)
-  ) {
-    // Videos scanned before bitrate was recorded: filled in once, so the
-    // bitrate rule works on an existing library without a full re-probe. The
-    // key is written even when unknown, which is what stops a retry per scan.
-    const probe = await probeVideo(filePath);
-    await db
-      .update(mediaItems)
-      .set({
-        extraMetadata: {
-          ...(item.extraMetadata as Record<string, unknown>),
-          bitrateKbps: probe.bitrateKbps,
-        },
-      })
-      .where(eq(mediaItems.id, mediaItemId));
   }
 
   await ensurePosterFrame(filePath, mediaItemId, contentHash, durationSeconds);

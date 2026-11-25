@@ -1,12 +1,12 @@
 // Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { YouTabs } from "@/components/YouTabs";
-import { MediaDetailModal } from "@/components/MediaDetailModal";
+import { openDetails, openWatchPage } from "@/lib/appEvents";
 import { fetchAuthStatus } from "@/lib/authApi";
 import {
   achievements,
@@ -58,18 +58,14 @@ export function StatsPage() {
 function StatsView() {
   const { data, isLoading } = useQuery({ queryKey: qk.insights, queryFn: fetchInsights });
   const { data: auth } = useQuery({ queryKey: qk.authStatus, queryFn: fetchAuthStatus });
-  const [open, setOpen] = useState<{ id: number; autoPlay: boolean; resume?: boolean } | null>(null);
-  const openItem = (id: number) => setOpen({ id, autoPlay: false });
-  const playItem = (id: number, resume = false) => setOpen({ id, autoPlay: true, resume });
+  const openItem = (id: number) => openDetails(id);
+  const playItem = (id: number, resume = false) => openWatchPage(id, { resume });
 
   return (
     <>
       {isLoading && <p className="px-6 py-8 text-sm text-muted-foreground">Loading…</p>}
       {data && (
         <StatsStory data={data} name={auth?.user?.username ?? null} onOpenItem={openItem} onPlayItem={playItem} />
-      )}
-      {open && (
-        <MediaDetailModal itemId={open.id} autoPlay={open.autoPlay} resume={open.resume} onClose={() => setOpen(null)} />
       )}
     </>
   );

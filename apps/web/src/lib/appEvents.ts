@@ -23,14 +23,8 @@ export const DISCREET_OFF_EVENT = "media-server:discreet-off";
 export type PlayItemDetail = {
   id: number;
   resume?: boolean;
-  /**
-   * Open the full detail view rather than the corner mini player.
-   *
-   * The shell's handler opens the mini player for everything, which is right
-   * for "play this" and wrong for "show me this" — a request for an item's
-   * details should not answer with a thumbnail-sized video in the corner.
-   */
-  details?: boolean;
+  watchPage?: boolean;
+  autoPlay?: boolean;
 };
 
 export function openSearch(): void {
@@ -45,11 +39,28 @@ export function playItem(id: number, options: { resume?: boolean } = {}): void {
   );
 }
 
-/** Opens an item's full detail view. */
+/** Opens an item's watch page without starting playback. */
 export function openDetails(id: number): void {
   window.dispatchEvent(
     new CustomEvent<PlayItemDetail>(PLAY_ITEM_EVENT, {
-      detail: { id, details: true },
+      detail: { id, watchPage: true },
+    }),
+  );
+}
+
+/** Opens the watch page and starts playback, optionally resuming progress. */
+export function openWatchPage(
+  id: number,
+  options: { autoPlay?: boolean; resume?: boolean } = {},
+): void {
+  window.dispatchEvent(
+    new CustomEvent<PlayItemDetail>(PLAY_ITEM_EVENT, {
+      detail: {
+        id,
+        watchPage: true,
+        autoPlay: options.autoPlay ?? true,
+        resume: options.resume ?? false,
+      },
     }),
   );
 }

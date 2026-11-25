@@ -30,6 +30,7 @@ import { StatsPage } from "@/pages/StatsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SeriesPage } from "@/pages/SeriesPage";
 import { SeriesPageIndex } from "@/pages/SeriesPageIndex";
+import { WatchPage } from "@/pages/WatchPage";
 import type { NetworkView } from "@/lib/performerApi";
 
 // The shell lives here, once, rather than in each page: a page-owned shell
@@ -176,6 +177,19 @@ const seriesRoute = createRoute({
   component: SeriesPage,
 });
 
+const watchRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/watch/$itemId",
+  validateSearch: (search: Record<string, unknown>): {
+    autoplay?: boolean;
+    resume?: boolean;
+  } => ({
+    autoplay: search.autoplay === true || search.autoplay === "true" || undefined,
+    resume: search.resume === true || search.resume === "true" || undefined,
+  }),
+  component: WatchPage,
+});
+
 const albumRoute = createRoute({
   getParentRoute: () => rootRoute,
   // Keyed by id, like performers: an album's title comes from its folder
@@ -316,6 +330,7 @@ const routeTree = rootRoute.addChildren([
   albumsRoute,
   seriesIndexRoute,
   seriesRoute,
+  watchRoute,
   albumRoute,
   studiosRoute,
   tagsRoute,

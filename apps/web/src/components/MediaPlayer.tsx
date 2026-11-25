@@ -4,19 +4,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useIsMobile } from "@/lib/useMediaQuery";
 import { useQuery } from "@tanstack/react-query";
-import { Maximize2, X } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Maximize2, Play, X } from "lucide-react";
 import { AmbientLight } from "./AmbientLight";
 import { GalleryStrip } from "./GalleryStrip";
 import { Portal } from "./Portal";
 import { RelatedItems } from "./RelatedItems";
 import { useAppearance } from "@/lib/appearance";
-import { fetchItem } from "@/lib/mediaItemApi";
+import { fetchItem, thumbnailUrl } from "@/lib/mediaItemApi";
+import { formatTimestamp } from "@/lib/bookmarkApi";
 import { bestPartSeconds } from "@/lib/heatmap";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 import { QueuePanel } from "./QueuePanel";
 import { SeekStrip } from "./SeekStrip";
 import { PlayerGestures } from "./PlayerGestures";
-import { useFocusTrap } from "@/lib/useFocusTrap";
 import { XRayPanel } from "./mediaDetail/XRayPanel";
 import { DetailsPanel } from "./mediaDetail/DetailsPanel";
 import { MiniPlayerHandles } from "./mediaDetail/MiniPlayerHandles";
@@ -44,13 +45,14 @@ import { useVideoPlayback, type PlayerMode } from "./mediaDetail/useVideoPlaybac
 import { qk } from "@/lib/queryKeys";
 import { useIsOwner } from "@/lib/profile";
 import { adjacentPositionStart } from "@/lib/markerApi";
+import { fetchSeriesDetail, nextEpisodeInSeries } from "@/lib/seriesApi";
 
 /**
  * A section of the watch page under the video: a short pink rule and its
  * name in spaced capitals, then the content — the home page's chapter
  * labels. `show` false renders the content alone, as it always was.
  */
-function ModalSection({ label, show, children }: { label: string; show: boolean; children: React.ReactNode }) {
+function WatchSection({ label, show, children }: { label: string; show: boolean; children: React.ReactNode }) {
   if (!show) return <>{children}</>;
   return (
     <section className="mt-12 space-y-4 first-of-type:mt-8">
@@ -63,40 +65,48 @@ function ModalSection({ label, show, children }: { label: string; show: boolean;
   );
 }
 
-export function MediaDetailModal({
-  itemId,
-  autoPlay = false,
-  resume = false,
-  onClose,
-  mini = false,
-  onExpand,
-}: {
+type MediaPlayerProps = {
   itemId: number;
   autoPlay?: boolean;
   resume?: boolean;
   onClose: () => void;
   mini?: boolean;
   onExpand?: () => void;
-}) {
-  // Clicking a "More Like This" card swaps the modal's content in place
-  // rather than stacking modals or bouncing back to the grid.
+};
+
+export function MediaPlayer({
+  itemId,
+  autoPlay = false,
+  resume = false,
+  onClose,
+  mini = false,
+  onExpand,
+}: MediaPlayerProps) {
+  const isWatchPage = !mini;
+  // Clicking a "More Like This" card swaps the player's content in place.
   const [viewingId, setViewingId] = useState(itemId);
   const panelRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
-  // Without this, focus stays on the page behind: Tab walks the background
-  // instead of the dialog, and closing leaves focus nowhere useful.
+  // Keep keyboard controls available immediately when a page opens.
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     panelRef.current?.focus();
     return () => previouslyFocused?.focus?.();
   }, []);
-  // The mini player floats over a page you are still using, so it is not
-  // modal and must not hold focus; the full sheet is, and must.
-  useFocusTrap(panelRef, !mini);
 
   const { data: item } = useQuery({
     queryKey: qk.mediaItem.detail(viewingId),
     queryFn: () => fetchItem(viewingId),
+  });
+  const seriesId = item?.seriesId;
+  const { data: seriesDetail } = useQuery({
+    queryKey: qk.series.detail(seriesId),
+    queryFn: () => {
+      if (seriesId == null) throw new Error("A series ID is required");
+      return fetchSeriesDetail(seriesId);
+    },
+    enabled: isWatchPage && seriesId != null,
   });
 
   const {
@@ -217,14 +227,22 @@ export function MediaDetailModal({
   }
 
   /**
-   * Shows another item in this same modal, from a clean slate.
+   * Shows another item in this same player, from a clean slate.
    *
    * Everything per-item goes back to how a fresh open would have it — the
    * muted preview, no seek, no cast stream — rather than inheriting the
    * previous item's playing state. Shared by "More Like This", the queue,
-   * and a new play request arriving while the modal is already open.
+   * and a new play request arriving while the mini player is already open.
    */
   function showItem(id: number) {
+    if (isWatchPage && id !== itemId) {
+      void navigate({
+        to: "/watch/$itemId",
+        params: { itemId: String(id) },
+        search: {},
+        replace: true,
+      });
+    }
     setViewingId(id);
     setMode("preview");
     setEditing(false);
@@ -239,7 +257,8 @@ export function MediaDetailModal({
     startPosition.current = 0;
     progress.lastSavedAt.current = 0;
     playback.autoPlayTriggered.current = false;
-    scrollRef.current?.scrollTo({ top: 0 });
+    if (isWatchPage) window.scrollTo({ top: 0 });
+    else scrollRef.current?.scrollTo({ top: 0 });
   }
 
   // A new play request while open (the mini player is up and something else
@@ -315,25 +334,36 @@ export function MediaDetailModal({
     item.lastPositionSeconds > MIN_RESUMABLE_SECONDS &&
     (item.durationSeconds == null ||
       item.lastPositionSeconds < item.durationSeconds - MIN_RESUMABLE_SECONDS);
+  const progressDuration =
+    item?.durationSeconds ?? videoRef.current?.duration ?? 0;
+  const progressSeconds =
+    mode === "playing" ? playback.currentTime : item?.lastPositionSeconds ?? 0;
+  const resumePosition = item?.lastPositionSeconds ?? 0;
+  const progressPercent =
+    Number.isFinite(progressDuration) && progressDuration > 0
+      ? Math.min(100, Math.max(0, Math.round((progressSeconds / progressDuration) * 100)))
+      : 0;
+  const nextEpisode =
+    item && seriesDetail
+      ? nextEpisodeInSeries(seriesDetail, item.id)
+      : null;
+  const canResumeNextEpisode =
+    !!nextEpisode &&
+    nextEpisode.lastPositionSeconds !== null &&
+    nextEpisode.lastPositionSeconds > MIN_RESUMABLE_SECONDS &&
+    (nextEpisode.durationSeconds === null ||
+      nextEpisode.lastPositionSeconds <
+        nextEpisode.durationSeconds - MIN_RESUMABLE_SECONDS);
 
-  return (
-    <Portal lockPageScroll={!mini}>
+  const content = (
+    <>
       <div
         ref={scrollRef}
-        // overscroll-contain stops the scroll continuing into the page
-        // behind once this container hits its end.
         className={cn(
           "z-50",
-          mini
-            ? "pointer-events-none fixed inset-0 overflow-visible bg-transparent"
-            : "fixed inset-0 overflow-y-auto overscroll-contain bg-background",
+          isWatchPage && "relative min-h-screen w-full bg-background pb-24",
         )}
-        onClick={onClose}
       >
-        {/* Behind the dialog, on the dimmed backdrop. Not in cinema mode,
-            where the video already fills the screen; not in the mini player,
-            which has no backdrop; and not in discreet mode, where colour
-            moving across the room gives away what's playing. */}
         <AmbientLight
           videoRef={videoRef}
           active={ambient && isVideo && mode === "playing" && !mini && !cinema && !discreet}
@@ -341,20 +371,12 @@ export function MediaDetailModal({
         <div
           ref={panelRef}
           tabIndex={-1}
-          role="dialog"
-          aria-modal={mini ? "false" : "true"}
-          // A label rather than aria-labelledby: which heading is on screen
-          // depends on the layout (overlay, info column, the title editor,
-          // none at all in the mini player), but the item's title is the
-          // dialog's name in every one of them.
-          aria-label={item?.title ?? "Media details"}
+          aria-label={item?.title ?? "Media player"}
           className={cn(
             "relative overflow-hidden bg-card shadow-2xl focus:outline-none",
-            mini
-              ? "pointer-events-auto fixed z-50 w-[min(24rem,calc(100vw-2rem))] rounded-lg ring-1 ring-border"
-              : cinema
-                ? "fixed inset-0 z-50 bg-black"
-                : "min-h-full w-full animate-fade-in bg-background pb-24",
+            isWatchPage
+              ? "min-h-full w-full bg-background"
+              : "pointer-events-auto fixed z-50 w-[min(24rem,calc(100vw-2rem))] rounded-lg ring-1 ring-border",
           )}
           style={
             mini
@@ -368,7 +390,6 @@ export function MediaDetailModal({
           onMouseEnter={mini ? revealPlayerControls : undefined}
           onMouseMove={mini ? revealPlayerControls : undefined}
           onMouseLeave={mini ? scheduleHideControls : undefined}
-          onClick={(e) => e.stopPropagation()}
         >
           {mini && (
             <MiniPlayerHandles
@@ -384,9 +405,9 @@ export function MediaDetailModal({
           {/* The player and the queue share a row; everything below it runs
               the full width again.
 
-              The modal keeps its width and the player gives up the space —
-              widening it instead pushed the dialog out towards the edges of
-              the screen every time something was queued, so the whole page
+              The mini player keeps its width and the player gives up the space —
+              widening it instead pushed the content out towards the edges of
+              the screen every time something was queued, so the whole view
               moved because of a list. */}
           {/* Backdrop / player area */}
           <div
@@ -580,10 +601,105 @@ export function MediaDetailModal({
             )}
           </div>
 
+          {isWatchPage && isVideo && (mode === "playing" || canResume) && (
+            <section className="mx-4 mt-4 rounded-lg border border-border bg-card/70 p-4 md:mx-6">
+              <div className="mb-3 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                    {mode === "playing" ? "Now playing" : "Continue watching"}
+                  </p>
+                  <p className="mt-1 truncate text-sm text-muted-foreground">
+                    {mode === "playing"
+                      ? `${formatTimestamp(progressSeconds)}${
+                          Number.isFinite(progressDuration) && progressDuration > 0
+                            ? ` of ${formatTimestamp(progressDuration)}`
+                            : ""
+                        }`
+                      : `You left off at ${formatTimestamp(resumePosition)}`}
+                  </p>
+                </div>
+                {mode === "preview" && canResume && (
+                  <button
+                    type="button"
+                    onClick={() => startPlaying(resumePosition)}
+                    className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+                  >
+                    <Play className="size-4 fill-current" />
+                    Continue
+                  </button>
+                )}
+              </div>
+              <div
+                role="progressbar"
+                aria-label="Video progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPercent}
+                className="h-1.5 overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-[width]"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </section>
+          )}
+
+          {isWatchPage && nextEpisode && seriesDetail && (
+            <section className="mx-4 mt-4 rounded-xl border border-border bg-card/70 p-4 md:mx-6 md:p-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Next episode · <span className="sensitive">{seriesDetail.name}</span>
+              </p>
+              <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center">
+                <img
+                  src={thumbnailUrl(nextEpisode)}
+                  alt=""
+                  className="sensitive aspect-video w-full rounded-md object-cover sm:w-48"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-muted-foreground">
+                    Season {nextEpisode.seasonNumber ?? 1}
+                    {nextEpisode.episodeNumber != null &&
+                      ` · Episode ${nextEpisode.episodeNumber}`}
+                  </p>
+                  <h2 className="sensitive mt-1 truncate text-lg font-semibold">
+                    {nextEpisode.episodeTitle || nextEpisode.title}
+                  </h2>
+                  {canResumeNextEpisode && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Resume at {formatTimestamp(nextEpisode.lastPositionSeconds ?? 0)}
+                    </p>
+                  )}
+                  {formatDuration(nextEpisode.durationSeconds) && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatDuration(nextEpisode.durationSeconds)}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void navigate({
+                      to: "/watch/$itemId",
+                      params: { itemId: String(nextEpisode.id) },
+                      search: {
+                        autoplay: true,
+                        resume: canResumeNextEpisode || undefined,
+                      },
+                    })
+                  }
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
+                >
+                  <Play className="size-4 fill-current" />
+                  {canResumeNextEpisode ? "Resume episode" : "Play next episode"}
+                </button>
+              </div>
+            </section>
+          )}
 
           {/* Details */}
           {item && !mini && (
-            <ModalSection label="Details" show={page}>
+            <WatchSection label="Details" show={page}>
             <DetailsPanel
               item={item}
               isMobile={isMobile}
@@ -604,7 +720,7 @@ export function MediaDetailModal({
               framingSaving={saveFraming.isPending}
               onSaveFraming={(next) => saveFraming.mutate(next)}
             />
-            </ModalSection>
+            </WatchSection>
           )}
 
           {/* Above "More like this": the gallery belongs to this video, while
@@ -628,20 +744,20 @@ export function MediaDetailModal({
           {item && cinema && <RelatedItems itemId={item.id} onSelect={showItem} />}
 
           {item?.itemType === "video" && page && queueBeside && queue.queueItems.length > 0 && (
-            <ModalSection label="Your queue" show>
+            <WatchSection label="Your queue" show>
               <QueuePanel onPlay={showItem} />
-            </ModalSection>
+            </WatchSection>
           )}
 
           {item && page && (
-            <ModalSection label="Up next" show>
+            <WatchSection label="Up next" show>
               <RelatedItems
                 itemId={item.id}
                 onSelect={showItem}
                 variant="strip"
                 source={{ performers: item.performers, studio: item.studio, tags: item.tags }}
               />
-            </ModalSection>
+            </WatchSection>
           )}
         </div>
       </div>
@@ -659,6 +775,7 @@ export function MediaDetailModal({
           onClose={() => setContactSheetOpen(false)}
         />
       )}
-    </Portal>
+    </>
   );
+  return isWatchPage ? content : <Portal lockPageScroll={false}>{content}</Portal>;
 }

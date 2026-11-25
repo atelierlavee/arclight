@@ -19,6 +19,18 @@ import { listSubtitleTracks, readSubtitleAsVtt } from "../media/subtitles.js";
 import { previewPathFor } from "../media/preview.js";
 import { ensureScrubSprite, spritePathFor } from "../media/scrubSprite.js";
 import { getOrCreatePhotoThumbnail, getPosterPath } from "../media/thumbnails.js";
+import { playbackWarningFor } from "../media/compatibility.js";
+import { probeVideo } from "../metadata/videoProbe.js";
+import {
+  closeAllTranscodeSessions,
+  closeTranscodeSession,
+  createTranscodeSession,
+  getTranscodeSession,
+  initializeTranscodeStorage,
+  transcodePlaylist,
+  transcodeAssetPath,
+  TranscodeCapacityError,
+} from "../media/transcode.js";
 
 import { itemHiddenAt } from "../library/profileState.js";
 type ResolvedFile = {
@@ -27,6 +39,8 @@ type ResolvedFile = {
   filePath: string;
   mimeType: string | null;
   contentHash: string | null;
+  extraMetadata: Record<string, unknown> | null;
+  durationSeconds: number | null;
 };
 
 function isPathUnderRoot(filePath: string, root: string): boolean {
@@ -57,6 +71,8 @@ async function resolveItemFile(
       filePath: mediaFiles.path,
       mimeType: mediaFiles.mimeType,
       contentHash: mediaFiles.contentHash,
+      extraMetadata: mediaItems.extraMetadata,
+      durationSeconds: mediaItems.durationSeconds,
     })
     .from(mediaItems)
     .innerJoin(mediaItemTypes, eq(mediaItems.itemTypeId, mediaItemTypes.id))
@@ -79,6 +95,8 @@ async function resolveItemFile(
     filePath: row.filePath,
     mimeType: row.mimeType,
     contentHash: row.contentHash,
+    extraMetadata: row.extraMetadata as Record<string, unknown> | null,
+    durationSeconds: row.durationSeconds,
   };
 }
 
@@ -105,6 +123,122 @@ function mediaCacheControl(hidden: boolean): string {
 }
 
 export async function mediaRoutes(app: FastifyInstance): Promise<void> {
+  await initializeTranscodeStorage();
+  app.addHook("onClose", closeAllTranscodeSessions);
+
+  app.post<{ Params: { id: string } }>(
+    "/api/media-items/:id/transcodes",
+    async (request, reply) => {
+      const id = Number(request.params.id);
+      const profileId = viewerProfile(request);
+      const file = await resolveItemFile(id, canSeeHidden(request), profileId);
+      if (!file || file.itemType !== "video") {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      if (!playbackWarningFor("video", file.extraMetadata)) {
+        reply.code(409);
+        return { error: "This video can be played directly" };
+      }
+      const durationSeconds =
+        file.durationSeconds ?? (await probeVideo(file.filePath)).durationSeconds;
+      if (!durationSeconds || durationSeconds <= 0) {
+        reply.code(422);
+        return { error: "Could not determine the video duration; rescan the library and try again" };
+      }
+
+      try {
+        const sessionId = await createTranscodeSession(
+          id,
+          profileId,
+          file.filePath,
+          durationSeconds,
+        );
+        reply.code(201);
+        return { sessionId };
+      } catch (error) {
+        if (error instanceof TranscodeCapacityError) {
+          reply.code(429);
+          return { error: error.message };
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.get<{ Params: { sessionId: string; asset: string } }>(
+    "/api/transcodes/:sessionId/:asset",
+    async (request, reply) => {
+      const profileId = viewerProfile(request);
+      const session = getTranscodeSession(request.params.sessionId, profileId);
+      if (!session) {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+
+      const file = await resolveItemFile(
+        session.itemId,
+        streamMayShowHidden(request),
+        profileId,
+      );
+      if (!file || file.itemType !== "video" || file.filePath !== session.sourcePath) {
+        await closeTranscodeSession(request.params.sessionId, profileId);
+        reply.code(404);
+        return { error: "Not found" };
+      }
+
+      reply.header("Cache-Control", file.hidden ? "private, no-store" : "private, no-cache");
+      if (request.params.asset === "index.m3u8") {
+        const playlist = transcodePlaylist(request.params.sessionId, profileId);
+        if (!playlist) {
+          reply.code(404);
+          return { error: "Not found" };
+        }
+        reply.type("application/vnd.apple.mpegurl; charset=utf-8");
+        return reply.send(playlist);
+      }
+
+      let assetPath: string | null;
+      try {
+        assetPath = await transcodeAssetPath(
+          request.params.sessionId,
+          profileId,
+          request.params.asset,
+        );
+      } catch (error) {
+        reply.code(500);
+        console.warn(
+          `transcode: playback failed for session ${request.params.sessionId}:`,
+          error instanceof Error ? error.message : error,
+        );
+        return {
+          error: "Could not transcode this video",
+        };
+      }
+      if (!assetPath) {
+        reply.code(404);
+        return { error: "Transcode output not found" };
+      }
+
+      reply.type("video/mp2t");
+      await streamFile(
+        reply,
+        assetPath,
+        "video/mp2t",
+        request.headers.range,
+        false,
+      );
+    },
+  );
+
+  app.delete<{ Params: { sessionId: string } }>(
+    "/api/transcodes/:sessionId",
+    async (request, reply) => {
+      await closeTranscodeSession(request.params.sessionId, viewerProfile(request));
+      reply.code(204).send();
+    },
+  );
+
   app.get<{ Params: { itemId: string } }>(
     "/api/stream/:itemId",
     // Registered manually below instead, so a HEAD request doesn't actually

@@ -128,9 +128,9 @@ describe("card shortcuts", () => {
     expect(sessionStorage.getItem("playback-queue")).toContain("Row video");
   });
 
-  // The shell opens the mini player for a plain play event. Answering a
-  // request for an item's details with a thumbnail in the corner is wrong.
-  it("E asks for the details view, not the mini player", async () => {
+  // The shell opens the mini player for a plain play event. Details use the
+  // full watch page instead.
+  it("E opens the watch page without autoplay", async () => {
     const seen: PlayItemDetail[] = [];
     const listener = (event: Event) =>
       seen.push((event as CustomEvent<PlayItemDetail>).detail);
@@ -140,7 +140,7 @@ describe("card shortcuts", () => {
     await user.keyboard("e");
     window.removeEventListener(PLAY_ITEM_EVENT, listener);
 
-    expect(seen).toEqual([{ id: 1, details: true }]);
+    expect(seen).toEqual([{ id: 1, watchPage: true }]);
   });
 
   it("P plays rather than opening the details", async () => {

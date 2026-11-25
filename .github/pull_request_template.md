@@ -12,7 +12,7 @@
 
 ## Checklist
 
-- [ ] Keeps the library read-only, MP4-only, no transcoding, and no new outside calls
+- [ ] Keeps library files read-only, transcodes only for playback, and adds no new outside calls
 - [ ] Tests added or updated
 - [ ] `npm run build`, `npm run lint` and `npm test` pass for `apps/web`
 - [ ] `tsc` and `npm test` pass for `apps/server`

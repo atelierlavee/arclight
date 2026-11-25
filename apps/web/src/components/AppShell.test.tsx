@@ -1,7 +1,7 @@
 // Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   createMemoryHistory,
@@ -13,6 +13,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { QueueProvider } from "@/lib/queue";
 import { ToastProvider } from "@/lib/toast";
+import { openDetails, openWatchPage } from "@/lib/appEvents";
 import { AppLayout, AppShell } from "./AppShell";
 
 // The frame's own children are not what is under test, and most of them
@@ -41,7 +42,7 @@ vi.mock("./SpotlightSearch", () => ({
   SpotlightSearch: () => null,
   openSpotlight: () => {},
 }));
-vi.mock("./MediaDetailModal", () => ({ MediaDetailModal: () => null }));
+vi.mock("./MediaPlayer", () => ({ MediaPlayer: () => null }));
 vi.mock("@/lib/useAchievementWatcher", () => ({ useAchievementWatcher: () => {} }));
 
 function renderApp() {
@@ -65,6 +66,11 @@ function renderApp() {
         </AppShell>
       ),
     }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/watch/$itemId",
+      component: () => <p>watch player</p>,
+    }),
   ]);
   const router = createRouter({
     routeTree,
@@ -84,6 +90,24 @@ function renderApp() {
 }
 
 describe("AppLayout", () => {
+  it("routes detail and play requests to the watch page", async () => {
+    const router = renderApp();
+    expect(await screen.findByText("first body")).toBeInTheDocument();
+
+    act(() => openDetails(42));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/watch/42");
+    });
+    expect(router.state.location.search).toEqual({});
+
+    act(() => openWatchPage(17, { resume: true }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/watch/17");
+    });
+    expect(router.state.location.search).toEqual({ autoplay: true, resume: true });
+    expect(await screen.findByText("watch player")).toBeInTheDocument();
+  });
+
   it("renders the page's header once and keeps the frame mounted across navigation", async () => {
     mounts.screensaver = 0;
     const router = renderApp();

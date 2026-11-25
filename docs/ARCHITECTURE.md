@@ -164,9 +164,17 @@ edits a field, the scanner stops overwriting it.
 
 ## Media and playback
 
-- **Streaming** (`media/streamer.ts`) serves the file from disk with HTTP
-  range requests (`206 Partial Content`). Nothing is transcoded. Only MP4 and
-  M4V are playable.
+- **Direct streaming** (`media/streamer.ts`) serves browser-compatible files
+  from disk with HTTP range requests (`206 Partial Content`).
+- **On-demand playback** (`media/transcode.ts`) starts FFmpeg for videos whose
+  container, video codec or audio codec is not browser-compatible. It
+  advertises a full HLS VOD playlist and encodes each four-second segment only
+  when requested, so seeking can jump directly to an ungenerated segment.
+  Segments are written to a temporary directory, served only to the profile
+  that started the session, and cached up to 256 MiB per session. Idle sessions
+  expire after ten minutes; stale directories are swept at startup and
+  periodically. At most two sessions and two FFmpeg encoders run concurrently.
+  The source library remains read-only.
 - **Generated files** live in `APP_DATA_DIR`: poster frames, hover preview
   clips, seek-bar sprite sheets (`scrubSprite.ts`) and thumbnails. They're a
   cache, left out of backups and rebuilt by a scan.
@@ -266,7 +274,7 @@ The schema lives in `apps/server/src/db/schema.ts`. Migrations are SQL files in
 | Decision | Why |
 |---|---|
 | Library mounted read-only | The user's files are the source of truth. The app can't damage them. |
-| MP4 only, no transcoding | Instant playback at almost no CPU cost, and far less code. |
+| Direct play plus on-demand transcode | Compatible files stay cheap to play; unsupported containers/codecs can be converted without changing originals. |
 | Content hashing | Moving or renaming files doesn't lose ratings, tags or history. |
 | Server-side visibility | Hidden items are filtered before they reach the browser, not just hidden in the UI. |
 | Fixed, tested route lists | A new route can't become public or open to every profile by accident. |

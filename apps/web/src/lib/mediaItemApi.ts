@@ -16,6 +16,7 @@ export type VideoMetadata = {
   width?: number;
   height?: number;
   codec?: string;
+  audioCodec?: string | null;
   containerFormat?: string;
 };
 

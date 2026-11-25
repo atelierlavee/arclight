@@ -27,6 +27,15 @@ export type SeriesDetail = {
   seasons: { number: number; episodes: SeriesEpisode[] }[];
 };
 
+export function nextEpisodeInSeries(
+  series: SeriesDetail,
+  currentEpisodeId: number,
+): SeriesEpisode | null {
+  const episodes = series.seasons.flatMap((season) => season.episodes);
+  const currentIndex = episodes.findIndex((episode) => episode.id === currentEpisodeId);
+  return currentIndex < 0 ? null : episodes[currentIndex + 1] ?? null;
+}
+
 export async function fetchSeries(): Promise<{ series: SeriesSummary[] }> {
   const response = await fetch("/api/series");
   if (!response.ok) throw new Error(`Failed to load series: ${response.status}`);

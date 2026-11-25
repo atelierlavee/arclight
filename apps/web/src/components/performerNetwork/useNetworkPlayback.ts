@@ -1,20 +1,18 @@
 // Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
-import { useState } from "react";
 import { useQueue } from "@/lib/queue";
 import { fetchLatestVideos, fetchVideosWhere, type NetworkNode, type SharedVideo } from "@/lib/performerApi";
+import { openWatchPage } from "@/lib/appEvents";
 
 /** Playing from the graph: one video, a set of them, or someone's latest. */
 export function useNetworkPlayback() {
-  const [playing, setPlaying] = useState<number | null>(null);
   const { add: addToQueue } = useQueue();
 
-  // The player opens over the page, which a full-screen graph would hide, so
-  // playing something leaves full screen first.
+  // Leave full screen before navigating to the watch page.
   const play = (itemId: number) => {
     if (document.fullscreenElement) void document.exitFullscreen();
-    setPlaying(itemId);
+    openWatchPage(itemId);
   };
 
   /** Plays the first video now and queues the rest behind whatever's queued. */
@@ -38,5 +36,5 @@ export function useNetworkPlayback() {
     if (videos[0]) play(videos[0].id);
   };
 
-  return { playing, stopPlaying: () => setPlaying(null), play, playAll, playLatest };
+  return { play, playAll, playLatest };
 }

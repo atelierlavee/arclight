@@ -7,11 +7,11 @@ import { getRouteApi } from "@tanstack/react-router";
 import { Play, RotateCcw } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { PlaySurface } from "@/components/PlaySurface";
 import { fetchSeriesDetail } from "@/lib/seriesApi";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 import { qk } from "@/lib/queryKeys";
+import { openWatchPage } from "@/lib/appEvents";
 
 const routeApi = getRouteApi("/series/$seriesId");
 
@@ -19,7 +19,6 @@ export function SeriesPage() {
   const { seriesId } = routeApi.useParams();
   const id = Number(seriesId);
   const [season, setSeason] = useState<number | null>(null);
-  const [openId, setOpenId] = useState<number | null>(null);
   const { data, isError, isLoading } = useQuery({
     queryKey: qk.series.detail(id),
     queryFn: () => fetchSeriesDetail(id),
@@ -59,7 +58,7 @@ export function SeriesPage() {
             {firstUnwatched && (
               <button
                 type="button"
-                onClick={() => setOpenId(firstUnwatched.id)}
+                onClick={() => openWatchPage(firstUnwatched.id)}
                 className="flex items-center gap-2 rounded-md bg-secondary px-3 py-1.5 text-sm transition-colors hover:bg-accent"
               >
                 <RotateCcw className="size-4" /> Resume
@@ -91,7 +90,7 @@ export function SeriesPage() {
               <button
                 key={episode.id}
                 type="button"
-                onClick={() => setOpenId(episode.id)}
+                onClick={() => openWatchPage(episode.id)}
                 className="group flex w-full items-center gap-4 rounded-lg border border-border bg-card/50 p-3 text-left transition-colors hover:bg-accent"
               >
                 <img src={thumbnailUrl(episode)} alt="" className="aspect-video w-36 shrink-0 rounded object-cover" />
@@ -106,7 +105,6 @@ export function SeriesPage() {
           })}
         </section>
       </div>
-      {openId !== null && <MediaDetailModal itemId={openId} autoPlay onClose={() => setOpenId(null)} />}
     </AppShell>
   );
 }

@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, CircleHelp, Menu, Search, X } from "lucide-react";
 import { PageScope, SEARCH_SHORTCUT, useAppearanceScope } from "@/lib/appearance";
 import { useIsMobile } from "@/lib/useMediaQuery";
@@ -25,7 +25,7 @@ import { AppFooter } from "./AppFooter";
 import { Sidebar } from "./Sidebar";
 import { UserMenu } from "./UserMenu";
 import { cn } from "@/lib/utils";
-import { MediaDetailModal } from "./MediaDetailModal";
+import { MediaPlayer } from "./MediaPlayer";
 import { NotificationCenter } from "./NotificationCenter";
 import { CardShortcutProvider } from "@/lib/cardShortcuts";
 import type { PlayItemDetail } from "@/lib/appEvents";
@@ -143,6 +143,7 @@ function ShellPage({
 }
 
 function ShellFrame({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
   const [header, setHeader] = useState<PageHeader | null>(null);
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const title = header?.title;
@@ -181,7 +182,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   // Read by the play-request listener, which is registered once.
   const playingIdRef = useRef<number | null>(null);
   playingIdRef.current = playingId;
-  // Bumped when the loaded item is requested again, to remount its modal.
+  // Bumped when the loaded item is requested again, to restart playback.
   const [playRequest, setPlayRequest] = useState(0);
   const [miniPlayer, setMiniPlayer] = useState(false);
   const [resumePlayer, setResumePlayer] = useState(false);
@@ -193,13 +194,10 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
     select: (state) => state.location.pathname,
   });
 
-  // Navigation closes the drawer, and the full detail sheet. The sheet used
-  // to close for free, because the page that owned it unmounted; the frame
-  // now outlives pages, so it does that itself — a link inside the sheet (a
-  // studio, an album) should land on that page, not under the sheet. The
-  // mini player is the one meant to survive navigation, so it is left alone.
+  // Navigation closes the drawer and clears a player that is not in mini mode.
+  // The mini player is meant to survive navigation, so it is left alone.
   // Adjusted during render rather than in an effect, so the new page never
-  // paints with the old sheet still over it.
+  // paints with the old player still over it.
   const [seenPathname, setSeenPathname] = useState(pathname);
   if (seenPathname !== pathname) {
     setSeenPathname(pathname);
@@ -218,8 +216,8 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   }, []);
 
   // The drawer sits over the page, so the page behind it must not scroll.
-  // Through the overlays' shared count: a modal opened from the drawer would
-  // otherwise restore the overflow this set, or this the modal's.
+  // Through the overlays' shared count so nested overlays restore scrolling
+  // only after the last one closes.
   useScrollLock(drawerOpen);
 
   useEffect(() => {
@@ -229,22 +227,31 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
       ).detail;
       const id = typeof detail === "number" ? detail : detail?.id;
       if (typeof id !== "number") return;
-      const wantsDetails = typeof detail !== "number" && detail.details === true;
-      // Asking for the item that is already loaded changes no prop, so the
-      // modal would ignore it — Resume or Play on the video you are watching
-      // did nothing. A new key remounts it so the request is honoured.
+      if (typeof detail !== "number" && detail.watchPage === true) {
+        setPlayingId(null);
+        setMiniPlayer(false);
+        setResumePlayer(false);
+        void navigate({
+          to: "/watch/$itemId",
+          params: { itemId: String(id) },
+          search: {
+            autoplay: detail.autoPlay || undefined,
+            resume: detail.resume || undefined,
+          },
+        });
+        return;
+      }
+      // Re-requesting the current mini-player item changes no prop; remount
+      // it so a second Play or Resume request is honoured.
       if (playingIdRef.current === id) setPlayRequest((n) => n + 1);
       setPlayingId(id);
-      // The mini player is the answer to "play this", not to "show me this".
-      // Opening one in response to a request for details puts the thing you
-      // asked to read about into a thumbnail in the corner.
-      setMiniPlayer(!wantsDetails);
+      setMiniPlayer(true);
       setResumePlayer(typeof detail !== "number" && detail.resume === true);
     }
     window.addEventListener("media-server:play-item", resumeItem);
     return () =>
       window.removeEventListener("media-server:play-item", resumeItem);
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -430,13 +437,24 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
         </div>
 
         {playingId !== null && (
-          <MediaDetailModal
+          <MediaPlayer
             key={playRequest}
             itemId={playingId}
             autoPlay={miniPlayer}
             resume={resumePlayer}
             mini={miniPlayer}
-            onExpand={() => setMiniPlayer(false)}
+            onExpand={() => {
+              const id = playingId;
+              if (id === null) return;
+              setMiniPlayer(false);
+              setPlayingId(null);
+              setResumePlayer(false);
+              void navigate({
+                to: "/watch/$itemId",
+                params: { itemId: String(id) },
+                search: { autoplay: true, resume: true },
+              });
+            }}
             onClose={() => {
               setPlayingId(null);
               setMiniPlayer(false);

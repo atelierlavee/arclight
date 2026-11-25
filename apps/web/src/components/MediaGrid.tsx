@@ -9,7 +9,6 @@ import { MediaCard, type MediaCardItem } from "./MediaCard";
 import { tileWidthPx, useAppearance } from "@/lib/appearance";
 import { useIsMobile } from "@/lib/useMediaQuery";
 import { cardLayout, MOBILE_MAX_TILE_PX } from "@/lib/layout";
-import { MediaDetailModal } from "./MediaDetailModal";
 import { useQueue, type QueueItem } from "@/lib/queue";
 import {
   Dices,
@@ -31,7 +30,7 @@ import { FilterMenu } from "./FilterBar";
 import { recordRecent } from "@/lib/recent";
 import { setMediaDragData } from "@/lib/dragMedia";
 import { reorderCollectionItems } from "@/lib/mediaItemApi";
-import { isTypingTarget, playItem } from "@/lib/appEvents";
+import { isTypingTarget, openDetails, playItem } from "@/lib/appEvents";
 import { useCardShortcuts } from "@/lib/cardShortcuts";
 import { readPins } from "@/lib/pinned";
 import { useIsOwner } from "@/lib/profile";
@@ -173,7 +172,6 @@ export function MediaGrid({
   const tileWidth = isMobile
     ? Math.min(layout.widthPx, MOBILE_MAX_TILE_PX)
     : layout.widthPx;
-  const [openItemId, setOpenItemId] = useState<number | null>(null);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   // Which card the keyboard is pointing at, hover or focus. Owned by the
   // shortcut layer so a row and a grid agree about it.
@@ -430,7 +428,7 @@ export function MediaGrid({
         event.preventDefault();
         const playable = items.filter((entry) => entry.itemType !== "folder");
         const pick = playable[Math.floor(Math.random() * playable.length)];
-        if (pick) setOpenItemId(pick.id);
+        if (pick) openDetails(pick.id);
       }
     }
 
@@ -560,7 +558,7 @@ export function MediaGrid({
       onOpenFolder(item.id, item.title);
     } else {
       recordRecent("browsed", item);
-      setOpenItemId(item.id);
+      openDetails(item.id);
     }
   }
 
@@ -775,7 +773,7 @@ export function MediaGrid({
                     {
                       label: "Edit details",
                       icon: Pencil,
-                      onSelect: () => setOpenItemId(item.id),
+                      onSelect: () => openDetails(item.id),
                     },
                   ]
                 : []),
@@ -824,7 +822,7 @@ export function MediaGrid({
     }
     clear();
     queueItems.slice(1).forEach(add);
-    setOpenItemId(queueItems[0].id);
+    openDetails(queueItems[0].id);
   }
 
   /**
@@ -845,12 +843,12 @@ export function MediaGrid({
     // Not in the playable list at all — a photo, or a folder. Opening it is
     // still the right response to the click.
     if (start === -1) {
-      setOpenItemId(startId);
+      openDetails(startId);
       return;
     }
     clear();
     queueItems.slice(start + 1).forEach(add);
-    setOpenItemId(startId);
+    openDetails(startId);
   }
 
   if (isLoading) {
@@ -1101,12 +1099,6 @@ export function MediaGrid({
 
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
 
-      {openItemId !== null && (
-        <MediaDetailModal
-          itemId={openItemId}
-          onClose={() => setOpenItemId(null)}
-        />
-      )}
     </>
   );
 }

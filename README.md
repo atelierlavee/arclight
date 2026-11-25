@@ -74,9 +74,12 @@ and a QR code.
 
 ## Formats
 
-**Arc Light plays MP4 files (`.mp4`, `.m4v`) as they are and never
-transcodes.** Other formats are still scanned and get posters, but you'll need
-to convert them to watch them.
+**Arc Light plays browser-compatible videos directly.** When a video's
+container or codec is not browser-compatible, playback is transcoded on demand
+with FFmpeg. It encodes the segments the player requests, so seeking doesn't
+wait for a full-file conversion. The original files stay untouched; temporary
+segments are capped per playback session and removed when playback ends or
+the session expires.
 
 ## Backups
 

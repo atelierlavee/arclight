@@ -27,7 +27,6 @@ import {
 import { FramingEditor, type FramingValue } from "@/components/FramingEditor";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { PerformerContinueWatching } from "@/components/PerformerContinueWatching";
 import { AlbumRow } from "@/components/AlbumRow";
 import { PerformerCareer } from "@/components/PerformerCareer";
@@ -55,6 +54,7 @@ import {
 } from "@/lib/performerApi";
 import { useToast } from "@/lib/toast";
 import { qk } from "@/lib/queryKeys";
+import { openDetails, openWatchPage } from "@/lib/appEvents";
 import { invalidatePerformer } from "@/lib/invalidate";
 import { useIsOwner } from "@/lib/profile";
 import { useAppearance, BANNER_VH } from "@/lib/appearance";
@@ -901,10 +901,10 @@ export function PerformerPage() {
   // The cover's position while you drag it; null when not repositioning.
   const [bannerDraft, setBannerDraft] = useState<number | null>(null);
   const bannerDrag = useRef<{ startY: number; start: number; height: number } | null>(null);
-  // Opening a video from here shows the modal in place, rather than
-  // navigating away and losing your position on the profile.
-  const [open, setOpen] = useState<{ id: number; autoPlay: boolean } | null>(null);
-  const openItem = (id: number, autoPlay: boolean) => setOpen({ id, autoPlay });
+  const openItem = (id: number, autoPlay: boolean) => {
+    if (autoPlay) openWatchPage(id);
+    else openDetails(id);
+  };
   const queryClient = useQueryClient();
 
   const saveFraming = useMutation({
@@ -1266,7 +1266,6 @@ export function PerformerPage() {
         </div>
       )}
 
-      {open && <MediaDetailModal itemId={open.id} autoPlay={open.autoPlay} onClose={() => setOpen(null)} />}
     </AppShell>
   );
 }

@@ -10,11 +10,10 @@ import { PageHint } from "@/components/PageHint";
 import { ManageFollowingPanel } from "@/components/feed/FollowingManager";
 import { ContextMenu } from "@/components/ContextMenu";
 import { FeedSidebar } from "@/components/FeedSidebar";
-import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { FeedPost, PostSkeleton, type PostHandle } from "@/components/feed/FeedPost";
 import { FeedStories } from "@/components/feed/FeedStories";
 import { useAppearance } from "@/lib/appearance";
-import { isTypingTarget } from "@/lib/appEvents";
+import { isTypingTarget, openDetails, openWatchPage } from "@/lib/appEvents";
 import { arrivedSince } from "@/lib/feed";
 import { fetchFeed, fetchFollowing, type FeedFilter, type FeedItem } from "@/lib/followingApi";
 import { pkey } from "@/lib/profileStorage";
@@ -74,7 +73,6 @@ export function FeedPage() {
     [navigate, order, performerId, studioId],
   );
   const lastSeen = useLastSeen();
-  const [open, setOpen] = useState<{ id: number; autoPlay: boolean } | null>(null);
   const { setFollowed } = useFollowToggle();
 
   const feed = useInfiniteQuery({
@@ -113,11 +111,11 @@ export function FeedPage() {
     setInView(best);
   }, []);
   // Nothing plays behind the player.
-  const playingId = autoplay && open === null ? inView : null;
+  const playingId = autoplay ? inView : null;
 
   // The ⋯ menu: the same menu a tile has everywhere else, plus unfollowing
   // whoever put this post in the feed.
-  const { menu, setMenu, openMenu } = useTileMenu({ onEdit: (id) => setOpen({ id, autoPlay: false }) });
+  const { menu, setMenu, openMenu } = useTileMenu({ onEdit: openDetails });
   const onMenu = useCallback(
     (event: React.MouseEvent, item: FeedItem) => {
       openMenu(event, item);
@@ -147,7 +145,7 @@ export function FeedPage() {
   );
 
   // Keyboard: J / K pick the next or previous post, L favourites it, Enter
-  // plays it. Off while the player is open or you are typing a note.
+  // plays it. Off while you are typing a note.
   const handles = useRef(new Map<number, PostHandle>());
   const register = useCallback((id: number, handle: PostHandle | null) => {
     if (handle) handles.current.set(id, handle);
@@ -155,7 +153,6 @@ export function FeedPage() {
   }, []);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   useEffect(() => {
-    if (open !== null) return;
     function onKeyDown(event: KeyboardEvent) {
       if (event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return;
       const key = event.key.toLowerCase();
@@ -294,7 +291,8 @@ export function FeedPage() {
                 onVisibility={reportVisibility}
                 onOpen={(autoPlay) => {
                   setSelectedId(item.id);
-                  setOpen({ id: item.id, autoPlay });
+                  if (autoPlay) openWatchPage(item.id);
+                  else openDetails(item.id);
                 }}
                 onMenu={onMenu}
                 register={register}
@@ -322,9 +320,6 @@ export function FeedPage() {
       </div>
 
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
-      {open !== null && (
-        <MediaDetailModal itemId={open.id} autoPlay={open.autoPlay} onClose={() => setOpen(null)} />
-      )}
       {search.manage && <ManageFollowingPanel onClose={closeManage} />}
     </AppShell>
   );

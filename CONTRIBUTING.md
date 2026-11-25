@@ -12,8 +12,9 @@ won't be merged, however well they're written.
 - **The library is read-only.** The app never writes to, moves, renames or
   deletes a user's media files. The only writable mounts are the app data
   directory and the backups directory.
-- **MP4 only, never transcode.** Playback streams the file as it is on disk.
-  Don't add transcoding, remuxing or on-the-fly conversion.
+- **Keep originals read-only.** Browser-compatible videos play directly;
+  incompatible formats may be transcoded on demand into temporary playback
+  segments. Never write converted files beside or over a library file.
 - **Offline by default.** Nothing leaves the machine unless the user has set an
   API key *and* asked for a lookup. Don't add analytics, telemetry or calls to
   outside services.

@@ -8,7 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { EditorialHome, EndCard } from "@/components/home/EditorialHome";
 import { CastScene, StudiosScene } from "@/components/home/LibraryScenes";
 import type { MediaCardItem } from "@/components/MediaCard";
-import { MediaDetailModal } from "@/components/MediaDetailModal";
+import { openDetails, openWatchPage } from "@/lib/appEvents";
 import { ROW_TILE_LIMIT } from "@/lib/rowLimits";
 import { MediaRow } from "@/components/MediaRow";
 import { useAppearance, PageScope, type HomeRowKey } from "@/lib/appearance";
@@ -98,8 +98,6 @@ function CollectionRow({
 }
 
 export function HomePage() {
-  const [open, setOpen] = useState<{ id: number; autoPlay: boolean } | null>(null);
-
   const { data: recent, isLoading: recentLoading } = useQuery({
     queryKey: qk.mediaItems.recent,
     queryFn: () => fetchJson<{ items: MediaCardItem[] }>("/api/media-items"),
@@ -191,7 +189,8 @@ export function HomePage() {
   const shown = new Set(homeRows.filter((row) => row.visible).map((row) => row.key));
 
   function openItem(id: number, autoPlay: boolean) {
-    setOpen({ id, autoPlay });
+    if (autoPlay) openWatchPage(id);
+    else openDetails(id);
   }
 
   return (
@@ -338,9 +337,6 @@ export function HomePage() {
           </div>
         </div>
 
-        {open && (
-          <MediaDetailModal itemId={open.id} autoPlay={open.autoPlay} onClose={() => setOpen(null)} />
-        )}
       </AppShell>
     </PageScope>
   );

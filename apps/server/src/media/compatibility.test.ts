@@ -4,7 +4,11 @@
 import { describe, expect, it } from "vitest";
 import { playbackWarningFor } from "./compatibility.js";
 
-const mp4 = { codec: "h264", containerFormat: "mov,mp4,m4a,3gp,3g2,mj2" };
+const mp4 = {
+  codec: "h264",
+  audioCodec: "aac",
+  containerFormat: "mov,mp4,m4a,3gp,3g2,mj2",
+};
 
 describe("playbackWarningFor", () => {
   it("says nothing about a plain H.264 MP4", () => {
@@ -21,6 +25,7 @@ describe("playbackWarningFor", () => {
     // which is the case that used to slip through silently.
     const warning = playbackWarningFor("video", {
       codec: "h264",
+      audioCodec: "aac",
       containerFormat: "matroska,webm",
     });
     expect(warning).toMatch(/container/i);
@@ -31,7 +36,11 @@ describe("playbackWarningFor", () => {
     // ffprobe reports Matroska and WebM under one name, so the codec is the
     // only thing that can tell them apart.
     expect(
-      playbackWarningFor("video", { codec: "vp9", containerFormat: "matroska,webm" })
+      playbackWarningFor("video", {
+        codec: "vp9",
+        audioCodec: "opus",
+        containerFormat: "matroska,webm",
+      })
     ).toBeNull();
   });
 
@@ -41,8 +50,31 @@ describe("playbackWarningFor", () => {
     expect(warning).not.toMatch(/container \(/i);
   });
 
+  it("falls back when the audio codec is not browser-compatible", () => {
+    const warning = playbackWarningFor("video", { ...mp4, audioCodec: "dts" });
+    expect(warning).toMatch(/audio codec/i);
+    expect(warning).toMatch(/dts/i);
+  });
+
+  it("falls back for legacy probe data without an audio codec", () => {
+    expect(
+      playbackWarningFor("video", {
+        codec: mp4.codec,
+        containerFormat: mp4.containerFormat,
+      }),
+    ).toMatch(/audio codec is unknown/i);
+  });
+
+  it("does not require audio for a silent video", () => {
+    expect(playbackWarningFor("video", { ...mp4, audioCodec: "none" })).toBeNull();
+  });
+
   it("names both when both are wrong", () => {
-    const warning = playbackWarningFor("video", { codec: "vc1", containerFormat: "asf" });
+    const warning = playbackWarningFor("video", {
+      codec: "vc1",
+      audioCodec: "aac",
+      containerFormat: "asf",
+    });
     expect(warning).toMatch(/vc1/);
     expect(warning).toMatch(/asf/);
   });

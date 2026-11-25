@@ -1,7 +1,7 @@
 // Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Droplets, Star } from "lucide-react";
@@ -9,7 +9,7 @@ import { AppShell } from "@/components/AppShell";
 import { PageBody } from "@/components/PageBody";
 import { YouTabs } from "@/components/YouTabs";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
-import { MediaDetailModal } from "@/components/MediaDetailModal";
+import { openDetails } from "@/lib/appEvents";
 import { fetchInsights } from "@/lib/insightsApi";
 import { formatWatchTime, localDay } from "@/lib/insights";
 import { diaryMonth, diaryMonths, finishedOn } from "@/lib/diary";
@@ -44,7 +44,6 @@ export function DiaryPage() {
   const { at: monthParam, log } = routeApi.useSearch();
   const everything = log === "all";
   const navigate = useNavigate();
-  const [open, setOpen] = useState<number | null>(null);
   const { data, isLoading } = useQuery({ queryKey: qk.insights, queryFn: fetchInsights });
 
   const months = useMemo(() => (data ? diaryMonths(data) : []), [data]);
@@ -129,7 +128,7 @@ export function DiaryPage() {
         </div>
 
         {everything ? (
-          <ActivityTimeline onOpen={setOpen} />
+          <ActivityTimeline onOpen={openDetails} />
         ) : (
           <>
             {isLoading && <div className="skeleton h-40 rounded-lg" />}
@@ -173,7 +172,7 @@ export function DiaryPage() {
                       <li key={item.id}>
                         <button
                           type="button"
-                          onClick={() => setOpen(item.id)}
+                          onClick={() => openDetails(item.id)}
                           className="flex w-full items-start gap-3 rounded-md p-1.5 text-left transition-colors hover:bg-accent"
                         >
                           <img
@@ -226,7 +225,6 @@ export function DiaryPage() {
         )}
       </PageBody>
 
-      {open !== null && <MediaDetailModal itemId={open} autoPlay={false} onClose={() => setOpen(null)} />}
     </AppShell>
   );
 }
