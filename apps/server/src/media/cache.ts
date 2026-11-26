@@ -22,6 +22,7 @@ export const THUMBNAILS_DIR = path.resolve(appDataDir, "thumbnails");
 export const POSTERS_DIR = path.resolve(appDataDir, "posters");
 export const PREVIEWS_DIR = path.resolve(appDataDir, "previews");
 export const SPRITES_DIR = path.resolve(appDataDir, "scrub-sprites");
+export const CHAPTER_FRAMES_DIR = path.resolve(appDataDir, "chapter-frames");
 export const PERFORMER_IMAGES_DIR = path.resolve(appDataDir, "performer-images");
 export const ITEM_THUMBNAILS_DIR = path.resolve(appDataDir, "item-thumbnails");
 export const KIND_COVERS_DIR = path.resolve(appDataDir, "kind-covers");
@@ -60,6 +61,7 @@ export const DERIVED_DIRS: AppDataDir[] = [
   { name: "posters", dir: POSTERS_DIR },
   { name: "previews", dir: PREVIEWS_DIR },
   { name: "scrub-sprites", dir: SPRITES_DIR },
+  { name: "chapter-frames", dir: CHAPTER_FRAMES_DIR },
 ];
 
 /**

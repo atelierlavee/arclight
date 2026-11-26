@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bookmark as BookmarkIcon, Flame, LayoutGrid, Loader2, X } from "lucide-react";
 import { Portal } from "./Portal";
+import { SharpFrame } from "./SharpFrame";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import {
   formatTimestamp,
@@ -27,7 +28,7 @@ const DENSITIES = [
 const HOT_SHARE = 0.6;
 
 /** The CSS that shows one cell of the sprite, scaled to fill its tile. */
-function cellStyle(sprite: ScrubSprite, index: number): React.CSSProperties {
+export function cellStyle(sprite: ScrubSprite, index: number): React.CSSProperties {
   const rows = Math.ceil(sprite.count / sprite.columns);
   const column = index % sprite.columns;
   const row = Math.floor(index / sprite.columns);
@@ -208,10 +209,12 @@ export function ContactSheet({
                       aria-label={`Play from ${formatTimestamp(frame.seconds)}`}
                       className="group relative block w-full overflow-hidden rounded-md bg-black outline-none ring-offset-2 ring-offset-card focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <div
-                        className="sensitive w-full bg-no-repeat transition-transform duration-200 group-hover:scale-[1.04]"
-                        style={cellStyle(sprite, frame.index)}
-                      />
+                      {/* The small sheet's cell holds the tile's shape and shows at
+                          once; the full-size frame fades in over it. */}
+                      <div className="relative transition-transform duration-200 group-hover:scale-[1.04]">
+                        <div className="sensitive w-full bg-no-repeat" style={cellStyle(sprite, frame.index)} />
+                        <SharpFrame itemId={itemId} seconds={frame.seconds} />
+                      </div>
                       <span className="absolute bottom-1 left-1 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white">
                         {formatTimestamp(frame.seconds)}
                       </span>

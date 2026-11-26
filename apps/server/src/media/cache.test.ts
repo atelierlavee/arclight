@@ -53,6 +53,7 @@ describe("app data directories", () => {
       "performer-images",
     ]);
     expect(DERIVED_DIRS.map((entry) => entry.name).sort()).toEqual([
+      "chapter-frames",
       "posters",
       "previews",
       "scrub-sprites",

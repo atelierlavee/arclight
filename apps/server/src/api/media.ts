@@ -18,6 +18,7 @@ import { streamFile } from "../media/streamer.js";
 import { listSubtitleTracks, readSubtitleAsVtt } from "../media/subtitles.js";
 import { previewPathFor } from "../media/preview.js";
 import { ensureScrubSprite, spritePathFor } from "../media/scrubSprite.js";
+import { ensureChapterFrame } from "../media/chapterFrame.js";
 import { getOrCreatePhotoThumbnail, getPosterPath } from "../media/thumbnails.js";
 import { playbackWarningFor } from "../media/compatibility.js";
 import { backfillAudioCodec, needsAudioCodec } from "../media/audioCodecBackfill.js";
@@ -400,6 +401,44 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
       }
       reply.header("Cache-Control", mediaCacheControl(file.hidden));
       await streamFile(reply, spritePathFor(id, file.contentHash), "image/jpeg", request.headers.range, false);
+    }
+  );
+
+  /**
+   * A sharp still at a whole second of the video, for the chapter tiles.
+   *
+   * Extracted on first request and cached; the time is a whole second so
+   * the cache can't be filled with near-duplicates of one moment.
+   */
+  app.get<{ Params: { id: string }; Querystring: { t?: string } }>(
+    "/api/media-items/:id/frame.jpg",
+    async (request, reply) => {
+      const id = Number(request.params.id);
+      const raw = request.query.t ?? "";
+      const seconds = Number(raw);
+      if (!/^\d{1,6}$/.test(raw) || !Number.isSafeInteger(seconds)) {
+        reply.code(400);
+        return { error: "t must be a whole number of seconds" };
+      }
+      const file = await resolveItemFile(id, canSeeHidden(request), viewerProfile(request));
+      if (!file || file.itemType !== "video") {
+        reply.code(404);
+        return { error: "Not found" };
+      }
+      if (file.durationSeconds != null && seconds > file.durationSeconds) {
+        reply.code(400);
+        return { error: "t is past the end of the video" };
+      }
+
+      const framePath = await ensureChapterFrame(file.filePath, id, file.contentHash, seconds);
+      if (!framePath) {
+        reply.code(404);
+        return { error: "No frame could be read at that time" };
+      }
+      // The URL doesn't name the encode, so a re-encoded file would keep
+      // showing the old frame under an immutable cache; a day is plenty.
+      reply.header("Cache-Control", file.hidden ? "private, no-store" : "private, max-age=86400");
+      await streamFile(reply, framePath, "image/jpeg", request.headers.range, false);
     }
   );
 
