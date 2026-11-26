@@ -17,9 +17,12 @@ ThePornDB) are optional, use your own API keys, and run only when you ask.
   approval. Your edits always win over the scanner.
 - **Your library, your way.** Tags, ratings, favourites, notes, bookmarks,
   collections (manual or rule-based), categories, series and albums.
-- **Watching.** A full-page player with hover previews, a seek-bar thumbnail
-  strip, subtitles, a queue, and position markers from ThePornDB. Casts to
-  Chromecast or AirPlay.
+- **Watching.** A full-page player with hover previews, a seek bar with
+  thumbnails and a "most watched" curve, subtitles, a queue, and a contact
+  sheet of the whole video. Chapters from ThePornDB appear as a row of frames
+  that follows playback, and an X-Ray strip shows who's in the scene. Optional
+  ambient light tints the page with the picture's colours. Scroll down and the
+  now-playing controls move into the top bar. Casts to Chromecast or AirPlay.
 - **Discovery.** Performer and studio pages, a feed of new videos from who you
   follow, and personal stats.
 - **Privacy.** Profiles with their own PINs, a hidden vault per profile, lock
@@ -51,7 +54,7 @@ start):
 | `HOME_ROOT` | What the in-app folder picker can browse | your home folder |
 | `BACKUP_DIR` | Where backups are written and restores are read from | `../backups` |
 | `STASHDB_API_KEY` | Turns on StashDB lookups | — |
-| `TPDB_API_KEY` | Turns on ThePornDB positions | — |
+| `TPDB_API_KEY` | Turns on chapters from ThePornDB | — |
 | `WEBAUTHN_ORIGIN` | Addresses allowed to use Touch ID and passkeys | `http://localhost:5173,http://localhost:3000` |
 | `LAN_HOST` | This machine's wifi address, used for the phone link | detected by `make up` |
 
@@ -78,8 +81,13 @@ and a QR code.
 container or codec is not browser-compatible, playback is transcoded on demand
 with FFmpeg. It encodes the segments the player requests, so seeking doesn't
 wait for a full-file conversion. The original files stay untouched; temporary
-segments are capped per playback session and removed when playback ends or
-the session expires.
+segments are capped per playback session and removed when playback ends, the
+tab is closed, or the session expires.
+
+The check looks at the video codec, the container and the audio codec. Videos
+scanned before Arc Light recorded audio codecs are checked the first time
+they're opened, and all of them on the next scan, so ordinary MP4s play
+directly instead of being transcoded.
 
 ## Backups
 

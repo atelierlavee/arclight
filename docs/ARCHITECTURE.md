@@ -173,11 +173,20 @@ edits a field, the scanner stops overwriting it.
   Segments are written to a temporary directory, served only to the profile
   that started the session, and cached up to 256 MiB per session. Idle sessions
   expire after ten minutes; stale directories are swept at startup and
-  periodically. At most two sessions and two FFmpeg encoders run concurrently.
-  The source library remains read-only.
+  periodically. At most two sessions and two FFmpeg encoders run concurrently;
+  when both slots are taken, a profile's new session replaces its own oldest
+  one rather than failing. The player ends its session when the video changes
+  or the tab closes. The source library remains read-only.
+- **Audio codec backfill** (`media/audioCodecBackfill.ts`): the compatibility
+  check needs the audio codec, which older scans didn't record. A video missing
+  it is probed once, the first time it's opened and for every video on the next
+  scan. "Unknown, so transcode" is kept only for when ffprobe can't read the
+  file.
 - **Generated files** live in `APP_DATA_DIR`: poster frames, hover preview
-  clips, seek-bar sprite sheets (`scrubSprite.ts`) and thumbnails. They're a
-  cache, left out of backups and rebuilt by a scan.
+  clips, seek-bar sprite sheets (`scrubSprite.ts`), thumbnails, and full-size
+  frames at a given second (`chapterFrame.ts`, served at
+  `/api/media-items/:id/frame.jpg?t=`) for chapter tiles and the contact sheet.
+  They're a cache, left out of backups and rebuilt when needed.
 - **Uploads** (performer images, custom covers) also live in `APP_DATA_DIR`,
   and *are* included in backups.
 - **Subtitles** are `.srt` or `.vtt` files placed next to the video.
@@ -190,7 +199,8 @@ edits a field, the scanner stops overwriting it.
 Both are off unless their API key is set, and both run only when the user asks.
 
 - **StashDB** (`metadata/stashdb.ts`): cast, studio, tags and descriptions.
-- **ThePornDB** (`metadata/tpdb.ts`): named position markers for the seek bar.
+- **ThePornDB** (`metadata/tpdb.ts`): chapters, shown as a row of frames on
+  the watch page and as marks on the seek bar.
   Only the video's studio, release date and title are sent. The match is
   stored on the item (`tpdb_scene_id`, `tpdb_checked_at`), so each video is
   looked up only once.
