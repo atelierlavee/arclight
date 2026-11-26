@@ -20,6 +20,7 @@ import { previewPathFor } from "../media/preview.js";
 import { ensureScrubSprite, spritePathFor } from "../media/scrubSprite.js";
 import { getOrCreatePhotoThumbnail, getPosterPath } from "../media/thumbnails.js";
 import { playbackWarningFor } from "../media/compatibility.js";
+import { backfillAudioCodec, needsAudioCodec } from "../media/audioCodecBackfill.js";
 import { probeVideo } from "../metadata/videoProbe.js";
 import {
   closeAllTranscodeSessions,
@@ -136,7 +137,13 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
         reply.code(404);
         return { error: "Not found" };
       }
-      if (!playbackWarningFor("video", file.extraMetadata)) {
+      // The same gap the detail route fills; checked here too in case the
+      // player asks before the detail has been refetched.
+      let extraMetadata = file.extraMetadata;
+      if (needsAudioCodec(extraMetadata)) {
+        extraMetadata = (await backfillAudioCodec(id)) ?? extraMetadata;
+      }
+      if (!playbackWarningFor("video", extraMetadata)) {
         reply.code(409);
         return { error: "This video can be played directly" };
       }

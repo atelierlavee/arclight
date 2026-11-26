@@ -21,6 +21,7 @@ import {
 } from "../db/schema.js";
 import { fileByStudio } from "../library/studioCategory.js";
 import { probeMetadata, probeVideo } from "../metadata/videoProbe.js";
+import { backfillAudioCodec, needsAudioCodec } from "../media/audioCodecBackfill.js";
 import { probePhoto } from "../metadata/photoExif.js";
 import { ensurePosterFrame, generatePosterFrame } from "../media/poster.js";
 import { ensurePreviewClip } from "../media/preview.js";
@@ -340,6 +341,15 @@ async function processFile(
 
     if (unchanged) {
       if (kind === "video") {
+        // Videos scanned before the audio codec was recorded get it now, once;
+        // afterwards this is a cheap check that finds nothing to do.
+        const [item] = await db
+          .select({ extraMetadata: mediaItems.extraMetadata })
+          .from(mediaItems)
+          .where(eq(mediaItems.id, existingFile.mediaItemId));
+        if (item && needsAudioCodec(item.extraMetadata)) {
+          await backfillAudioCodec(existingFile.mediaItemId);
+        }
         await ensureArtworkForItem(
           existingFile.mediaItemId,
           filePath,

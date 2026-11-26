@@ -237,6 +237,15 @@ export async function createTranscodeSession(
   sourcePath: string,
   durationSeconds: number,
 ): Promise<string> {
+  if (reservedSessions >= MAX_ACTIVE_SESSIONS) {
+    // One person watches one thing at a time, so a session of theirs that is
+    // still open is one a player left behind — a reload, a closed tab — and
+    // can make room. Sessions are kept in creation order: the first is oldest.
+    const leftBehind = [...sessions.values()].find(
+      (session) => session.profileId === profileId && !session.closed,
+    );
+    if (leftBehind) await closeTranscodeSession(leftBehind.id);
+  }
   if (reservedSessions >= MAX_ACTIVE_SESSIONS) throw new TranscodeCapacityError();
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     throw new Error("A positive video duration is required for transcoding");

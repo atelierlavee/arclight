@@ -47,8 +47,13 @@ export function PlayerMedia({
     Boolean(item.playbackWarning) &&
     !castSrc;
 
+  // Keyed on the id alone: the item object is replaced whenever its details
+  // are refetched (a favourite, a rating, the window regaining focus), and
+  // following the object restarted the session — reloading the video and
+  // briefly holding two of the server's few transcode slots each time.
+  const itemId = item?.id;
   useEffect(() => {
-    if (!transcodeRequired || !item) return;
+    if (!transcodeRequired || itemId === undefined) return;
 
     const video = videoRef.current;
     if (!video) return;
@@ -80,7 +85,7 @@ export function PlayerMedia({
         }
       }
 
-      const response = await fetch(`/api/media-items/${item.id}/transcodes`, {
+      const response = await fetch(`/api/media-items/${itemId}/transcodes`, {
         method: "POST",
       });
       const body = (await response.json()) as {
@@ -124,6 +129,14 @@ export function PlayerMedia({
       }
     };
 
+    // Unmounting doesn't happen when the page itself goes away — a reload or a
+    // closed tab — so the session is let go here too, or it would hold its
+    // slot until the server's idle timeout.
+    const onPageHide = () => {
+      if (sessionId) void stopSession(sessionId);
+    };
+    window.addEventListener("pagehide", onPageHide);
+
     void start().catch((error: unknown) => {
       if (!cancelled) {
         setTranscodeError(
@@ -138,9 +151,10 @@ export function PlayerMedia({
       video.pause();
       video.removeAttribute("src");
       video.load();
+      window.removeEventListener("pagehide", onPageHide);
       if (sessionId) void stopSession(sessionId);
     };
-  }, [item, mode, transcodeRequired, videoRef]);
+  }, [itemId, transcodeRequired, videoRef]);
 
   return (
     <>

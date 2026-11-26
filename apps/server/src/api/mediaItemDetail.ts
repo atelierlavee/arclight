@@ -26,6 +26,7 @@ import {
 } from "./mediaItemQueries.js";
 
 import { profileId } from "../auth/profileContext.js";
+import { backfillAudioCodec, needsAudioCodec } from "../media/audioCodecBackfill.js";
 import { itemNote } from "../library/profileState.js";
 export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>("/api/media-items/:id", async (request, reply) => {
@@ -53,6 +54,12 @@ export async function mediaItemDetailRoutes(app: FastifyInstance): Promise<void>
     if (!item) {
       reply.code(404);
       return { error: "Not found" };
+    }
+    // Videos scanned before the audio codec was recorded: find it out now,
+    // so the playback check below judges the real file instead of a gap.
+    if (item.itemType === "video" && needsAudioCodec(item.extraMetadata)) {
+      const updated = await backfillAudioCodec(id);
+      if (updated) item.extraMetadata = updated;
     }
     const related = await fetchRelated([id]);
     return withPlayback(item, related);
