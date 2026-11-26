@@ -8,7 +8,7 @@ import type { MediaCardItem } from "./MediaCard";
 import { PreviewClip } from "./PreviewClip";
 import { useAppearance } from "@/lib/appearance";
 import { framingStyle, thumbnailUrl } from "@/lib/mediaItemApi";
-import { formatDuration } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 import { MediaRow } from "./MediaRow";
 import { qk } from "@/lib/queryKeys";
 
@@ -37,7 +37,7 @@ export function RelatedItems({
   onSelect: (id: number) => void;
   source?: RelatedSource;
   /** "strip" for the watch page: a sideways film strip under its own heading. */
-  variant?: "row" | "strip";
+  variant?: "row" | "strip" | "grid";
 }) {
   const { data, isLoading } = useQuery({
     queryKey: qk.relatedItems.forItem(itemId),
@@ -50,6 +50,9 @@ export function RelatedItems({
   // Empty and still-loading look identical from here, so only the settled
   // empty case is allowed to remove the section.
   if (!isLoading && items.length === 0) return null;
+
+  if (variant === "grid")
+    return <RelatedGrid items={items} loading={isLoading} source={source} onSelect={onSelect} />;
 
   if (variant === "strip")
     return <RelatedRows items={items} loading={isLoading} source={source} onSelect={onSelect} />;
@@ -189,6 +192,95 @@ function RelatedRows({
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * "Up next" on the watch page: one row of cards, scrolled sideways or with
+ * the arrows; each a rounded still (its clip on hover) with its length, then
+ * the title and why it follows this one.
+ */
+function RelatedGrid({
+  items,
+  loading,
+  source,
+  onSelect,
+}: {
+  items: MediaCardItem[];
+  loading: boolean;
+  source?: RelatedSource;
+  onSelect: (id: number) => void;
+}) {
+  const { hoverPreview, discreet } = useAppearance();
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const card = "w-60 shrink-0 snap-start md:w-[17rem]";
+  if (loading) {
+    return (
+      <div className="flex gap-5 overflow-hidden">
+        {Array.from({ length: 5 }, (_, n) => (
+          <div key={n} className={cn(card, "space-y-2.5")}>
+            <div className="skeleton aspect-video rounded-xl" />
+            <div className="skeleton h-3.5 w-3/4 rounded" />
+            <div className="skeleton h-3 w-1/2 rounded" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  const scroll = (direction: 1 | -1) =>
+    rowRef.current?.scrollBy({ left: direction * rowRef.current.clientWidth * 0.8 });
+  const arrow =
+    "absolute top-[calc((100%-3.5rem)/2)] z-10 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/75 text-white opacity-0 shadow-lg backdrop-blur-sm transition-opacity hover:bg-black group-hover/slider:opacity-100";
+  return (
+    <div className="group/slider relative">
+    <div ref={rowRef} className="scrollbar-hide flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth">
+      {items.slice(0, 20).map((item) => {
+        const why = whyRelated(source, item);
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelect(item.id)}
+            onMouseEnter={() => setHoveredId(item.id)}
+            onMouseLeave={() => setHoveredId(null)}
+            aria-label={item.title}
+            className={cn(card, "group flex flex-col gap-2.5 text-left")}
+          >
+            <span className="relative block aspect-video overflow-hidden rounded-xl bg-secondary">
+              <img
+                src={thumbnailUrl(item)}
+                alt=""
+                loading="lazy"
+                style={framingStyle(item)}
+                className="sensitive size-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+              />
+              {hoverPreview && !discreet && hoveredId === item.id && <PreviewClip itemId={item.id} />}
+              {item.durationSeconds ? (
+                <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">
+                  {formatDuration(item.durationSeconds)}
+                </span>
+              ) : null}
+            </span>
+            <span className="sensitive line-clamp-2 text-sm font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
+              {item.title}
+            </span>
+            {why && <span className="sensitive -mt-1 truncate text-xs text-muted-foreground">{why}</span>}
+          </button>
+        );
+      })}
+    </div>
+    {items.length > 1 && (
+      <>
+        <button type="button" onClick={() => scroll(-1)} aria-label="Previous" className={cn(arrow, "-left-4")}>
+          <ChevronLeft className="size-5" />
+        </button>
+        <button type="button" onClick={() => scroll(1)} aria-label="Next" className={cn(arrow, "-right-4")}>
+          <ChevronRight className="size-5" />
+        </button>
+      </>
+    )}
     </div>
   );
 }

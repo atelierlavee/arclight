@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
  * point of putting it there is to keep the video visible, which a list that
  * pushes the column taller than the video would defeat.
  */
-type QueueVariant = "stacked" | "side";
+type QueueVariant = "stacked" | "side" | "rail";
 
 export function QueuePanel({
   onPlay,
@@ -24,12 +24,16 @@ export function QueuePanel({
   variant?: QueueVariant;
 }) {
   const { items, clear, move, remove } = useQueue();
-  const side = variant === "side";
+  // The watch page's rail reads like the side panel, without the panel.
+  const rail = variant === "rail";
+  const side = variant === "side" || rail;
 
   return (
     <section
       className={cn(
-        side
+        rail
+          ? ""
+          : side
           ? // Transparent: sitting over the video, its container already
             // provides the tint and the blur, and a second background on top
             // of that just turns the panel into a grey slab.
@@ -41,12 +45,17 @@ export function QueuePanel({
       <div
         className={cn(
           "flex items-center justify-between gap-3",
-          side ? "shrink-0 border-b border-white/10 p-4" : "mb-3",
+          rail ? "mb-4" : side ? "shrink-0 border-b border-white/10 p-4" : "mb-3",
         )}
       >
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <List className="size-4" />
-          Queue{" "}
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            rail ? "text-xl font-bold tracking-[-0.01em]" : "text-sm font-semibold",
+          )}
+        >
+          {!rail && <List className="size-4" />}
+          {rail ? "Your queue" : "Queue"}{" "}
           <span className="text-xs font-normal text-muted-foreground">
             {items.length}
           </span>
@@ -79,7 +88,7 @@ export function QueuePanel({
         <ol
           className={cn(
             "space-y-2",
-            side && "min-h-0 flex-1 overflow-y-auto overscroll-contain p-4",
+            side && !rail && "min-h-0 flex-1 overflow-y-auto overscroll-contain p-4",
           )}
         >
           {items.map((queueItem, index) => (

@@ -46,17 +46,30 @@ describe("SeekStrip best part", () => {
   });
 });
 
-describe("SeekStrip heatmap bars", () => {
-  it("draws nothing for buckets that were never watched", () => {
+describe("SeekStrip heatmap curve", () => {
+  /** The curve's points, read back from the end of each segment of its path. */
+  function curvePoints(container: HTMLElement): [number, number][] {
+    const line = container.querySelector("svg path[fill='none']");
+    const d = line?.getAttribute("d") ?? "";
+    const start = /^M([\d.]+),([\d.]+)/.exec(d);
+    const ends = [...d.matchAll(/ ([\d.]+),([\d.]+)(?= C|$)/g)];
+    return [
+      ...(start ? [[Number(start[1]), Number(start[2])] as [number, number]] : []),
+      ...ends.map((m) => [Number(m[1]), Number(m[2])] as [number, number]),
+    ];
+  }
+
+  it("lies flat on the bar where nothing was watched and peaks at the most-watched part", () => {
     const heatmap = flat();
     heatmap[3] = 4;
     heatmap[4] = 2;
     const { container } = strip({ heatmap });
-    const bars = Array.from(container.querySelectorAll<HTMLElement>("div.rounded-t-sm"));
+    const points = curvePoints(container);
 
-    expect(bars).toHaveLength(50);
-    expect(bars[0].style.height).toBe("0%");
-    expect(bars[3].style.height).toBe("100%");
-    expect(bars[4].style.height).toBe("50%");
+    expect(points).toHaveLength(50);
+    expect(points[0][1]).toBe(100);
+    expect(points[3][1]).toBeCloseTo(8);
+    expect(points[4][1]).toBeCloseTo(54);
+    expect(points[20][1]).toBe(100);
   });
 });

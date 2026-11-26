@@ -5,8 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { useIsMobile } from "@/lib/useMediaQuery";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Maximize2, Play, X } from "lucide-react";
+import { Maximize2, Play } from "lucide-react";
 import { AmbientLight } from "./AmbientLight";
+import { FlowingRibbons } from "./mediaDetail/FlowingRibbons";
 import { GalleryStrip } from "./GalleryStrip";
 import { Portal } from "./Portal";
 import { RelatedItems } from "./RelatedItems";
@@ -21,9 +22,12 @@ import { PlayerGestures } from "./PlayerGestures";
 import { XRayPanel } from "./mediaDetail/XRayPanel";
 import { DetailsPanel } from "./mediaDetail/DetailsPanel";
 import { MiniPlayerHandles } from "./mediaDetail/MiniPlayerHandles";
+import { PlayerBar } from "./mediaDetail/PlayerBar";
+import { CompactPlayerBar } from "./mediaDetail/CompactPlayerBar";
 import { PlayerControls } from "./mediaDetail/PlayerControls";
 import { PlayerMedia } from "./mediaDetail/PlayerMedia";
-import { MobilePlayButton, PreviewOverlay } from "./mediaDetail/PreviewOverlay";
+import { PreviewOverlay } from "./mediaDetail/PreviewOverlay";
+import { WatchMasthead } from "./mediaDetail/WatchMasthead";
 import { UpNextCard } from "./mediaDetail/UpNextCard";
 import { MIN_RESUMABLE_SECONDS } from "./mediaDetail/playerUtils";
 import { useCastStream } from "./mediaDetail/useCastStream";
@@ -48,18 +52,13 @@ import { adjacentPositionStart } from "@/lib/markerApi";
 import { fetchSeriesDetail, nextEpisodeInSeries } from "@/lib/seriesApi";
 
 /**
- * A section of the watch page under the video: a short pink rule and its
- * name in spaced capitals, then the content — the home page's chapter
- * labels. `show` false renders the content alone, as it always was.
+ * A section of the watch page: its name as a plain bold heading, then the
+ * content.
  */
-function WatchSection({ label, show, children }: { label: string; show: boolean; children: React.ReactNode }) {
-  if (!show) return <>{children}</>;
+function WatchSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <section className="mt-12 space-y-4 first-of-type:mt-8">
-      <h2 className="flex items-center gap-3 px-4 text-xs font-semibold uppercase tracking-[0.3em] text-primary md:px-6">
-        <span className="h-px w-8 bg-primary/60" />
-        {label}
-      </h2>
+    <section className="space-y-5">
+      <h2 className="text-xl font-bold tracking-[-0.01em]">{label}</h2>
       {children}
     </section>
   );
@@ -143,7 +142,7 @@ export function MediaPlayer({
   const scrollRef = useRef<HTMLDivElement>(null);
   const playerAreaRef = useRef<HTMLDivElement>(null);
 
-  const { bookmarks, markers, scrubSprite, heatmapBuckets, categories, accent, addBookmark } =
+  const { bookmarks, markers, scrubSprite, heatmapBuckets, categories, addBookmark } =
     usePlayerData({ viewingId, item, mode, mini, videoRef });
   const { updateKind, toggleFavorite, saveFraming, toggleWatched, toggleOrganised, countO } =
     useItemActions({
@@ -154,6 +153,12 @@ export function MediaPlayer({
 
   const toggleWatchLater = useToggleWatchLater();
   const [contactSheetOpen, setContactSheetOpen] = useState(false);
+  // Whether the live ambient glow is actually on screen.
+  const [ambientLit, setAmbientLit] = useState(false);
+  // Whether the video is running right now — not paused, not still the
+  // preview. Read from the element's own events, so every way of pausing
+  // (bar, keyboard, click, end of file) agrees.
+  const [videoPlaying, setVideoPlaying] = useState(false);
   const leanBack = useLeanBackStart();
   // Closing the player is how a lean-back session ends.
   useEffect(() => () => endLeanBack(), []);
@@ -172,6 +177,21 @@ export function MediaPlayer({
     resolveStart: leanBack.resolveStart,
   });
   const { skipSeconds, startPosition, seekTo, startPlaying } = playback;
+
+  // The <video> is remounted when the mode changes, so listen afresh each time.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (mode !== "playing" || !video) {
+      setVideoPlaying(false);
+      return;
+    }
+    const sync = () => setVideoPlaying(!video.paused && !video.ended);
+    sync();
+    const events = ["play", "playing", "pause", "ended", "emptied"] as const;
+    events.forEach((name) => video.addEventListener(name, sync));
+    return () => events.forEach((name) => video.removeEventListener(name, sync));
+  }, [mode, viewingId]);
+
   const subtitleTracks = useSubtitleTracks(viewingId, isVideo && mode === "playing");
   const subtitles = useSubtitles({ videoRef, tracks: subtitleTracks, mode, videoId: viewingId });
   const progress = usePlaybackProgress({
@@ -182,6 +202,23 @@ export function MediaPlayer({
   });
   const screenModes = useScreenModes({ videoRef, playerAreaRef, isMobile, mini });
   const { cinema, setCinema } = screenModes;
+
+  // Whether the player has scrolled out of view, for the now-playing
+  // controls that take its place in the header. The header covers the top
+  // 60px, so the player counts as gone once it is under that.
+  const [stageOut, setStageOut] = useState(false);
+  useEffect(() => {
+    const area = playerAreaRef.current;
+    if (mini || cinema || !area) {
+      setStageOut(false);
+      return;
+    }
+    const visibility = new IntersectionObserver(([entry]) => setStageOut(!entry.isIntersecting), {
+      rootMargin: "-60px 0px 0px 0px",
+    });
+    visibility.observe(area);
+    return () => visibility.disconnect();
+  }, [mini, cinema]);
   const { cast, castSrc, setCastSrc, startCasting } = useCastStream({
     videoRef,
     item,
@@ -338,7 +375,6 @@ export function MediaPlayer({
     item?.durationSeconds ?? videoRef.current?.duration ?? 0;
   const progressSeconds =
     mode === "playing" ? playback.currentTime : item?.lastPositionSeconds ?? 0;
-  const resumePosition = item?.lastPositionSeconds ?? 0;
   const progressPercent =
     Number.isFinite(progressDuration) && progressDuration > 0
       ? Math.min(100, Math.max(0, Math.round((progressSeconds / progressDuration) * 100)))
@@ -355,19 +391,107 @@ export function MediaPlayer({
       nextEpisode.lastPositionSeconds <
         nextEpisode.durationSeconds - MIN_RESUMABLE_SECONDS);
 
+  // The title, who's in it, and what you can do with it.
+  const masthead = item && (
+    <WatchMasthead
+      item={item}
+      seriesName={seriesDetail?.name ?? null}
+      playing={mode === "playing"}
+      canResume={canResume}
+      editing={editing}
+      isOwner={isOwner}
+      watchedPending={toggleWatched.isPending}
+      organisedPending={toggleOrganised.isPending}
+      hallOfFamePin={hallOfFamePin}
+      onStartPlaying={startPlaying}
+      onToggleFavorite={toggleFavorite}
+      onToggleWatched={(next) => toggleWatched.mutate(next)}
+      onToggleWatchLater={(next) => void toggleWatchLater(item, next)}
+      onOpenContactSheet={() => setContactSheetOpen(true)}
+      onQueue={queue.queueCurrent}
+      onSetHallOfFamePin={(id) => setAppearance({ hallOfFamePin: id })}
+      onCountO={countO}
+      onToggleOrganised={(next) => toggleOrganised.mutate(next)}
+    />
+  );
+
+  // The next episode of a series: its still beside its name, no card.
+  const nextEpisodeLink = nextEpisode && seriesDetail && (
+    <WatchSection label="Next episode">
+      <button
+        type="button"
+        onClick={() =>
+          void navigate({
+            to: "/watch/$itemId",
+            params: { itemId: String(nextEpisode.id) },
+            search: {
+              autoplay: true,
+              resume: canResumeNextEpisode || undefined,
+            },
+          })
+        }
+        className="group -mx-3 flex w-[calc(100%+1.5rem)] max-w-xl items-center gap-4 rounded-2xl p-3 text-left transition-colors hover:bg-white/[0.05]"
+      >
+        <span className="relative block aspect-video w-36 shrink-0 overflow-hidden rounded-xl bg-secondary sm:w-48">
+          <img
+            src={thumbnailUrl(nextEpisode)}
+            alt=""
+            className="sensitive size-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+          <span className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+            <span className="flex size-10 items-center justify-center rounded-full bg-primary text-white shadow-[0_0_32px_-6px_rgba(255,45,149,0.9)]">
+              <Play className="size-4 translate-x-px fill-current" />
+            </span>
+          </span>
+        </span>
+        <span className="min-w-0 space-y-1">
+          <span className="sensitive block truncate text-[13px] text-zinc-400">
+            {seriesDetail.name} · S{nextEpisode.seasonNumber ?? 1}
+            {nextEpisode.episodeNumber != null && ` E${nextEpisode.episodeNumber}`}
+          </span>
+          <span className="sensitive line-clamp-2 block text-base font-bold leading-snug transition-colors group-hover:text-primary">
+            {nextEpisode.episodeTitle || nextEpisode.title}
+          </span>
+          <span className="block text-[13px] text-zinc-500">
+            {canResumeNextEpisode
+              ? `Resume at ${formatTimestamp(nextEpisode.lastPositionSeconds ?? 0)}`
+              : formatDuration(nextEpisode.durationSeconds) || "Play next episode"}
+          </span>
+        </span>
+      </button>
+    </WatchSection>
+  );
+
+  // The record: positions, the story, the facts, and your own notes on it.
+  const details = item && (
+    <DetailsPanel
+      item={item}
+      key={item.id}
+      currentTime={mode === "playing" ? playback.currentTime : null}
+      editing={editing}
+      canEdit={!isMobile && isOwner}
+      onToggleEditing={() => setEditing((e) => !e)}
+      categories={categories}
+      bookmarks={bookmarks}
+      markers={markers}
+      onJumpToBookmark={jumpTo}
+      kindPending={updateKind.isPending}
+      onChangeKind={(kind) => updateKind.mutate(kind)}
+      reframing={reframing}
+      setReframing={setReframing}
+      framingSaving={saveFraming.isPending}
+      onSaveFraming={(next) => saveFraming.mutate(next)}
+    />
+  );
+
   const content = (
     <>
       <div
         ref={scrollRef}
         className={cn(
-          "z-50",
-          isWatchPage && "relative min-h-screen w-full bg-background pb-24",
+          isWatchPage ? "relative min-h-screen w-full bg-background pb-24" : "z-50",
         )}
       >
-        <AmbientLight
-          videoRef={videoRef}
-          active={ambient && isVideo && mode === "playing" && !mini && !cinema && !discreet}
-        />
         <div
           ref={panelRef}
           tabIndex={-1}
@@ -399,6 +523,33 @@ export function MediaPlayer({
               resizeHandlers={resizeHandlers}
             />
           )}
+          {/* The watch page: one centred column — the video as a rounded
+              screen, its title and actions, the details as tabs, then what
+              to watch next.
+
+              The video sits at the same place in the tree in every mode, so
+              switching cinema on or off never remounts it mid-playback. */}
+          <div
+            className={cn(
+              page && "mx-auto w-full max-w-[1276px] px-4 pt-[60px] md:px-12 md:pt-[76px]",
+            )}
+          >
+            <div className={cn(page && "space-y-8")}>
+              <div className={cn(page && "relative -mx-4 md:mx-0")}>
+                {/* A halo just outside the screen in the picture's colours,
+                    drawn behind it rather than behind the whole page — where
+                    the panel's own background used to cover it. */}
+                {/* The silk only while the video is actually playing, and
+                    never with the live glow: it gives way once the glow is
+                    really showing — not just switched on. */}
+                {page && <FlowingRibbons visible={videoPlaying && !ambientLit} />}
+                {page && (
+                  <AmbientLight
+                    videoRef={videoRef}
+                    active={ambient && isVideo && mode === "playing" && !discreet}
+                    onLitChange={setAmbientLit}
+                  />
+                )}
           {/* The player and the queue share a row. The player keeps its
               aspect ratio and so decides the row's height; the queue column
               stretches to match and scrolls inside itself. */}
@@ -415,8 +566,8 @@ export function MediaPlayer({
             className={cn(
               "relative w-full overflow-hidden bg-black",
               cinema ? "h-screen" : "aspect-video",
-              // Full-bleed, as tall as the screen allows.
-              page && "max-h-[86vh]",
+              // Edge to edge on a phone; a rounded screen in the column above that.
+              page && "md:rounded-[20px] md:shadow-[0_40px_80px_-40px_rgba(0,0,0,0.9)]",
             )}
             onMouseMove={revealPlayerControls}
             onTouchStart={revealPlayerControls}
@@ -440,6 +591,11 @@ export function MediaPlayer({
                 if (leanBack.session && !nextQueuedItem) endLeanBack();
               }}
               onVolumeChange={playback.handleVolumeChange}
+              onVideoClick={() => {
+                playback.togglePlay();
+                revealPlayerControls();
+              }}
+              onVideoDoubleClick={screenModes.toggleFullscreen}
             />
 
             {mode === "playing" && isVideo && !mini && (
@@ -493,30 +649,29 @@ export function MediaPlayer({
               that a title, six controls and a scrim left nothing of it to
               see, so there the frame carries a single play button and
               everything else moves below it. */}
-            {mode === "preview" && !mini && !isMobile && (
+            {/* A play button over the still, and mute. The title and the
+                actions are in the masthead under the video. */}
+            {mode === "preview" && !mini && (
               <PreviewOverlay
                 item={item}
                 canResume={canResume}
                 muted={playback.muted}
-                watchedPending={toggleWatched.isPending}
-                hallOfFamePin={hallOfFamePin}
                 onStartPlaying={startPlaying}
-                onToggleFavorite={toggleFavorite}
-                onToggleWatched={(next) => toggleWatched.mutate(next)}
-                onOpenContactSheet={() => setContactSheetOpen(true)}
-                onToggleWatchLater={(next) => {
-                  if (item) void toggleWatchLater(item, next);
-                }}
-                onQueue={queue.queueCurrent}
-                onSetHallOfFamePin={(id) => setAppearance({ hallOfFamePin: id })}
                 onToggleMuted={playback.toggleMuted}
+                progressPercent={progressPercent}
               />
             )}
 
-            {mode === "preview" && !mini && isMobile && item?.itemType === "video" && (
-              <MobilePlayButton
-                canResume={canResume}
-                onPlay={() => startPlaying(canResume ? item.lastPositionSeconds : 0)}
+            {mode === "playing" && item?.itemType === "video" && !mini && (
+              <PlayerBar
+                videoRef={videoRef}
+                visible={showPlayerControls}
+                currentTime={playback.currentTime}
+                duration={item.durationSeconds ?? videoRef.current?.duration ?? 0}
+                besidePanel={queueOverVideo}
+                onTogglePlay={playback.togglePlay}
+                onToggleMuted={playback.toggleMuted}
+                onToggleFullscreen={screenModes.toggleFullscreen}
               />
             )}
 
@@ -550,26 +705,11 @@ export function MediaPlayer({
                 onCast={startCasting}
                 onTogglePictureInPicture={() => void screenModes.togglePictureInPicture()}
                 onToggleAmbient={toggleAmbient}
-                onToggleFullscreen={screenModes.toggleFullscreen}
                 onPlayNext={queue.playNextQueued}
                 onToggleCinema={() => setCinema((active) => !active)}
               />
             )}
 
-            {!mini && (
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close"
-                className={cn(
-                  "absolute top-4 z-40 flex size-9 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm transition-all hover:bg-black/80",
-                  // Steps aside for the queue rather than hiding under it.
-                  queueOverVideo ? "right-[21.25rem]" : "right-4",
-                )}
-              >
-                <X className="size-5" />
-              </button>
-            )}
             {mini && onExpand && showPlayerControls && (
               <button
                 type="button"
@@ -600,165 +740,72 @@ export function MediaPlayer({
               </aside>
             )}
           </div>
-
-          {isWatchPage && isVideo && (mode === "playing" || canResume) && (
-            <section className="mx-4 mt-4 rounded-lg border border-border bg-card/70 p-4 md:mx-6">
-              <div className="mb-3 flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                    {mode === "playing" ? "Now playing" : "Continue watching"}
-                  </p>
-                  <p className="mt-1 truncate text-sm text-muted-foreground">
-                    {mode === "playing"
-                      ? `${formatTimestamp(progressSeconds)}${
-                          Number.isFinite(progressDuration) && progressDuration > 0
-                            ? ` of ${formatTimestamp(progressDuration)}`
-                            : ""
-                        }`
-                      : `You left off at ${formatTimestamp(resumePosition)}`}
-                  </p>
-                </div>
-                {mode === "preview" && canResume && (
-                  <button
-                    type="button"
-                    onClick={() => startPlaying(resumePosition)}
-                    className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
-                  >
-                    <Play className="size-4 fill-current" />
-                    Continue
-                  </button>
-                )}
               </div>
-              <div
-                role="progressbar"
-                aria-label="Video progress"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progressPercent}
-                className="h-1.5 overflow-hidden rounded-full bg-muted"
-              >
-                <div
-                  className="h-full rounded-full bg-primary transition-[width]"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-            </section>
-          )}
-
-          {isWatchPage && nextEpisode && seriesDetail && (
-            <section className="mx-4 mt-4 rounded-xl border border-border bg-card/70 p-4 md:mx-6 md:p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                Next episode · <span className="sensitive">{seriesDetail.name}</span>
-              </p>
-              <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center">
-                <img
-                  src={thumbnailUrl(nextEpisode)}
-                  alt=""
-                  className="sensitive aspect-video w-full rounded-md object-cover sm:w-48"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground">
-                    Season {nextEpisode.seasonNumber ?? 1}
-                    {nextEpisode.episodeNumber != null &&
-                      ` · Episode ${nextEpisode.episodeNumber}`}
-                  </p>
-                  <h2 className="sensitive mt-1 truncate text-lg font-semibold">
-                    {nextEpisode.episodeTitle || nextEpisode.title}
-                  </h2>
-                  {canResumeNextEpisode && (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Resume at {formatTimestamp(nextEpisode.lastPositionSeconds ?? 0)}
-                    </p>
+              {page ? (
+                // Above the glow and the silk behind the player, which are
+                // positioned layers and would otherwise paint over the text.
+                <div key={viewingId} className="relative z-[1] space-y-8">
+                  {/* The page arrives in a short cascade: title, then
+                      details, then what's next. */}
+                  <div className="animate-fade-up">{masthead}</div>
+                  <div className="animate-fade-up pt-4 [animation-delay:90ms]">{details}</div>
+                  {nextEpisodeLink && <div className="pt-6">{nextEpisodeLink}</div>}
+                  {item?.itemType === "video" && queueBeside && queue.queueItems.length > 0 && (
+                    <div className="max-w-xl pt-6">
+                      <QueuePanel onPlay={showItem} variant="rail" />
+                    </div>
                   )}
-                  {formatDuration(nextEpisode.durationSeconds) && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatDuration(nextEpisode.durationSeconds)}
-                    </p>
+                  {item && (
+                    <div className="animate-fade-up pb-16 pt-6 [animation-delay:180ms]">
+                      <WatchSection label="Up next">
+                        <RelatedItems
+                          itemId={item.id}
+                          onSelect={showItem}
+                          variant="grid"
+                          source={{ performers: item.performers, studio: item.studio, tags: item.tags }}
+                        />
+                      </WatchSection>
+                    </div>
+                  )}
+                  {item && (
+                    <CompactPlayerBar
+                      item={item}
+                      videoRef={videoRef}
+                      visible={stageOut}
+                      markers={markers}
+                      playing={videoPlaying}
+                      currentTime={mode === "playing" ? playback.currentTime : item.lastPositionSeconds}
+                      duration={item.durationSeconds ?? videoRef.current?.duration ?? 0}
+                      onTogglePlay={() =>
+                        mode === "playing"
+                          ? playback.togglePlay()
+                          : startPlaying(canResume ? item.lastPositionSeconds : 0)
+                      }
+                      onBackToVideo={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                    />
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void navigate({
-                      to: "/watch/$itemId",
-                      params: { itemId: String(nextEpisode.id) },
-                      search: {
-                        autoplay: true,
-                        resume: canResumeNextEpisode || undefined,
-                      },
-                    })
-                  }
-                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
-                >
-                  <Play className="size-4 fill-current" />
-                  {canResumeNextEpisode ? "Resume episode" : "Play next episode"}
-                </button>
-              </div>
-            </section>
-          )}
-
-          {/* Details */}
-          {item && !mini && (
-            <WatchSection label="Details" show={page}>
-            <DetailsPanel
-              item={item}
-              isMobile={isMobile}
-              editing={editing}
-              onToggleEditing={() => setEditing((e) => !e)}
-              accent={accent}
-              categories={categories}
-              bookmarks={bookmarks}
-              markers={markers}
-              onJumpToBookmark={jumpTo}
-              kindPending={updateKind.isPending}
-              onChangeKind={(kind) => updateKind.mutate(kind)}
-              organisedPending={toggleOrganised.isPending}
-              onToggleOrganised={(next) => toggleOrganised.mutate(next)}
-              onCountO={countO}
-              reframing={reframing}
-              setReframing={setReframing}
-              framingSaving={saveFraming.isPending}
-              onSaveFraming={(next) => saveFraming.mutate(next)}
-            />
-            </WatchSection>
-          )}
-
-          {/* Above "More like this": the gallery belongs to this video, while
-            related items lead away from it. */}
-          {item && !mini && (
-            <div className={cn(page && "mt-12")}>
-              <GalleryStrip itemId={item.id} />
+              ) : (
+                !mini && (
+                  <>
+                    {masthead && <div className="px-4 pt-6 md:px-6">{masthead}</div>}
+                    {details && <div className="mt-12 px-4 md:px-6">{details}</div>}
+                    {item && (
+                      <div className="mt-12">
+                        <GalleryStrip itemId={item.id} />
+                      </div>
+                    )}
+                    {/* Cinema mode has its own stack, so a queue with something in
+                        it falls back to the stack below. Empty, it stays hidden. */}
+                    {item?.itemType === "video" && cinema && queue.queueItems.length > 0 && (
+                      <QueuePanel onPlay={showItem} />
+                    )}
+                    {item && cinema && <RelatedItems itemId={item.id} onSelect={showItem} />}
+                  </>
+                )
+              )}
             </div>
-          )}
-
-          {/* Only ever with something in it. An empty queue below the player
-              was a heading and a line of instructions taking up the space
-              between the video and what is actually under it — the sidebar's
-              queue button is where you go looking for an empty one. */}
-          {/* Cinema mode has no side column, so a queue with something in it
-              falls back to the stack below. Empty, it stays hidden. */}
-          {item?.itemType === "video" &&
-            cinema &&
-            queue.queueItems.length > 0 && <QueuePanel onPlay={showItem} />}
-
-          {item && cinema && <RelatedItems itemId={item.id} onSelect={showItem} />}
-
-          {item?.itemType === "video" && page && queueBeside && queue.queueItems.length > 0 && (
-            <WatchSection label="Your queue" show>
-              <QueuePanel onPlay={showItem} />
-            </WatchSection>
-          )}
-
-          {item && page && (
-            <WatchSection label="Up next" show>
-              <RelatedItems
-                itemId={item.id}
-                onSelect={showItem}
-                variant="strip"
-                source={{ performers: item.performers, studio: item.studio, tags: item.tags }}
-              />
-            </WatchSection>
-          )}
+          </div>
         </div>
       </div>
       {contactSheetOpen && item?.itemType === "video" && !mini && (

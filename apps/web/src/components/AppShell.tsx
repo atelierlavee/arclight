@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {
-  createContext,
   useContext,
   useEffect,
   useId,
@@ -26,6 +25,7 @@ import { Sidebar } from "./Sidebar";
 import { UserMenu } from "./UserMenu";
 import { cn } from "@/lib/utils";
 import { MediaPlayer } from "./MediaPlayer";
+import { ShellContext, type PageHeader } from "./shellContext";
 import { NotificationCenter } from "./NotificationCenter";
 import { CardShortcutProvider } from "@/lib/cardShortcuts";
 import type { PlayItemDetail } from "@/lib/appEvents";
@@ -44,25 +44,6 @@ function readCollapsed(): boolean {
     return false;
   }
 }
-
-/** What the current page has told the persistent frame about itself. */
-type PageHeader = {
-  /** Which AppShell set this, so an outgoing page can't clear its successor's. */
-  owner: string;
-  title?: string;
-  subtitle?: string;
-  centeredHeader: boolean;
-  /** The page's PageScope, for the appearance menu that lives up here. */
-  scope: string | null;
-};
-
-type ShellStore = {
-  setHeader: React.Dispatch<React.SetStateAction<PageHeader | null>>;
-  /** Where a page's header actions are portalled to. */
-  actionsSlot: HTMLElement | null;
-};
-
-const ShellContext = createContext<ShellStore | null>(null);
 
 /**
  * The root route's component: the frame every page renders inside.
@@ -146,10 +127,11 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const [header, setHeader] = useState<PageHeader | null>(null);
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  const [startSlot, setStartSlot] = useState<HTMLElement | null>(null);
   const title = header?.title;
   const subtitle = header?.subtitle;
   const centeredHeader = header?.centeredHeader ?? false;
-  const store = useMemo(() => ({ setHeader, actionsSlot }), [actionsSlot]);
+  const store = useMemo(() => ({ setHeader, actionsSlot, startSlot }), [actionsSlot, startSlot]);
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(readCollapsed);
 
@@ -307,8 +289,10 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
           {/* The search field used to hold the centre column; with search on
               ⌘K there's nothing to centre, so the header is just its actions. */}
           <header className={cn(
-            "cinema-hide focus-hide sticky top-0 z-30 -mb-[60px] flex h-[60px] shrink-0 items-center justify-between gap-2 px-4 py-3 transition-colors md:justify-end md:gap-4 md:px-6",
-            scrolled ? "bg-background" : "bg-transparent",
+            "cinema-hide focus-hide sticky top-0 z-30 -mb-[60px] flex h-[60px] shrink-0 items-center justify-between gap-2 px-4 py-3 transition-colors duration-300 md:justify-end md:gap-4 md:px-6",
+            // Frosted once the page moves under it, so what scrolls beneath
+            // still shows through softly instead of meeting a solid band.
+            scrolled ? "bg-background/70 backdrop-blur-xl backdrop-saturate-150" : "bg-transparent",
           )}>
             {/* On phones the sidebar is behind a button, so the header carries
                 the only way to reach it — and the page title with it. */}
@@ -326,6 +310,14 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
                 {title ?? "Arc Light"}
               </span>
             </div>
+            {/* A page's own content, centred in the bar, wide screens only.
+                Laid over the row rather than in it, so it sits in the true
+                middle and the buttons stay where they are; only what is put
+                in it takes clicks. */}
+            <div
+              ref={setStartSlot}
+              className="pointer-events-none absolute inset-0 hidden items-center justify-center md:flex md:px-36 lg:px-72 [&>*]:pointer-events-auto"
+            />
             <div className="flex shrink-0 items-center gap-1.5 md:gap-3">
               {/* The current page's actions are portalled in here. `contents`
                   so they sit in this row's flex layout as if written inline. */}

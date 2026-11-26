@@ -11,7 +11,6 @@ import {
   Gauge,
   LayoutGrid,
   Lightbulb,
-  Maximize,
   MonitorPlay,
   PictureInPicture2,
   RotateCcw,
@@ -56,7 +55,6 @@ export function PlayerControls({
   onCast,
   onTogglePictureInPicture,
   onToggleAmbient,
-  onToggleFullscreen,
   onPlayNext,
   onToggleCinema,
 }: {
@@ -91,7 +89,6 @@ export function PlayerControls({
   onCast: () => void;
   onTogglePictureInPicture: () => void;
   onToggleAmbient: () => void;
-  onToggleFullscreen: () => void;
   onPlayNext: () => void;
   onToggleCinema: () => void;
 }) {
@@ -279,17 +276,6 @@ export function PlayerControls({
           )}
         >
           <Lightbulb className={cn("size-4", ambient && "fill-current")} />
-        </button>
-      )}
-      {!mini && (
-        <button
-          type="button"
-          onClick={onToggleFullscreen}
-          aria-label="Fullscreen"
-          title="Fullscreen (f)"
-          className="flex size-9 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm transition-colors hover:bg-black/80"
-        >
-          <Maximize className="size-4" />
         </button>
       )}
       {mini && hasNextQueued && (

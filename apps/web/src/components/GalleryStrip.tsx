@@ -26,7 +26,23 @@ async function fetchGallery(
  * A taste rather than the set — the album page is where you look through
  * all 121 photos, and "See all" is how you get there.
  */
-export function GalleryStrip({ itemId }: { itemId: number }) {
+/** How many stills sit beside this video, from the same cached request the strip makes. */
+export function useGalleryTotal(itemId: number): number {
+  const { data } = useQuery({
+    queryKey: qk.gallery(itemId),
+    queryFn: () => fetchGallery(itemId),
+  });
+  return data?.total ?? data?.images.length ?? 0;
+}
+
+export function GalleryStrip({
+  itemId,
+  bare = false,
+}: {
+  itemId: number;
+  /** No page gutter and no heading: a tab around it already says what it is. */
+  bare?: boolean;
+}) {
   const { data } = useQuery({
     queryKey: qk.gallery(itemId),
     queryFn: () => fetchGallery(itemId),
@@ -48,7 +64,8 @@ export function GalleryStrip({ itemId }: { itemId: number }) {
   const wall = images.slice(0, 20);
 
   return (
-    <div className="space-y-4 px-4 pb-6 md:px-6">
+    <div className={bare ? "space-y-4" : "space-y-4 px-4 pb-6 md:px-6"}>
+      {!bare && (
       <div className="flex items-baseline gap-2">
         <h3 className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.3em] text-primary">
           <span className="h-px w-8 bg-primary/60" />
@@ -56,6 +73,7 @@ export function GalleryStrip({ itemId }: { itemId: number }) {
         </h3>
         <span className="text-[11px] text-muted-foreground/70">{total} images</span>
       </div>
+      )}
 
       {/* A simple slider: the photos in a row, scrolled with the arrows. */}
       <div className="group/slider relative">

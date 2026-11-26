@@ -17,6 +17,45 @@ const SNAP_PX = 8;
 /** The preview is drawn at the sheet's own tile width, so it is never upscaled. */
 const PREVIEW_MAX_WIDTH = 160;
 
+/** The heatmap's buckets as points across a 100×100 box, y growing downwards. */
+function heatmapPoints(counts: number[], max: number): [number, number][] {
+  const last = counts.length - 1;
+  return counts.map((count, i) => [
+    last > 0 ? (i / last) * 100 : 50,
+    100 - (count / max) * 92,
+  ]);
+}
+
+/**
+ * A smooth line through the points: Catmull-Rom turned into cubic curves,
+ * with the control points' height clamped so the curve never overshoots
+ * above the box or below the bar.
+ */
+function heatmapLine(counts: number[], max: number): string {
+  const points = heatmapPoints(counts, max);
+  if (points.length === 0) return "";
+  const clampY = (y: number) => Math.min(100, Math.max(0, y));
+  let d = `M${points[0][0]},${points[0][1]}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const [x0, y0] = points[Math.max(0, i - 1)];
+    const [x1, y1] = points[i];
+    const [x2, y2] = points[i + 1];
+    const [x3, y3] = points[Math.min(points.length - 1, i + 2)];
+    const c1x = x1 + (x2 - x0) / 6;
+    const c1y = clampY(y1 + (y2 - y0) / 6);
+    const c2x = x2 - (x3 - x1) / 6;
+    const c2y = clampY(y2 - (y3 - y1) / 6);
+    d += ` C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`;
+  }
+  return d;
+}
+
+/** The same curve closed down to the bar, for the faint fill under it. */
+function heatmapArea(counts: number[], max: number): string {
+  const line = heatmapLine(counts, max);
+  return line ? `${line} L100,100 L0,100 Z` : "";
+}
+
 /**
  * A seek bar that shows where you are going before you get there.
  *
@@ -195,17 +234,24 @@ export function SeekStrip({
         className="group relative flex h-5 cursor-pointer touch-none items-center"
       >
         {heatmapMax > 1 && heatmap && (
-          <div
-            className="absolute inset-x-0 bottom-full mb-0.5 flex h-6 items-end gap-px opacity-0 transition-opacity group-hover:opacity-100"
+          // How often each part has been watched, as one soft curve hugging
+          // the bar — read as a graph at a glance, where separate blocks
+          // looked like stray boxes when only a part had any history.
+          <svg
+            aria-hidden
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="pointer-events-none absolute inset-x-0 bottom-1/2 h-8 w-full opacity-0 transition-opacity group-hover:opacity-100"
           >
-            {heatmap.map((count, i) => (
-              <div
-                key={i}
-                className="flex-1 rounded-t-sm bg-white/30"
-                style={{ height: count > 0 ? `${Math.max(8, (count / heatmapMax) * 100)}%` : "0%" }}
-              />
-            ))}
-          </div>
+            <path d={heatmapArea(heatmap, heatmapMax)} className="fill-white/15" />
+            <path
+              d={heatmapLine(heatmap, heatmapMax)}
+              fill="none"
+              vectorEffect="non-scaling-stroke"
+              className="stroke-white/45"
+              strokeWidth={1.25}
+            />
+          </svg>
         )}
         <div className="relative h-1 w-full rounded-full bg-white/25 transition-[height] group-hover:h-1.5">
           <div

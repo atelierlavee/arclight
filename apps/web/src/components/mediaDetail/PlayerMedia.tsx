@@ -23,6 +23,8 @@ export function PlayerMedia({
   onPause,
   onEnded,
   onVolumeChange,
+  onVideoClick,
+  onVideoDoubleClick,
 }: {
   item: MediaItemDetail | undefined;
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -39,6 +41,10 @@ export function PlayerMedia({
   onPause: () => void;
   onEnded: () => void;
   onVolumeChange: () => void;
+  /** Clicking the playing video: play/pause, as in most players. */
+  onVideoClick?: () => void;
+  /** Double-clicking it: the player's own fullscreen. */
+  onVideoDoubleClick?: () => void;
 }) {
   const [transcodeError, setTranscodeError] = useState<string | null>(null);
   const transcodeRequired =
@@ -209,7 +215,12 @@ export function PlayerMedia({
           autoPlay={mode === "playing" || !stillOnly}
           loop={mode === "preview"}
           playsInline
-          controls={mode === "playing"}
+          // Only the mini player keeps the browser's bar; elsewhere the
+          // player draws its own (PlayerBar), with the one fullscreen that
+          // keeps its overlays.
+          controls={mode === "playing" && mini}
+          onClick={mode === "playing" && !mini ? onVideoClick : undefined}
+          onDoubleClick={mode === "playing" && !mini ? onVideoDoubleClick : undefined}
           controlsList={mini ? "nofullscreen" : undefined}
           style={{
             // Nothing will ever seek when there is no clip loaded, so

@@ -50,15 +50,21 @@ export function XRayPanel({ performers, visible }: { performers: Performer[]; vi
   return (
     <div
       className={cn(
-        // A strip down the left edge, the full height of the video, the
-        // picture darkening behind it; clear of the toolbar at the top and the
-        // controls at the bottom.
-        "absolute inset-y-0 left-0 z-30 flex w-64 flex-col bg-gradient-to-r from-black/85 via-black/60 to-transparent pb-24 pl-4 pr-6 pt-24 md:pt-28 transition-all duration-300 md:w-72 md:pl-6",
-        visible ? "translate-x-0 opacity-100" : "pointer-events-none -translate-x-3 opacity-0",
+        // A strip down the left edge, clear of the toolbar at the top and the
+        // controls at the bottom, with only a light shade behind it so the
+        // picture still reads through.
+        //
+        // The strip itself never takes a click — only the cards do — so the
+        // video's own taps (pause, double-tap to skip) still work through it.
+        //
+        // Compact in the page's player; roomier once the player area is
+        // fullscreen (`:fullscreen` is that area, an ancestor of this strip).
+        "pointer-events-none absolute inset-y-0 left-0 z-30 flex w-56 flex-col bg-gradient-to-r from-black/60 via-black/25 to-transparent pb-20 pl-4 pr-8 pt-20 transition-all duration-300 md:w-60 [:fullscreen_&]:w-72 [:fullscreen_&]:pl-6 [:fullscreen_&]:pt-28",
+        visible ? "translate-x-0 opacity-100" : "-translate-x-3 opacity-0",
       )}
     >
       <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.3em] text-primary">In this scene</p>
-      <ul className="scrollbar-hide min-h-0 flex-1 space-y-4 overflow-y-auto">
+      <ul className="scrollbar-hide min-h-0 flex-1 space-y-2.5 overflow-y-auto [:fullscreen_&]:space-y-4">
         {performers.map((performer) => {
           const summary = byId.get(performer.id);
           const portrait = summary ? performerPortraitUrl(summary) : null;
@@ -72,10 +78,14 @@ export function XRayPanel({ performers, visible }: { performers: Performer[]; vi
                     params: { performerId: String(performer.id) },
                   })
                 }
-                className="group flex w-full items-start gap-3 rounded-lg bg-black/60 p-2 text-left ring-1 ring-white/10 backdrop-blur-md transition-colors hover:bg-black/75"
+                tabIndex={visible ? 0 : -1}
+                className={cn(
+                  "group flex w-full items-start gap-2.5 rounded-xl bg-black/55 p-1.5 text-left ring-1 ring-white/10 backdrop-blur-md transition-colors hover:bg-black/75 [:fullscreen_&]:gap-3 [:fullscreen_&]:p-2",
+                  visible && "pointer-events-auto",
+                )}
               >
                 {/* Their whole portrait, not a circle cropped out of it. */}
-                <span className="block aspect-[2/3] w-20 shrink-0 overflow-hidden rounded-md bg-secondary ring-1 ring-white/20 transition-all group-hover:ring-2 group-hover:ring-primary">
+                <span className="block aspect-[2/3] w-12 shrink-0 overflow-hidden rounded-lg bg-secondary [:fullscreen_&]:w-20 ring-1 ring-white/20 transition-all group-hover:ring-2 group-hover:ring-primary">
                   {portrait ? (
                     <img
                       src={portrait}

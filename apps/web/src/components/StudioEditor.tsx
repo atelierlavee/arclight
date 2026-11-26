@@ -17,10 +17,13 @@ export function StudioEditor({
   itemId,
   studio,
   readOnly = false,
+  textClassName = "text-sm text-foreground/90",
 }: {
   itemId: number;
   studio: string | null;
   readOnly?: boolean;
+  /** The read-only name's type, for a place that sets its own (the watch page's facts strip). */
+  textClassName?: string;
 }) {
   const [value, setValue] = useState(studio ?? "");
   const queryClient = useQueryClient();
@@ -56,12 +59,12 @@ export function StudioEditor({
       <Link
         to="/studio/$studioId"
         params={{ studioId: String(match.id) }}
-        className="text-sm text-foreground/90 hover:underline"
+        className={`${textClassName} hover:underline`}
       >
         {studio}
       </Link>
     ) : (
-      <span className="text-sm text-foreground/90">{studio}</span>
+      <span className={textClassName}>{studio}</span>
     );
   }
 
