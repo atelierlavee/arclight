@@ -419,6 +419,7 @@ function parameterisedGets(s: Seeded): Record<string, string | null> {
     "/api/media-items/:id/scrub": item("/scrub"),
     "/api/media-items/:id/scrub.jpg": item("/scrub.jpg"),
     "/api/media-items/:id/thumbnail": item("/thumbnail"),
+    "/api/media-items/:id/frame.jpg": item("/frame.jpg?t=1"),
     "/api/stream/:itemId": `/api/stream/${s.visibleId}`,
     "/api/performers/:id": `/api/performers/${s.performerId}`,
     "/api/performers/:id/image": `/api/performers/${s.performerId}/image`,
@@ -426,6 +427,11 @@ function parameterisedGets(s: Seeded): Record<string, string | null> {
     "/api/tiers/:kind": "/api/tiers/video",
     "/api/studios/:id": `/api/studios/${s.studioId}`,
     "/api/series/:id": `/api/series/${s.seriesId}`,
+    "/api/series/:id/related": `/api/series/${s.seriesId}/related`,
+    "/api/series/:id/cover": `/api/series/${s.seriesId}/cover`,
+    // A session id is a random token handed out by POST …/transcodes for one
+    // item the viewer could already reach; there is nothing to sweep without one.
+    "/api/transcodes/:sessionId/:asset": null,
     "/api/albums/:id": `/api/albums/${s.albumId}`,
     "/api/collections/:id/items": `/api/collections/${s.collectionId}/items`,
     "/api/scan/:id": `/api/scan/${s.scanId}`,
@@ -623,6 +629,8 @@ const UNGATED_DELETES: Record<string, string> = {
   "/api/kinds/:kind/cover": "custom artwork; falls back to the automatic cover",
   "/api/performers/:id/image": "custom artwork; the performer and their links stay",
   "/api/media-items/:id/thumbnail": "custom artwork; falls back to the generated thumbnail",
+  "/api/series/:id/cover": "owner only (ownerRoutes.ts); custom artwork, falls back to the episode stills",
+  "/api/transcodes/:sessionId": "stops this profile's temporary transcode; nothing stored is touched",
   "/api/media-items/:id/o": "takes back the viewer's own most recent O-count; per profile, the item is untouched",
   "/api/continue-watching":
     "resets resume positions only; play counts and completion are kept (see playback.ts)",

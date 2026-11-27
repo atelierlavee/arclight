@@ -69,6 +69,8 @@ export const OWNER_ONLY_ROUTES: ReadonlySet<string> = new Set([
   "POST /api/folders",
   "PATCH /api/albums/:id",
   "POST /api/series",
+  "POST /api/series/:id/cover",
+  "DELETE /api/series/:id/cover",
   "DELETE /api/performers/:id",
   "POST /api/performers/:id/image",
   "DELETE /api/performers/:id/image",

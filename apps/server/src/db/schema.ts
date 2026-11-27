@@ -45,6 +45,9 @@ export const series = pgTable("series", {
     .references(() => libraries.id),
   name: text("name").notNull(),
   nameSource: text("name_source").notNull().default("scanner"),
+  // An uploaded cover, under APP_DATA_DIR/series-covers; null for none. It
+  // sits on top of the stacked episode stills wherever the series is shown.
+  coverFile: text("cover_file"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [uniqueIndex("series_library_name_unique").on(table.libraryId, table.name)]);

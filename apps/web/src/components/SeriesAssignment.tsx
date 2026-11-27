@@ -13,7 +13,7 @@ export function SeriesAssignment({ item }: { item: MediaItemDetail }) {
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const { data } = useQuery({ queryKey: qk.series.all, queryFn: fetchSeries });
+  const { data } = useQuery({ queryKey: qk.series.all, queryFn: () => fetchSeries() });
 
   const save = useMutation({
     mutationFn: (patch: Parameters<typeof updateItem>[1]) => updateItem(item.id, patch),

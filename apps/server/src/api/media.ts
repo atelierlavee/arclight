@@ -414,16 +414,17 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     "/api/media-items/:id/frame.jpg",
     async (request, reply) => {
       const id = Number(request.params.id);
+      // Reachability first, so a hidden id answers 404 whatever the query.
+      const file = await resolveItemFile(id, canSeeHidden(request), viewerProfile(request));
+      if (!file || file.itemType !== "video") {
+        reply.code(404);
+        return { error: "Not found" };
+      }
       const raw = request.query.t ?? "";
       const seconds = Number(raw);
       if (!/^\d{1,6}$/.test(raw) || !Number.isSafeInteger(seconds)) {
         reply.code(400);
         return { error: "t must be a whole number of seconds" };
-      }
-      const file = await resolveItemFile(id, canSeeHidden(request), viewerProfile(request));
-      if (!file || file.itemType !== "video") {
-        reply.code(404);
-        return { error: "Not found" };
       }
       if (file.durationSeconds != null && seconds > file.durationSeconds) {
         reply.code(400);

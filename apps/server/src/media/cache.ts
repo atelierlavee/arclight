@@ -26,6 +26,7 @@ export const CHAPTER_FRAMES_DIR = path.resolve(appDataDir, "chapter-frames");
 export const PERFORMER_IMAGES_DIR = path.resolve(appDataDir, "performer-images");
 export const ITEM_THUMBNAILS_DIR = path.resolve(appDataDir, "item-thumbnails");
 export const KIND_COVERS_DIR = path.resolve(appDataDir, "kind-covers");
+export const SERIES_COVERS_DIR = path.resolve(appDataDir, "series-covers");
 
 export type AppDataDir = { name: string; dir: string };
 
@@ -47,6 +48,7 @@ export const UPLOAD_DIRS: AppDataDir[] = [
   { name: "performer-images", dir: PERFORMER_IMAGES_DIR },
   { name: "item-thumbnails", dir: ITEM_THUMBNAILS_DIR },
   { name: "kind-covers", dir: KIND_COVERS_DIR },
+  { name: "series-covers", dir: SERIES_COVERS_DIR },
 ];
 
 /**

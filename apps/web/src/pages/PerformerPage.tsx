@@ -14,6 +14,7 @@ import {
   ImagePlus,
   LayoutGrid,
   List,
+  ListVideo,
   Loader2,
   MoreHorizontal,
   Move,
@@ -30,6 +31,8 @@ import { AppShell } from "@/components/AppShell";
 import { PerformerContinueWatching } from "@/components/PerformerContinueWatching";
 import { AlbumRow } from "@/components/AlbumRow";
 import { PerformerCareer } from "@/components/PerformerCareer";
+import { PerformerSeries } from "@/components/PerformerSeries";
+import { fetchSeries } from "@/lib/seriesApi";
 import { PerformerFacts } from "@/components/PerformerFacts";
 import { StashDbLookupDialog } from "@/components/StashDbLookupDialog";
 import { fetchStashDbStatus } from "@/lib/stashdbApi";
@@ -275,7 +278,7 @@ function CinemaRow({
           </span>
         </span>
         <span className="min-w-0 flex-1 space-y-1.5 pt-0.5">
-          <span className="sensitive line-clamp-2 block text-base font-bold leading-snug transition-colors group-hover:text-primary md:text-lg">
+          <span className="sensitive line-clamp-2 text-base font-bold leading-snug transition-colors group-hover:text-primary md:text-lg">
             {item.title}
           </span>
           <span className="sensitive block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -442,7 +445,7 @@ function AllVideos({
 }
 
 /** Which way the videos section is laid out. Every visit opens By studio. */
-type VideoView = "all" | "grid" | "timeline";
+type VideoView = "all" | "grid" | "timeline" | "series";
 
 /**
  * Every video on one line down the middle of the page, newest first: each
@@ -552,7 +555,7 @@ function VideoTimeline({
                       <StillClip itemId={item.id} hovered={hoveredId === item.id} />
                     </span>
                     <span className="min-w-0 flex-1 space-y-1 pt-0.5">
-                      <span className="sensitive line-clamp-2 block text-base font-bold leading-snug transition-colors group-hover:text-primary">
+                      <span className="sensitive line-clamp-2 text-base font-bold leading-snug transition-colors group-hover:text-primary">
                         {item.title}
                       </span>
                       <span className="sensitive block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -589,7 +592,15 @@ function FeaturedWall({
   onSelect: (id: number, autoPlay: boolean) => void;
 }) {
   const sort: WallSort = "released";
-  const [view, setView] = useState<VideoView>("grid");
+  const [chosenView, setView] = useState<VideoView>("grid");
+  // The series they are in, for the Series view — offered only when there
+  // are some, and falling back to studios if they disappear.
+  const { data: seriesData } = useQuery({
+    queryKey: qk.series.byPerformer(performer.id),
+    queryFn: () => fetchSeries(performer.id),
+  });
+  const hasSeries = (seriesData?.series.length ?? 0) > 0;
+  const view: VideoView = chosenView === "series" && !hasSeries ? "grid" : chosenView;
   const [wall, setWallState] = useState(readWall);
   // Every visit opens on two columns; switching lasts for the visit.
   const [mode, setMode] = useState<VideoMode>("list");
@@ -625,7 +636,8 @@ function FeaturedWall({
                 { key: "all", label: "All", icon: List },
                 { key: "grid", label: "By studio", icon: LayoutGrid },
                 { key: "timeline", label: "Timeline", icon: GitCommitVertical },
-              ] as const
+                ...(hasSeries ? [{ key: "series", label: "Series", icon: ListVideo }] : []),
+              ] as { key: VideoView; label: string; icon: typeof List }[]
             ).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -656,7 +668,7 @@ function FeaturedWall({
               <Sparkles className="size-3.5" />
             </button>
           </div>
-          {view !== "timeline" && (
+          {view !== "timeline" && view !== "series" && (
             <div className="flex rounded-full bg-secondary p-0.5" role="group" aria-label="View mode">
               {(
                 [
@@ -686,7 +698,9 @@ function FeaturedWall({
       </div>
       <ModeContext.Provider value={mode}>
         <WallContext.Provider value={wall}>
-          {view === "all" ? (
+          {view === "series" ? (
+            <PerformerSeries performerId={performer.id} name={performer.name} bare />
+          ) : view === "all" ? (
             <AllVideos performer={performer} onSelect={onSelect} />
           ) : view === "timeline" ? (
             <VideoTimeline performer={performer} onSelect={onSelect} />

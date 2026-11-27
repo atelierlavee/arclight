@@ -182,6 +182,11 @@ export const qk = {
   series: {
     all: ["series"] as const,
     detail: (id: Id) => ["series", id] as const,
+    related: (id: Id) => ["series", id, "related"] as const,
+    suggestions: ["series", "suggestions"] as const,
+    byPerformer: (performerId: Id) => ["series", "performer", performerId] as const,
+    /** Videos found while picking a new series' parts. */
+    videoSearch: (query: string) => ["series", "video-search", query] as const,
   },
   tags: ["tags"] as const,
   categories: ["categories"] as const,

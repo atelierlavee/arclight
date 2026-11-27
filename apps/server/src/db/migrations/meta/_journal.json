@@ -414,6 +414,13 @@
       "when": 1795257757537,
       "tag": "0058_studio_default_category",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795747574639,
+      "tag": "0059_series_cover",
+      "breakpoints": true
     }
   ]
 }
