@@ -100,13 +100,31 @@
     font-size: calc(100% * var(--type-scale));
   }
 
+  /* A single element that overshoots by a few pixels otherwise lets the
+     whole page pan sideways on a phone — or worse, makes the phone widen the
+     layout to fit it and draw everything zoomed out. `clip` on both html and
+     body, not `hidden` on body alone: mobile browsers still size the layout
+     viewport to overflowing content under `hidden`, and `clip` also leaves
+     sticky positioning working, which `hidden` breaks. */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  /* A grid with no columns of its own gets one that can't grow past its
+     container. Left to the default, the column sizes itself to the longest
+     unbreakable word in it — a file-name title — and drags the whole layout
+     off a phone's screen. Any grid-cols-* utility still wins over this. */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
-    /* A single element that overshoots by a few pixels otherwise lets the
-       whole page pan sideways on a phone, which reads as the layout being
-       broken even where nothing is actually cut off. */
-    overflow-x: hidden;
+    /* Titles here are often file names — "Troy.2004.DC.1080p.BluRay.x264" —
+       with no space to wrap at, which pushed past the edge of a phone. */
+    overflow-wrap: break-word;
   }
 
   /* Stops iOS Safari zooming the page when a text field takes focus, which it
@@ -747,3 +765,26 @@ video.custom-seek::-webkit-media-controls-timeline {
 }
 
 
+
+/* Touch devices — phones and tablets — get the app without its costliest
+   decoration. iOS Safari keeps a GPU copy of every animated, blended or
+   filtered layer, and the home page's grain, slow zooms, glowing hearts and
+   blurred still wall together pushed an iPhone past its memory limit: Safari
+   killed the tab, reloaded it, and killed it again. The page reads the same
+   without them. */
+/* Its counterpart: shown only on touch devices, as the plainer stand-in. */
+.touch-only {
+  display: none;
+}
+@media (hover: none) and (pointer: coarse) {
+  .film-grain,
+  .touch-hidden {
+    display: none;
+  }
+  .touch-only {
+    display: block;
+  }
+  .animate-ken-burns {
+    animation: none;
+  }
+}

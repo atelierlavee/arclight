@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import { useAppearance } from "@/lib/appearance";
 import { type ScreensaverSource } from "@/lib/screensaver";
-import { thumbnailUrl } from "@/lib/mediaItemApi";
+import { backdropSize, thumbnailUrl } from "@/lib/mediaItemApi";
 
 /**
  * A slow, drifting slideshow of posters when the app has sat idle.
@@ -139,7 +139,7 @@ export function Screensaver() {
         return (
           <img
             key={i}
-            src={thumbnailUrl(poster)}
+            src={thumbnailUrl(poster, backdropSize())}
             alt=""
             className="absolute inset-0 h-full w-full object-cover"
             style={

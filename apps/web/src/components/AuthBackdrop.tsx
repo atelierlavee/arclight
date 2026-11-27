@@ -20,8 +20,8 @@ function CinemaArt({ className }: { className?: string }) {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_70%_at_15%_100%,#5c0a2e_0%,transparent_60%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_90%_0%,#3b0f63_0%,transparent_65%)]" />
       {/* A warm light leak raking across the frame. */}
-      <div className="absolute -inset-x-1/4 top-[30%] h-[45%] -rotate-12 bg-gradient-to-r from-transparent via-[#ff2d95]/25 to-transparent blur-3xl" />
-      <div className="absolute -inset-x-1/4 top-[42%] h-[6%] -rotate-12 bg-gradient-to-r from-transparent via-[#ffb3d9]/20 to-transparent blur-xl" />
+      <div className="touch-hidden absolute -inset-x-1/4 top-[30%] h-[45%] -rotate-12 bg-gradient-to-r from-transparent via-[#ff2d95]/25 to-transparent blur-3xl" />
+      <div className="touch-hidden absolute -inset-x-1/4 top-[42%] h-[6%] -rotate-12 bg-gradient-to-r from-transparent via-[#ffb3d9]/20 to-transparent blur-xl" />
       {/* Grain over everything, then the vignette that frames it. */}
       <div className="film-grain absolute inset-0" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgb(0_0_0/0.85))]" />

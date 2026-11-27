@@ -100,9 +100,9 @@ function QualityBadge({ item }: { item: MediaItemDetail }) {
     containerLabel(meta.containerFormat),
   ].filter(Boolean);
   return (
-    <div className="ml-auto min-w-0 pl-8 text-right">
+    <div className="col-span-2 min-w-0 md:ml-auto md:pl-8 md:text-right">
       <dt className="text-xs text-zinc-500">Quality</dt>
-      <dd className="mt-1 flex h-6 items-center justify-end gap-1.5 text-[15px]">
+      <dd className="mt-1 flex h-6 items-center gap-1.5 text-[15px] md:justify-end">
         <span className="font-semibold text-zinc-100">{quality}</span>
         {detail.length > 0 && <span className="truncate text-zinc-500">· {detail.join(" · ")}</span>}
       </dd>
@@ -124,7 +124,7 @@ function StripFact({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("min-w-0 px-8 first:pl-0", !last && "border-r border-white/[0.12]")}>
+    <div className={cn("min-w-0 md:px-8 md:first:pl-0", !last && "md:border-r md:border-white/[0.12]")}>
       <dt className="text-xs text-zinc-500">{label}</dt>
       <dd className="mt-1 flex h-6 items-center truncate text-[15px] font-semibold text-zinc-100">{children}</dd>
     </div>
@@ -425,7 +425,9 @@ export function DetailsPanel({
             {/* A compact strip: a small label over each value, hairlines
                 between them, each only as wide as its content; the picture's
                 size and quality right-aligned at the far end. */}
-            <dl className="flex flex-wrap items-end gap-y-5">
+            {/* Two tidy columns on a phone, where a wrapping strip leaves
+                hairlines dangling at the ends of its rows. */}
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-5 md:flex md:flex-wrap md:items-end md:gap-x-0">
               {isVideo && (
                 <>
                   <StripFact label="Studio">

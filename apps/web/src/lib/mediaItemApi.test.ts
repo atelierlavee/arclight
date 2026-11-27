@@ -9,17 +9,24 @@ describe("thumbnailUrl", () => {
     // The endpoint is served immutable for a year; without a changing token
     // every browser would keep showing the old picture.
     expect(thumbnailUrl({ id: 7, thumbnailFile: "7-abc123.jpg" })).toBe(
-      "/api/media-items/7/thumbnail?v=7-abc123.jpg&e=2",
+      "/api/media-items/7/thumbnail?v=7-abc123.jpg&e=2&w=640",
     );
   });
 
   it("uses a stable token when there is no upload", () => {
     expect(thumbnailUrl({ id: 7, thumbnailFile: null })).toBe(
-      "/api/media-items/7/thumbnail?v=auto&e=2",
+      "/api/media-items/7/thumbnail?v=auto&e=2&w=640",
     );
     expect(thumbnailUrl({ id: 7 })).toBe(
-      "/api/media-items/7/thumbnail?v=auto&e=2",
+      "/api/media-items/7/thumbnail?v=auto&e=2&w=640",
     );
+  });
+
+  it("asks for a copy sized to where it is shown, full size only when asked", () => {
+    // Full 1080p posters on every card made Safari on an iPhone run out of memory.
+    expect(thumbnailUrl({ id: 7 }, "small")).toBe("/api/media-items/7/thumbnail?v=auto&e=2&w=320");
+    expect(thumbnailUrl({ id: 7 }, "large")).toBe("/api/media-items/7/thumbnail?v=auto&e=2&w=960");
+    expect(thumbnailUrl({ id: 7 }, "full")).toBe("/api/media-items/7/thumbnail?v=auto&e=2");
   });
 });
 

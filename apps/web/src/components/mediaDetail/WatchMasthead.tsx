@@ -171,7 +171,9 @@ export function WatchMasthead({
       </div>
 
       {isVideo && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2.5 md:pb-1">
+        // Full width and wrapping on a phone, where the buttons and the icon
+        // pill don't fit on one line; its own width beside the title above.
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 md:w-auto md:shrink-0 md:pb-1">
           {!playing && (
             <>
               <button

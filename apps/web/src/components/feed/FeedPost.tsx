@@ -256,7 +256,7 @@ export function FeedPost({
         className="group relative block aspect-video w-full select-none overflow-hidden bg-black"
       >
         <img
-          src={thumbnailUrl(item)}
+          src={thumbnailUrl(item, "large")}
           alt=""
           loading="lazy"
           className="sensitive absolute inset-0 size-full object-cover"

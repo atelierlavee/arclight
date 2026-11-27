@@ -10,7 +10,7 @@ import { BecauseYouWatched, MoodPicker } from "./DiscoverScenes";
 import { LibraryScene } from "./LibraryScenes";
 import { BrandLogo } from "../BrandLogo";
 import { useAppearance } from "@/lib/appearance";
-import { framingStyle, thumbnailUrl } from "@/lib/mediaItemApi";
+import { framingStyle, backdropSize, thumbnailUrl, type ThumbnailSize } from "@/lib/mediaItemApi";
 import { useProfile } from "@/lib/profile";
 import { displayName } from "@/lib/profilesApi";
 import { useMediaQuery } from "@/lib/useMediaQuery";
@@ -257,10 +257,18 @@ function Byline({ item, prefix }: { item: MediaCardItem; prefix?: string }) {
   );
 }
 
-function Backdrop({ item, className }: { item: MediaCardItem; className?: string }) {
+function Backdrop({
+  item,
+  className,
+  size = "medium",
+}: {
+  item: MediaCardItem;
+  className?: string;
+  size?: ThumbnailSize;
+}) {
   return (
     <img
-      src={thumbnailUrl(item)}
+      src={thumbnailUrl(item, size)}
       alt=""
       style={framingStyle(item)}
       className={cn("sensitive absolute inset-0 size-full object-cover", className)}
@@ -345,13 +353,15 @@ function OpeningShot({
   return (
     <section
       ref={sectionRef}
-      className="relative flex h-[88vh] min-h-[640px] items-end overflow-hidden"
+      // At least most of the screen, and taller when the words need it: on a
+      // phone the greeting and the feature together outgrow a fixed height.
+      className="relative flex min-h-[88svh] overflow-hidden md:min-h-[max(88vh,640px)]"
       // The clip plays only while the pointer is over the scene.
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
-      <div ref={imageRef} className="absolute inset-0 will-change-transform">
-        <Backdrop item={item} className="animate-ken-burns" />
+      <div ref={imageRef} className="absolute inset-0 md:will-change-transform">
+        <Backdrop item={item} size={backdropSize()} className="animate-ken-burns" />
         {preview && hovering && <PreviewClip itemId={item.id} />}
       </div>
       {/* Darkness pooled at the bottom and left, where the words sit, and
@@ -363,24 +373,27 @@ function OpeningShot({
       {/* Deepens as you scroll away from the scene. */}
       <div ref={shadeRef} className="pointer-events-none absolute inset-0 bg-background opacity-0" />
 
-      <div ref={wordsRef} className="absolute inset-0 flex items-end will-change-transform">
+      {/* In the flow rather than pinned to the corners: the welcome at the
+          top and the feature at the bottom, with the section growing rather
+          than the two running into each other. */}
+      <div ref={wordsRef} className="relative flex w-full flex-col justify-between gap-10 md:will-change-transform">
         {/* The welcome, top left, clear of the header. */}
-        <div className="absolute inset-x-0 top-0 px-6 pt-24 md:px-14 md:pt-28">
+        <div className="px-6 pt-20 md:px-14 md:pt-28">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
             {date} · {greeting(now.getHours())}
           </p>
-          <p className="mt-2 text-2xl font-black tracking-tight text-white md:text-4xl">
+          <p className="mt-2 text-xl font-black tracking-tight text-white sm:text-2xl md:text-4xl">
             Welcome back{profile && <span className="text-white/60">, {displayName(profile)}</span>}.
           </p>
           <p className="mt-1.5 text-sm text-white/70 md:text-base">{rundown(toFinish, newCount)}</p>
         </div>
 
-        <div className="relative w-full max-w-4xl space-y-5 px-6 pb-10 md:px-14 md:pb-14">
+        <div className="relative w-full max-w-4xl space-y-4 px-6 pb-10 md:space-y-5 md:px-14 md:pb-14">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">Tonight's feature</p>
-          <h1 className="sensitive line-clamp-3 text-5xl font-black leading-[0.95] tracking-tighter text-primary drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] md:text-7xl lg:text-8xl">
+          <h1 className="sensitive line-clamp-3 text-4xl font-black leading-[0.95] tracking-tighter text-primary drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] sm:text-5xl md:text-7xl lg:text-8xl">
             {item.title}
           </h1>
-          <p className="sensitive text-base text-white/75 empty:hidden md:text-lg">
+          <p className="sensitive line-clamp-2 text-sm text-white/75 empty:hidden sm:text-base md:line-clamp-none md:text-lg">
             <Byline item={item} />
           </p>
           {item.description && (
@@ -392,7 +405,7 @@ function OpeningShot({
             <button
               type="button"
               onClick={() => onOpen(item.id, true)}
-              className="flex items-center gap-2.5 rounded-full bg-white px-7 py-3 text-base font-bold text-black transition-transform hover:scale-[1.04]"
+              className="flex items-center gap-2.5 rounded-full bg-white px-6 py-2.5 text-base font-bold text-black transition-transform hover:scale-[1.04] md:px-7 md:py-3"
             >
               <Play className="size-5 fill-current" />
               Play
@@ -400,7 +413,7 @@ function OpeningShot({
             <button
               type="button"
               onClick={() => onOpen(item.id, false)}
-              className="flex items-center gap-2 rounded-full px-5 py-3 text-base font-semibold text-white/90 transition-colors hover:bg-white/10"
+              className="flex items-center gap-2 rounded-full px-4 py-2.5 text-base font-semibold text-white/90 transition-colors hover:bg-white/10 md:px-5 md:py-3"
             >
               <Info className="size-5" />
               More about it
@@ -442,7 +455,7 @@ const HEARTS = [
 /** Little glowing hearts drifting up behind the details, and fading. */
 function FloatingHearts() {
   return (
-    <div aria-hidden className="pointer-events-none absolute -inset-8 -z-10">
+    <div aria-hidden className="touch-hidden pointer-events-none absolute -inset-8 -z-10">
       {HEARTS.map((heart, index) => (
         <Heart
           key={index}
@@ -525,6 +538,9 @@ function KeepWatching({
 }) {
   const [index, setIndex] = useState(0);
   const [hovered, setHovered] = useState(false);
+  // On a phone only the cover in focus is drawn: the stack behind it is a
+  // 3D layer per picture, which Safari on an iPhone keeps in GPU memory.
+  const touch = useMediaQuery("(hover: none) and (pointer: coarse)");
   const stage = useRef<HTMLDivElement>(null);
   const touchX = useRef<number | null>(null);
   const count = items.length;
@@ -593,7 +609,9 @@ function KeepWatching({
         {action}
       </div>
 
-      <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-20">
+      {/* minmax(0, …) even as one column: a plain track grows to fit a long
+          unbreakable title and pushes the whole scene off a phone's screen. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-20">
         <div
           ref={stage}
           onTouchStart={(event) => (touchX.current = event.touches[0]?.clientX ?? null)}
@@ -624,7 +642,8 @@ function KeepWatching({
               const offset = i - place;
               const distance = Math.abs(i - focus);
               const centre = i === focus;
-              const shown = i >= windowStart && i < windowStart + COVERS_SHOWN;
+              const shown = touch ? centre : i >= windowStart && i < windowStart + COVERS_SHOWN;
+              if (touch && !centre) return null;
               return (
                 <button
                   key={item.id}
@@ -650,7 +669,7 @@ function KeepWatching({
                   }}
                 >
                   <img
-                    src={thumbnailUrl(item)}
+                    src={thumbnailUrl(item, "large")}
                     alt=""
                     loading="lazy"
                     style={framingStyle(item)}
@@ -691,11 +710,11 @@ function KeepWatching({
           {/* The stack fades away under the text rather than cutting off. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute -inset-y-16 -left-32 right-0 -z-10 bg-gradient-to-r from-transparent via-background/85 to-background"
+            className="pointer-events-none absolute -inset-y-16 -left-32 right-0 -z-10 hidden bg-gradient-to-r from-transparent via-background/85 to-background lg:block"
           />
           <FloatingHearts />
           <div key={current.id} className="relative animate-fade-in space-y-5">
-            <p className="sensitive text-3xl font-black leading-tight tracking-tight md:text-4xl">
+            <p className="sensitive line-clamp-3 text-2xl font-black leading-tight tracking-tight md:text-4xl">
               {current.title}
             </p>
             <p className="sensitive text-sm text-white/80">
@@ -762,13 +781,13 @@ function NewArrivals({
       {/* The word itself, enormous and hollow, behind everything. */}
       <p
         aria-hidden
-        className="pointer-events-none absolute -left-4 top-6 select-none text-[22vw] font-black uppercase leading-none tracking-tighter opacity-20 md:text-[16vw]"
+        className="touch-hidden pointer-events-none absolute -left-4 top-6 select-none text-[22vw] font-black uppercase leading-none tracking-tighter opacity-20 md:text-[16vw]"
         style={{ WebkitTextStroke: "2px var(--foreground)", color: "transparent" }}
       >
         New
       </p>
 
-      <div className="relative grid items-center gap-12 px-6 md:grid-cols-[2fr_3fr] md:px-14">
+      <div className="relative grid grid-cols-[minmax(0,1fr)] items-center gap-12 px-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:px-14">
         <div className="space-y-4">
           <Chapter n={chapter} label="Just in" />
           <h2 className="text-4xl font-black leading-[0.95] tracking-tighter md:text-6xl">
@@ -778,7 +797,10 @@ function NewArrivals({
             {hovered !== null ? (
               <span className="sensitive font-semibold text-foreground">{items[hovered].title}</span>
             ) : (
-              "Hover a still to see what it is. Click to open it."
+              <>
+                <span className="hidden md:inline">Hover a still to see what it is. Click to open it.</span>
+                <span className="md:hidden">Tap a still to open it.</span>
+              </>
             )}
           </p>
           <Link
@@ -831,7 +853,7 @@ function Credits({ items, onOpen, preview }: { items: MediaCardItem[]; onOpen: O
           clip out and the next one in rather than swapping in place. */}
       {hovered && (
         <div key={hovered.id} className="animate-fade-in pointer-events-none absolute inset-0 opacity-50">
-          <Backdrop item={hovered} />
+          <Backdrop item={hovered} size="large" />
           {preview && <PreviewClip itemId={hovered.id} />}
         </div>
       )}
@@ -840,7 +862,7 @@ function Credits({ items, onOpen, preview }: { items: MediaCardItem[]; onOpen: O
       <p
         aria-hidden
         className={cn(
-          "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none whitespace-nowrap text-[15vw] font-black uppercase leading-none tracking-tighter transition-opacity duration-500 md:text-[12vw]",
+          "touch-hidden pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none whitespace-nowrap text-[15vw] font-black uppercase leading-none tracking-tighter transition-opacity duration-500 md:text-[12vw]",
           // Out of the way while a hovered title plays behind the credits.
           hovered ? "opacity-0" : "opacity-[0.18]",
         )}
@@ -919,7 +941,7 @@ function StillWall({ items }: { items: MediaCardItem[] }) {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_70%_80%_at_50%_50%,black_20%,transparent_75%)]"
+      className="touch-hidden pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_70%_80%_at_50%_50%,black_20%,transparent_75%)]"
     >
       <div className="absolute -inset-x-[10%] -inset-y-1/2 grid -rotate-6 grid-cols-6 gap-3 opacity-30 blur-[2px]">
         {wall.map((item, index) => (

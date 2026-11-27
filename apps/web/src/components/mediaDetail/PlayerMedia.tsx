@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import type Hls from "hls.js";
-import { framingStyle, thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
+import { framingStyle, backdropSize, thumbnailUrl, type MediaItemDetail } from "@/lib/mediaItemApi";
 import { cn } from "@/lib/utils";
 import type { SubtitleTrack } from "./useSubtitles";
 
@@ -166,7 +166,7 @@ export function PlayerMedia({
     <>
       {item?.itemType === "video" && (
         <img
-          src={thumbnailUrl(item)}
+          src={thumbnailUrl(item, backdropSize())}
           alt=""
           // Fades out once real playback is actually on screen. It fills
           // the frame (object-cover) while the video letterboxes inside it
@@ -204,7 +204,7 @@ export function PlayerMedia({
                 ? undefined
                 : `/api/media-items/${item.id}/preview`
           }
-          poster={thumbnailUrl(item)}
+          poster={thumbnailUrl(item, backdropSize())}
           onLoadedMetadata={onLoadedMetadata}
           onSeeked={onSeeked}
           onTimeUpdate={onTimeUpdate}

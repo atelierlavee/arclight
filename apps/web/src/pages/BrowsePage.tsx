@@ -280,7 +280,8 @@ export function BrowsePage() {
     // grid below it writes to or the panel would be editing a page it isn't on.
     <PageScope name={scope}>
       <AppShell>
-        <div className="space-y-5 px-4 py-5 md:px-6 md:py-6">
+        {/* Below the top bar on a phone, where it carries the menu and the page name. */}
+        <div className="space-y-5 px-4 pb-5 pt-[68px] md:px-6 md:py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
             <div className="flex min-w-0 items-center gap-1 text-muted-foreground">

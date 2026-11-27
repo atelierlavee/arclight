@@ -19,7 +19,7 @@ import { listSubtitleTracks, readSubtitleAsVtt } from "../media/subtitles.js";
 import { previewPathFor } from "../media/preview.js";
 import { ensureScrubSprite, spritePathFor } from "../media/scrubSprite.js";
 import { ensureChapterFrame } from "../media/chapterFrame.js";
-import { getOrCreatePhotoThumbnail, getPosterPath } from "../media/thumbnails.js";
+import { getOrCreatePhotoThumbnail, getPosterPath, getSizedThumbnail, thumbnailSizeFor } from "../media/thumbnails.js";
 import { playbackWarningFor } from "../media/compatibility.js";
 import { backfillAudioCodec, needsAudioCodec } from "../media/audioCodecBackfill.js";
 import { probeVideo } from "../metadata/videoProbe.js";
@@ -515,7 +515,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     })
   );
 
-  app.get<{ Params: { id: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { w?: string } }>(
     "/api/media-items/:id/thumbnail",
     async (request, reply) => {
       const id = Number(request.params.id);
@@ -542,8 +542,13 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
         return { error: "No thumbnail available" };
       }
 
+      // ?w= asks for a smaller copy, snapped to a size step; none, or one
+      // wider than the steps, is the full picture.
+      const width = thumbnailSizeFor(request.query.w);
+      const servedPath = width ? await getSizedThumbnail(thumbPath, width) : thumbPath;
+
       reply.header("Cache-Control", mediaCacheControl(file.hidden));
-      await streamFile(reply, thumbPath, "image/jpeg", undefined, false);
+      await streamFile(reply, servedPath, "image/jpeg", undefined, false);
     }
   );
 }

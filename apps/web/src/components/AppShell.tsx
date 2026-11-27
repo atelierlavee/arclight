@@ -88,6 +88,12 @@ type PageProps = {
   subtitle?: string;
   /** For pages whose content is a centred column, so the two agree. */
   centeredHeader?: boolean;
+  /**
+   * The page draws its own heading (a pinned one, say), so the shell skips
+   * the block above the content. The title still names the page in the
+   * phone's top bar.
+   */
+  ownHeading?: boolean;
   actions?: React.ReactNode;
 };
 
@@ -96,6 +102,7 @@ function ShellPage({
   title,
   subtitle,
   centeredHeader = false,
+  ownHeading = false,
   actions,
 }: PageProps) {
   const shell = useContext(ShellContext);
@@ -108,10 +115,10 @@ function ShellPage({
   // the frame, and with it this page, forever.
   useLayoutEffect(() => {
     if (!setHeader) return;
-    setHeader({ owner, title, subtitle, centeredHeader });
+    setHeader({ owner, title, subtitle, centeredHeader, ownHeading });
     return () =>
       setHeader((current) => (current?.owner === owner ? null : current));
-  }, [setHeader, owner, title, subtitle, centeredHeader]);
+  }, [setHeader, owner, title, subtitle, centeredHeader, ownHeading]);
 
   return (
     <>
@@ -129,6 +136,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   const title = header?.title;
   const subtitle = header?.subtitle;
   const centeredHeader = header?.centeredHeader ?? false;
+  const ownHeading = header?.ownHeading ?? false;
   const store = useMemo(() => ({ setHeader, actionsSlot, startSlot }), [actionsSlot, startSlot]);
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -292,6 +300,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
             // still shows through softly instead of meeting a solid band.
             scrolled ? "bg-background/70 backdrop-blur-xl backdrop-saturate-150" : "bg-transparent",
           )}>
+
             {/* On phones the sidebar is behind a button, so the header carries
                 the only way to reach it — and the page title with it. */}
             <div className="flex min-w-0 items-center gap-2 md:hidden">
@@ -389,17 +398,21 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
             </div>
           )}
 
-          {(title || subtitle) && (
+          {(title || subtitle) && !ownHeading && (
             // Centred only where the page beneath it is centred too — a heading
             // on a different axis to its own content reads as a mistake.
             <div
               className={cn(
                 "px-4 md:px-6",
-                focusMode ? "pt-[68px] md:pt-[72px]" : "pt-20 md:pt-[84px]",
-                // With the h1 hidden on a phone, a page that has only a title
-                // would leave this as bare padding — a gap under the header
-                // with nothing in it.
-                !subtitle && "hidden md:block",
+                focusMode
+                  ? "pt-[68px] md:pt-[72px]"
+                  : // On a phone the h1 is hidden (the top bar names the
+                    // page), so a page with no subtitle needs only enough to
+                    // clear the bar — but it does need that: hiding the whole
+                    // block left the page's content underneath the bar.
+                    subtitle
+                    ? "pt-20 md:pt-[84px]"
+                    : "pt-12 md:pt-[84px]",
                 centeredHeader && "text-center",
               )}
             >

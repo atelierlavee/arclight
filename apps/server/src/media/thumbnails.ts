@@ -57,6 +57,50 @@ export async function getOrCreatePhotoThumbnail(
   }
 }
 
+/**
+ * The widths a thumbnail can be asked for at, smallest first. A few fixed
+ * steps rather than any number, so the cache can't be filled with a copy per
+ * pixel width; anything wider than the last is served at full size.
+ */
+export const THUMBNAIL_SIZES = [320, 640, 960] as const;
+
+/** The smallest size step at least `raw` wide, or null for full size. */
+export function thumbnailSizeFor(raw: unknown): number | null {
+  const wanted = Number(raw);
+  if (!Number.isFinite(wanted) || wanted <= 0) return null;
+  return THUMBNAIL_SIZES.find((size) => size >= wanted) ?? null;
+}
+
+/**
+ * A copy of a thumbnail scaled down to `width`, made on first request and
+ * kept beside the other generated thumbnails.
+ *
+ * Why it exists: posters are full 1080p frames, and a page showing thirty of
+ * them at a few hundred pixels each decoded over 200 MB of pixels — enough
+ * for an iPhone to kill Safari's tab, reload it, and kill it again.
+ *
+ * Named after the source file, which already changes whenever the picture
+ * does (a new content hash, a new upload), so a stale copy is never served.
+ * Falls back to the original if it can't be scaled.
+ */
+export async function getSizedThumbnail(sourcePath: string, width: number): Promise<string> {
+  await ensureCacheDirs();
+  const target = path.join(THUMBNAILS_DIR, `fit${width}-${path.basename(sourcePath)}`);
+  if (await exists(target)) return target;
+  const tempPath = tempPathFor(target);
+  try {
+    await sharp(sourcePath)
+      .resize(width, undefined, { withoutEnlargement: true })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toFile(tempPath);
+    await rename(tempPath, target);
+    return target;
+  } catch {
+    await rm(tempPath, { force: true }).catch(() => {});
+    return sourcePath;
+  }
+}
+
 /** For videos: the poster frame is generated eagerly at scan time (see poster.ts); this just looks it up. */
 export async function getPosterPath(
   mediaItemId: number,

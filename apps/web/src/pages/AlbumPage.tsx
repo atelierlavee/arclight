@@ -117,7 +117,7 @@ export function AlbumPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6 px-4 py-6 md:px-6 md:py-8">
+      <div className="space-y-6 px-4 pb-6 pt-[68px] md:px-6 md:py-8">
         <Breadcrumbs
           items={[
             { label: "Albums", to: "/albums", viewTransition: true },

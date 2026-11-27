@@ -107,9 +107,40 @@ export const IMAGE_EPOCH = "2";
  * The `v` token changes the URL when the image behind it changes, so a
  * replaced thumbnail defeats the browser cache with no invalidation logic.
  */
-export function thumbnailUrl(item: { id: number; thumbnailFile?: string | null }): string {
+/**
+ * How big a thumbnail to fetch. Posters are full 1080p frames; a page of
+ * cards asking for every one at full size decoded over 200 MB of pixels,
+ * which made Safari on an iPhone kill the tab and reload it in a loop. Most
+ * places show a thumbnail a few hundred pixels wide, so the default is a
+ * copy 640 wide — sharp at 2x up to about 320 CSS pixels.
+ *
+ * - "small" (320): avatars, chips, list rows
+ * - "medium" (640): cards and tiles — the default
+ * - "large" (960): a picture filling a phone's width, or a big card
+ * - "full": a backdrop filling a wide screen, the player's poster
+ */
+export type ThumbnailSize = "small" | "medium" | "large" | "full";
+
+const THUMBNAIL_WIDTHS: Record<ThumbnailSize, number | null> = {
+  small: 320,
+  medium: 640,
+  large: 960,
+  full: null,
+};
+
+export function thumbnailUrl(
+  item: { id: number; thumbnailFile?: string | null },
+  size: ThumbnailSize = "medium",
+): string {
   const version = item.thumbnailFile ?? "auto";
-  return `/api/media-items/${item.id}/thumbnail?v=${version}&e=${IMAGE_EPOCH}`;
+  const width = THUMBNAIL_WIDTHS[size];
+  return `/api/media-items/${item.id}/thumbnail?v=${version}&e=${IMAGE_EPOCH}${width ? `&w=${width}` : ""}`;
+}
+
+/** Full size on a wide screen, "large" on a phone: for backdrops that fill the screen. */
+export function backdropSize(): ThumbnailSize {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "large";
+  return window.matchMedia("(min-width: 768px)").matches ? "full" : "large";
 }
 
 export async function uploadThumbnail(id: number, file: File): Promise<void> {

@@ -199,7 +199,10 @@ function Sway({ from, to, seconds }: { from: string; to: string; seconds: number
 export function SilkWaves({ className }: { className?: string }) {
   const { motion } = useAppearance();
   const osReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const animated = motion === "full" && !osReducedMotion;
+  // Still on a phone: the ribbons' morphing paths are animated SVG, which
+  // Safari on an iPhone redraws in full every frame.
+  const touch = useMediaQuery("(hover: none) and (pointer: coarse)");
+  const animated = motion === "full" && !osReducedMotion && !touch;
   return (
     <div aria-hidden className={cn("pointer-events-none relative", className)}>
       {/* Pink runs long, out to the left behind the words, fading in. */}

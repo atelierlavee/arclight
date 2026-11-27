@@ -110,7 +110,10 @@ export function StudioPage() {
 
   return (
     <AppShell>
-      <section className="relative h-56 w-full overflow-hidden sm:h-72">
+      {/* At least this tall, and taller when its details need the room: on a
+          phone the name, counts and buttons outgrow a fixed height and rose
+          up under the top bar. */}
+      <section className="relative flex min-h-56 w-full items-end overflow-hidden sm:min-h-72">
         {backdrop ? (
           <img
             src={backdrop}
@@ -118,14 +121,14 @@ export function StudioPage() {
             // Blurred and dimmed: it's one video's frame standing in for a
             // whole catalogue, so it should read as texture rather than as a
             // claim about what you're looking at.
-            className="h-full w-full scale-110 object-cover blur-sm brightness-[0.45]"
+            className="absolute inset-0 h-full w-full scale-110 object-cover blur-sm brightness-[0.45]"
           />
         ) : (
-          <div className="h-full w-full bg-gradient-to-br from-secondary to-background" />
+          <div className="absolute inset-0 bg-gradient-to-br from-secondary to-background" />
         )}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background to-transparent" />
 
-        <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-4 pb-4 md:gap-4 md:px-6 md:pb-5">
+        <div className="relative flex w-full items-end gap-3 px-4 pb-4 pt-[76px] md:gap-4 md:px-6 md:pb-5">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-black/50 ring-1 ring-white/15 backdrop-blur-sm sm:size-16 md:size-20">
             <Building2 className="size-6 text-white/80 sm:size-7 md:size-9" />
           </div>

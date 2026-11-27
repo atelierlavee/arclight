@@ -68,7 +68,7 @@ export function NumberOne({
       className="group relative block min-h-[26rem] w-full flex-1 cursor-pointer overflow-hidden rounded-3xl text-left shadow-[0_0_60px_-10px_rgba(245,158,11,0.6)] ring-2 ring-amber-400/70 outline-none focus-visible:ring-4 lg:min-h-[38rem]"
     >
       <div className="absolute inset-0" style={lively ? { animation: "kenburns 24s ease-in-out infinite alternate" } : undefined}>
-        <img src={thumbnailUrl(item)} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={thumbnailUrl(item, "large")} alt="" className="absolute inset-0 h-full w-full object-cover" />
         {moving && (
           <video
             src={`/api/media-items/${item.id}/preview`}
@@ -84,7 +84,9 @@ export function NumberOne({
       <div className="absolute inset-0 bg-black/65" />
       {lively && <Confetti />}
 
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center text-white sm:p-10">
+      {/* In the flow, at the card's height or more: pinned to the card's
+          edges, the details outgrew it on a phone and ran over each other. */}
+      <div className="relative flex min-h-[26rem] flex-col items-center justify-center gap-4 p-6 text-center text-white sm:p-10 lg:min-h-[38rem]">
         <span className="relative inline-flex items-center gap-1.5 overflow-hidden rounded-full bg-gradient-to-r from-amber-200 to-amber-500 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-amber-950 shadow-lg shadow-amber-500/40">
           <Trophy className="size-3.5" />
           #1 of all time
@@ -97,7 +99,7 @@ export function NumberOne({
           )}
         </span>
 
-        <h3 className="sensitive line-clamp-2 max-w-4xl text-5xl font-black tracking-tight drop-shadow sm:text-7xl">{item.title}</h3>
+        <h3 className="sensitive line-clamp-3 max-w-4xl text-3xl font-black tracking-tight drop-shadow sm:text-5xl md:text-7xl">{item.title}</h3>
 
         {people.length > 0 && (
           <div className="flex flex-wrap items-center justify-center gap-3">

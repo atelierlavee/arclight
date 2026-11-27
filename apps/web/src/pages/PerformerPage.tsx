@@ -260,9 +260,9 @@ function CinemaRow({
         onClick={() => onSelect(item.id, false)}
         onMouseEnter={() => onHover(item.id)}
         onMouseLeave={() => onHover(null)}
-        className="group flex w-full items-start gap-4 py-4 text-left md:gap-5"
+        className="group flex w-full items-start gap-3 py-4 text-left sm:gap-4 md:gap-5"
       >
-        <span className="relative block aspect-video w-40 shrink-0 overflow-hidden rounded-sm bg-secondary ring-1 ring-white/5 transition-all duration-300 group-hover:shadow-[0_0_30px_-8px_rgba(255,45,149,0.55)] group-hover:ring-primary/60 sm:w-52 xl:w-60">
+        <span className="relative block aspect-video w-28 shrink-0 overflow-hidden rounded-sm bg-secondary ring-1 ring-white/5 transition-all duration-300 group-hover:shadow-[0_0_30px_-8px_rgba(255,45,149,0.55)] group-hover:ring-primary/60 sm:w-52 xl:w-60">
           <img
             src={thumbnailUrl(item)}
             alt=""
@@ -1025,7 +1025,7 @@ export function PerformerPage() {
         // Relative, so the breadcrumbs sit within the page rather than over
         // the sidebar.
         <div className="relative pb-24">
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 px-4 pt-4 md:px-6">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 px-4 pt-[68px] md:px-6 md:pt-4">
             <Breadcrumbs
               overlay
               items={[{ label: "Performers", to: "/performers" }, { label: performer.name }]}
@@ -1036,7 +1036,7 @@ export function PerformerPage() {
             // At least 80% of the screen with a cover, so it has room to be
             // seen; taller if the details need it.
             style={{ minHeight: performer.hasBanner ? `${BANNER_VH}vh` : undefined }}
-            className="relative isolate flex flex-col items-center justify-center gap-6 overflow-hidden px-6 pb-16 pt-24 text-center md:pt-28"
+            className="relative isolate flex flex-col items-center justify-center gap-6 overflow-hidden px-6 pb-16 pt-32 text-center md:pt-28"
           >
             {/* Their banner, when one is set: behind the whole header, darkened
                 and fading into the page, so everything over it stays readable. */}

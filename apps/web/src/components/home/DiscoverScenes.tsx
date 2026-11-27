@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Play, Shuffle } from "lucide-react";
 import type { MediaCardItem } from "../MediaCard";
 import { PreviewClip } from "../PreviewClip";
-import { framingStyle, thumbnailUrl } from "@/lib/mediaItemApi";
+import { framingStyle, backdropSize, thumbnailUrl } from "@/lib/mediaItemApi";
 import { qk } from "@/lib/queryKeys";
 import { cn, formatDuration } from "@/lib/utils";
 
@@ -201,7 +201,7 @@ export function MoodPicker({
               className={cn("absolute inset-0", index === scenes.length - 1 && "animate-scene-in")}
             >
               <img
-                src={thumbnailUrl(scene)}
+                src={thumbnailUrl(scene, backdropSize())}
                 alt=""
                 style={framingStyle(scene)}
                 className="sensitive size-full object-cover animate-ken-burns"
@@ -214,16 +214,31 @@ export function MoodPicker({
 
       {/* The mask: near-black everywhere but the letters, which are white,
           so multiplying lets the scene through only inside the word. */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden bg-[rgb(46,40,48)] mix-blend-multiply [container-type:inline-size]">
+      <div className="touch-hidden pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden bg-[rgb(46,40,48)] mix-blend-multiply [container-type:inline-size]">
         <PosterWords words={words} className="text-white" />
       </div>
       {/* A fine pink edge to the letters, over the mask. */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden [container-type:inline-size]">
+      <div className="touch-hidden pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden [container-type:inline-size]">
         <PosterWords
           words={words}
           className="text-transparent"
           style={{ WebkitTextStroke: "1px color-mix(in oklab, var(--primary) 70%, transparent)" }}
         />
+      </div>
+
+      {/* On a phone: the word in plain type over a dimmed scene, instead of
+          the scene seen through the letters. That needs a full-screen blend
+          layer and the word drawn twice at poster size, which together were
+          part of what made Safari on an iPhone run out of memory. */}
+      <div className="touch-only pointer-events-none absolute inset-0 bg-black/60">
+        <div className="flex h-full items-center justify-center overflow-hidden [container-type:inline-size]">
+          <span
+            className="sensitive whitespace-nowrap font-black uppercase leading-none tracking-[-0.04em] text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)]"
+            style={{ fontSize: fitted(mood.name) }}
+          >
+            {mood.name}
+          </span>
+        </div>
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-background to-transparent" />
@@ -408,7 +423,7 @@ export function BecauseYouWatched({
 
       <div
         ref={areaRef}
-        className="relative grid items-center gap-6 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:gap-24"
+        className="relative grid grid-cols-[minmax(0,1fr)] items-center gap-6 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:gap-24"
       >
         {/* The branches, drawn over the whole area from measured points. */}
         <svg
@@ -453,7 +468,7 @@ export function BecauseYouWatched({
         >
           <span className="relative block aspect-video">
             <img
-              src={thumbnailUrl(item)}
+              src={thumbnailUrl(item, "large")}
               alt=""
               style={framingStyle(item)}
               className="sensitive size-full object-cover transition-transform duration-700 group-hover:scale-105"
@@ -488,7 +503,7 @@ export function BecauseYouWatched({
                   onMouseEnter={() => setHovered(index)}
                   onFocus={() => setHovered(index)}
                   className={cn(
-                    "group flex w-fit max-w-full items-center gap-4 rounded-lg p-1.5 text-left transition-colors",
+                    "group flex w-fit max-w-full items-center gap-3 rounded-lg p-1.5 text-left transition-colors md:gap-4",
                     hovered === index ? "bg-white/[0.06]" : "hover:bg-white/[0.04]",
                   )}
                 >
@@ -496,8 +511,9 @@ export function BecauseYouWatched({
                     ref={(node) => {
                       stillRefs.current[index] = node;
                     }}
-                    className="relative block aspect-video shrink-0 overflow-hidden rounded-sm bg-secondary"
-                    style={{ width: STILL_WIDTH }}
+                    // Narrower on a phone, so the words beside it keep some room.
+                    className="relative block aspect-video w-32 shrink-0 overflow-hidden rounded-sm bg-secondary md:w-[var(--still)]"
+                    style={{ "--still": `${STILL_WIDTH}px` } as React.CSSProperties}
                   >
                     <img
                       src={thumbnailUrl(video)}

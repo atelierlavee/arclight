@@ -16,6 +16,8 @@ export type PageHeader = {
   title?: string;
   subtitle?: string;
   centeredHeader: boolean;
+  /** The page draws its own heading; the shell skips the block above the content. */
+  ownHeading: boolean;
 };
 
 export type ShellStore = {

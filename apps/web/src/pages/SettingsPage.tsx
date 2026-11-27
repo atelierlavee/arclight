@@ -186,8 +186,18 @@ type Entry = { tab: TabId; anchor: string };
 /** The id of a page's chapter heading on the one long page. */
 const chapterId = (tab: TabId) => `settings-page-${tab}`;
 
-/** How far below the top of the window a chapter counts as the one you're in. */
-const SPY_OFFSET = 140;
+/** The pinned row of chapter pills under the top bar, below a wide screen. */
+const BAND_ID = "settings-band";
+
+/**
+ * Where the pinned bars end — the top bar, and the pill row under it where
+ * there is one — so jumps and the scroll spy work below them at any width.
+ */
+function bandBottom(): number {
+  const topBar = window.matchMedia("(min-width: 768px)").matches ? 60 : 48;
+  const band = document.getElementById(BAND_ID)?.getBoundingClientRect().bottom ?? 0;
+  return Math.max(topBar, band);
+}
 
 export function SettingsPage() {
   const { tab } = routeApi.useSearch();
@@ -215,7 +225,16 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!target) return;
-    const go = () => document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Measured rather than scrollIntoView: the pinned band (and, below a
+    // chapter's start, its pinned title) would otherwise cover what was asked for.
+    const go = () => {
+      const element = document.getElementById(target);
+      if (!element) return;
+      const isChapter = target.startsWith("settings-page-");
+      const titleRoom = !isChapter && window.matchMedia("(min-width: 1024px)").matches ? 64 : 0;
+      const y = element.getBoundingClientRect().top + window.scrollY - bandBottom() - titleRoom - 12;
+      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    };
     const frame = requestAnimationFrame(go);
     // Sections above the target load their data after the first paint and
     // push it down; a second pass lands where it ended up.
@@ -241,10 +260,17 @@ export function SettingsPage() {
   }
 
   return (
-    <AppShell title="Settings" subtitle="Your own preferences, and the library's.">
-      {/* Phone and tablet: the contents become a sticky strip of pills. */}
-      <div className="sticky top-12 z-20 border-b border-border bg-background/85 backdrop-blur md:top-[60px] lg:hidden">
-        <div className="scrollbar-hide mx-auto flex max-w-4xl gap-1.5 overflow-x-auto px-4 py-2 md:px-6">
+    // No heading above the content: the chapters start straight away. The
+    // title still names the page in a phone's top bar.
+    <AppShell title="Settings" ownHeading>
+      {/* Clears the top bar. */}
+      <div className="pt-12 md:pt-[60px]">
+      {/* Below a wide screen the contents rail becomes a pinned row of pills. */}
+      <div
+        id={BAND_ID}
+        className="sticky top-12 z-20 bg-background/70 backdrop-blur-xl backdrop-saturate-150 md:top-[60px] lg:hidden"
+      >
+        <div className="scrollbar-hide mx-auto flex max-w-4xl gap-1.5 overflow-x-auto px-4 py-2 md:px-6 lg:hidden">
           {tabs.map((entry) => (
             <button
               key={entry.id}
@@ -309,6 +335,7 @@ export function SettingsPage() {
           />
         </div>
       </div>
+      </div>
     </AppShell>
   );
 }
@@ -334,7 +361,7 @@ function useScrollSpy(ids: string[]): string | null {
       let found = list[0];
       for (const id of list) {
         const top = document.getElementById(id)?.getBoundingClientRect().top;
-        if (top !== undefined && top <= SPY_OFFSET) found = id;
+        if (top !== undefined && top <= bandBottom() + 24) found = id;
       }
       setActive(found);
     };
@@ -463,7 +490,7 @@ function Chapter({
       // A rule where one chapter ends and the next begins: the accent,
       // brightest in the middle and fading out to both edges.
       className={cn(
-        "relative scroll-mt-[64px] space-y-6 py-12 first:pt-0 last:pb-0",
+        "relative space-y-6 py-12 first:pt-0 last:pb-0",
         "before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-primary/70 before:to-transparent first:before:hidden",
       )}
     >
@@ -471,7 +498,7 @@ function Chapter({
         {/* The title stays pinned while you're in its chapter, and the next
             one pushes it off as you scroll into that, so the change of
             chapter is visible right where you're reading. */}
-        <header className="z-10 -mx-3 flex items-center gap-3 rounded-b-xl px-3 py-3 lg:sticky lg:top-[60px] lg:bg-background/85 lg:backdrop-blur-md">
+        <header className="z-10 -mx-3 flex items-center gap-3 rounded-b-xl px-3 py-3 lg:sticky lg:top-[60px] lg:bg-background/70 lg:backdrop-blur-xl lg:backdrop-saturate-150">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
             <entry.icon className="size-[18px]" />
           </span>
@@ -576,7 +603,7 @@ function SettingsSearch({
         onKeyDown={(event) => {
           if (event.key === "Escape") onQuery("");
         }}
-        placeholder={variant === "rail" ? "Search settings" : "Search settings — try “password”, “tile size” or “backup”"}
+        placeholder="Search settings"
         aria-label="Search settings"
         aria-expanded={results !== null}
         aria-controls={`settings-search-results-${variant}`}
