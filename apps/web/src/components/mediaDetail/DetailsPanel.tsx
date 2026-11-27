@@ -355,12 +355,6 @@ export function DetailsPanel({
 
   return (
     <section className="space-y-7">
-      {item.playbackWarning && (
-        <p className="rounded-xl bg-yellow-500/10 px-4 py-3 text-sm text-yellow-400">
-          {item.playbackWarning}
-        </p>
-      )}
-
       {/* Chapters stand on their own above the tabs: a row of frames you
           can see at a glance, not a list hidden behind a tab. */}
       {isVideo && markers.length > 0 && (

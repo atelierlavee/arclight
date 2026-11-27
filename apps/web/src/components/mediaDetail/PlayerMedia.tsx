@@ -81,14 +81,16 @@ export function PlayerMedia({
 
     const start = async () => {
       setTranscodeError(null);
-      const nativeHls = Boolean(video.canPlayType("application/vnd.apple.mpegurl"));
-      let HlsPlayer: typeof import("hls.js").default | null = null;
-      if (!nativeHls) {
-        HlsPlayer = (await import("hls.js")).default;
-        if (!HlsPlayer.isSupported()) {
-          setTranscodeError("This browser does not support the transcoded video stream.");
-          return;
-        }
+      // hls.js wherever it runs, the browser's own HLS only where it can't.
+      // Chromium now answers "maybe" for HLS too, but its built-in player
+      // stalls after the first segment of this stream (every segment is cut
+      // separately and restarts its timestamps), where hls.js stitches them.
+      let HlsPlayer: typeof import("hls.js").default | null = (await import("hls.js")).default;
+      if (!HlsPlayer.isSupported()) HlsPlayer = null;
+      const nativeHls = !HlsPlayer && Boolean(video.canPlayType("application/vnd.apple.mpegurl"));
+      if (!HlsPlayer && !nativeHls) {
+        setTranscodeError("This browser does not support the transcoded video stream.");
+        return;
       }
 
       const response = await fetch(`/api/media-items/${itemId}/transcodes`, {
