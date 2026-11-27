@@ -90,11 +90,11 @@ export function EditorialHome({
   let chapterCount = 0;
   const chapters = { next: () => String(++chapterCount).padStart(2, "0") };
 
-  if (loading && !lead) return <div className="skeleton -mx-4 -mt-[72px] h-[78vh] md:-mx-6 md:-mt-[80px]" />;
+  if (loading && !lead) return <div className="skeleton -mx-4 -mt-[72px] h-[78vh] md:-mx-6 md:-mt-[calc(80px+var(--masthead-room))]" />;
 
   return (
     // Scenes run edge to edge, so the page's own gutters are cancelled here.
-    <div className="-mx-4 -mt-[72px] md:-mx-6 md:-mt-[80px]">
+    <div className="-mx-4 -mt-[72px] md:-mx-6 md:-mt-[calc(80px+var(--masthead-room))]">
       {lead && (
         <OpeningShot
           item={lead}
@@ -377,8 +377,9 @@ function OpeningShot({
           top and the feature at the bottom, with the section growing rather
           than the two running into each other. */}
       <div ref={wordsRef} className="relative flex w-full flex-col justify-between gap-10 md:will-change-transform">
-        {/* The welcome, top left, clear of the header. */}
-        <div className="px-6 pt-20 md:px-14 md:pt-28">
+        {/* The welcome, top left, clear of the header — of the taller
+            masthead too, which the scene now runs up under. */}
+        <div className="px-6 pt-20 md:px-14 md:pt-[calc(7rem+var(--masthead-room))]">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
             {date} · {greeting(now.getHours())}
           </p>

@@ -3,8 +3,13 @@
 
 import { cn } from "@/lib/utils";
 
+/** The tagline's words. */
+const TAGLINE = ["Desire", "Dominate", "Devour"] as const;
+
 const SIZES = {
   sm: { word: "text-[2.6rem]", tag: "text-[9px] tracking-[0.28em]" },
+  /** The top bar's masthead, centred over the links. */
+  masthead: { word: "text-[3.1rem]", tag: "text-[10px] tracking-[0.3em]" },
   /** The top bar: a touch larger, with the tagline, fitted to its 60px height. */
   nav: { word: "text-[2.3rem]", tag: "text-[8.5px] tracking-[0.3em]" },
   md: { word: "text-4xl", tag: "text-[9px] tracking-[0.3em]" },
@@ -26,10 +31,12 @@ export function BrandLogo({
   size = "md",
   tagline = true,
   className,
+  taglineClassName,
 }: {
   size?: keyof typeof SIZES;
   tagline?: boolean;
   className?: string;
+  taglineClassName?: string;
 }) {
   return (
     <span role="img" aria-label="Arc Light" className={cn("inline-flex select-none flex-col items-start", className)}>
@@ -42,9 +49,15 @@ export function BrandLogo({
           className={cn(
             "mt-[0.5em] whitespace-nowrap font-medium uppercase text-white/70",
             SIZES[size].tag,
+            taglineClassName,
           )}
         >
-          Desire <span className="text-[#ff2d95]">·</span> Dominate <span className="text-[#ff2d95]">·</span> Devour
+          {TAGLINE.map((word, index) => (
+            <span key={word}>
+              {index > 0 && <span className="text-[#ff2d95]"> · </span>}
+              {word}
+            </span>
+          ))}
         </span>
       )}
     </span>
@@ -64,3 +77,4 @@ export function BrandMark({ className }: { className?: string }) {
     </span>
   );
 }
+

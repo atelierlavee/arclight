@@ -24,15 +24,16 @@ export type ShellStore = {
   setHeader: React.Dispatch<React.SetStateAction<PageHeader | null>>;
   /** Where a page's header actions are portalled to. */
   actionsSlot: HTMLElement | null;
-  /** The header's middle on a wide screen, for a page's own content. */
+  /** Room in the slim bar between the logo and the links, for a page's own content. */
   startSlot: HTMLElement | null;
 };
 
 export const ShellContext = createContext<ShellStore | null>(null);
 
 /**
- * Puts a page's own content in the middle of the shared header, on a wide
- * screen (a phone's header already has the menu and title). The watch
+ * Puts a page's own content in the shared header, between its logo and
+ * its links — on an `xl` screen in the slim bar only (a phone's header
+ * already has the menu and title; the tall masthead has no room). The watch
  * page uses it for its now-playing controls once the video scrolls away.
  */
 export function HeaderStart({ children }: { children: React.ReactNode }) {

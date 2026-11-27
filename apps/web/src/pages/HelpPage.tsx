@@ -3,7 +3,7 @@
 
 import { AppShell } from "@/components/AppShell";
 import { PageBody } from "@/components/PageBody";
-import { DISCREET_SHORTCUT, SEARCH_SHORTCUT, SIDEBAR_SHORTCUT } from "@/lib/appearance";
+import { DISCREET_SHORTCUT, SEARCH_SHORTCUT } from "@/lib/appearance";
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
@@ -64,9 +64,6 @@ export function HelpPage() {
           <Row keys={[SEARCH_SHORTCUT]}>
             Search from anywhere — performers, studios and titles, with results as you type.
             Arrow keys move through them, Enter opens the highlighted one.
-          </Row>
-          <Row keys={[SIDEBAR_SHORTCUT]}>
-            Shrink the sidebar to icons, or open it out again. Remembered for next time.
           </Row>
           <Row keys={["Esc"]}>
             Close whatever is open — the appearance panel, a video, the photo viewer, a menu.

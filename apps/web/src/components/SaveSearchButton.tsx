@@ -12,7 +12,7 @@ import type { Filters } from "@/lib/filters";
  *
  * Only offered when something is actually filtered — saving "the whole
  * library" is the Browse link, and a saved search that restores nothing is a
- * row in the sidebar that does nothing.
+ * link under Library that does nothing.
  *
  * The name is suggested from the filters rather than generated, so the list
  * does not fill up with "Saved view 1"; it stays editable because the
@@ -58,7 +58,7 @@ export function SaveSearchButton({
     setOpen(false);
     toast({
       title: "Saved",
-      description: `“${trimmed}” is in the sidebar under Saved searches.`,
+      description: `“${trimmed}” is under Library, in Saved searches.`,
       variant: "success",
     });
   }

@@ -367,16 +367,9 @@ export const DISCREET_SHORTCUT = "Ctrl/⌘ + Shift + H";
 /** Opens search from anywhere. The convention every app with a palette uses. */
 export const SEARCH_SHORTCUT = "Ctrl/⌘ + K";
 
-/**
- * Shrinks the sidebar to icons, or opens it again. The only way to: the
- * button it used to have was taking a row of the sidebar for something done
- * rarely. Backslash, because no browser claims it with Ctrl or ⌘.
- */
-export const SIDEBAR_SHORTCUT = "Ctrl/⌘ + \\";
-
 // localStorage throws outright in some privacy configurations, and an
-// unguarded read here would white-screen the whole app — the same discipline
-// the sidebar's collapsed state already uses.
+// unguarded read here would white-screen the whole app, so every read is
+// guarded.
 /**
  * Clamps a stored fractional value into range.
  *

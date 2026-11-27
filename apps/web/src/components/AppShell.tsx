@@ -11,8 +11,8 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, CircleHelp, Menu, Search, X } from "lucide-react";
+import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { ArrowLeft, Menu, Search, X } from "lucide-react";
 import { SEARCH_SHORTCUT } from "@/lib/appearance";
 import { useIsMobile } from "@/lib/useMediaQuery";
 import { Screensaver } from "./Screensaver";
@@ -21,6 +21,8 @@ import { PrivacyUnlockPrompt } from "./PrivacyUnlockPrompt";
 import { SpotlightSearch, openSpotlight } from "./SpotlightSearch";
 import { AppFooter } from "./AppFooter";
 import { Sidebar } from "./Sidebar";
+import { HealthIndicator, TopNav } from "./TopNav";
+import { useMasthead } from "./useMasthead";
 import { UserMenu } from "./UserMenu";
 import { cn } from "@/lib/utils";
 import { MediaPlayer } from "./MediaPlayer";
@@ -30,19 +32,6 @@ import { CardShortcutProvider } from "@/lib/cardShortcuts";
 import type { PlayItemDetail } from "@/lib/appEvents";
 import { useAchievementWatcher } from "@/lib/useAchievementWatcher";
 import { useScrollLock } from "@/lib/scrollLock";
-
-const SIDEBAR_STORAGE_KEY = "sidebar-collapsed";
-
-// localStorage throws outright in some privacy configurations, so every access
-// is guarded — an unhandled throw during the initial render would take down
-// the whole app rather than just losing a preference.
-function readCollapsed(): boolean {
-  try {
-    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
 
 /**
  * The root route's component: the frame every page renders inside.
@@ -139,28 +128,9 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   const ownHeading = header?.ownHeading ?? false;
   const store = useMemo(() => ({ setHeader, actionsSlot, startSlot }), [actionsSlot, startSlot]);
   const isMobile = useIsMobile();
-  const [collapsed, setCollapsed] = useState(readCollapsed);
-
-  // Ctrl/⌘ + \ folds the sidebar to icons and back. Works while typing too —
-  // it is a chord, not a letter, so it can't be mistaken for input.
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
-      if (event.code !== "Backslash") return;
-      event.preventDefault();
-      setCollapsed((current) => !current);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
-    } catch {
-      // Preference just won't persist — not worth surfacing.
-    }
-  }, [collapsed]);
+  // Tablet and up: a tall masthead at the top of the page that folds into
+  // the slim bar as you scroll.
+  const { ref: mastheadRef, expanded: mastheadExpanded } = useMasthead(!isMobile);
   useAchievementWatcher();
   const [drawerRequested, setDrawerRequested] = useState(false);
   // Derived rather than reset by an effect, so growing past `md` with the
@@ -273,14 +243,10 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
           focusMode && "focus-mode",
         )}
       >
-        <Sidebar
-          // The phone drawer is always full width; on wider screens the
-          // keyboard shortcut folds it to an icon rail.
-          collapsed={isMobile ? false : collapsed}
-          mobile={isMobile}
-          mobileOpen={drawerOpen}
-          onMobileClose={() => setDrawerRequested(false)}
-        />
+        {/* Phones only: wider screens carry the same places in the top bar. */}
+        {isMobile && (
+          <Sidebar open={drawerOpen} onClose={() => setDrawerRequested(false)} />
+        )}
 
         {isMobile && drawerOpen && (
           <button
@@ -292,14 +258,25 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* The search field used to hold the centre column; with search on
-              ⌘K there's nothing to centre, so the header is just its actions. */}
-          <header className={cn(
-            "cinema-hide focus-hide sticky top-0 z-30 -mb-[60px] flex h-[60px] shrink-0 items-center justify-between gap-2 px-4 py-3 transition-colors duration-300 md:justify-end md:gap-4 md:px-6",
-            // Frosted once the page moves under it, so what scrolls beneath
-            // still shows through softly instead of meeting a solid band.
-            scrolled ? "bg-background/70 backdrop-blur-xl backdrop-saturate-150" : "bg-transparent",
-          )}>
+          {/* The navigation on the left (a menu button on phones), the
+              actions on the right. Laid over the top of the page, so a
+              full-bleed opening shot runs up under it. */}
+          <header
+            ref={mastheadRef}
+            data-expanded={mastheadExpanded || undefined}
+            className={cn(
+              // `masthead` takes over the layout from `md` (index.css).
+              "masthead group/bar cinema-hide focus-hide sticky top-0 z-30 -mb-[60px] flex h-[60px] shrink-0 items-center justify-between gap-2 px-4 py-3 transition-colors duration-300 md:gap-4 md:px-6",
+              // Frosted once the page moves under it, so what scrolls beneath
+              // still shows through softly instead of meeting a solid band.
+              // Before that — and while it's the tall masthead — a faint
+              // shade keeps the links legible over a bright opening image.
+              scrolled && !mastheadExpanded
+                ? "bg-background/70 backdrop-blur-xl backdrop-saturate-150"
+                : "bg-gradient-to-b from-background/60 to-transparent",
+            )}
+          >
+            <span aria-hidden className="masthead-rule hidden md:block" />
 
             {/* On phones the sidebar is behind a button, so the header carries
                 the only way to reach it — and the page title with it. */}
@@ -317,29 +294,21 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
                 {title ?? "Arc Light"}
               </span>
             </div>
-            {/* A page's own content, centred in the bar, wide screens only.
-                Laid over the row rather than in it, so it sits in the true
-                middle and the buttons stay where they are; only what is put
-                in it takes clicks. */}
+            {/* A page's own content (the watch page's now-playing controls),
+                in the slim bar between the logo and the links — beside the
+                links, never in place of them, so the bar is the same on
+                every page. Only from `xl`, where there's room for both. */}
             <div
               ref={setStartSlot}
-              className="pointer-events-none absolute inset-0 hidden items-center justify-center md:flex md:px-36 lg:px-72 [&>*]:pointer-events-auto"
+              className="masthead-slot hidden min-w-0 items-center justify-center xl:flex"
             />
-            <div className="flex shrink-0 items-center gap-1.5 md:gap-3">
+            {!isMobile && <TopNav />}
+            <div data-flip className="masthead-actions flex shrink-0 items-center gap-1.5 md:gap-3">
               {/* The current page's actions are portalled in here. `contents`
                   so they sit in this row's flex layout as if written inline. */}
               <div ref={setActionsSlot} className="contents" />
+              {!isMobile && <HealthIndicator />}
               <NotificationCenter />
-              {/* The keyboard shortcuts, one click away instead of a sidebar
-                  row or a shortcut you would have to already know. */}
-              <Link
-                to="/help"
-                aria-label="Help and keyboard shortcuts"
-                title="Help and keyboard shortcuts"
-                className="hidden size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:flex"
-              >
-                <CircleHelp className="size-4" />
-              </Link>
               <button
                 type="button"
                 onClick={openSpotlight}
@@ -352,6 +321,9 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
               <UserMenu />
             </div>
           </header>
+          {/* The room the tall masthead needs at the top of the page. Fixed,
+              not folding with it, so the page never shifts under the bar. */}
+          <div aria-hidden className="cinema-hide focus-hide hidden h-[var(--masthead-room)] shrink-0 md:block" />
 
           {focusMode && (
             <div className={cn(
