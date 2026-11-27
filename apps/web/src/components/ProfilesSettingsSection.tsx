@@ -39,7 +39,7 @@ function ErrorLine({ error }: { error: unknown }) {
 }
 
 const primaryButton =
-  "inline-flex items-center gap-2 rounded-md bg-white px-3 py-1.5 text-sm font-semibold text-black disabled:opacity-50";
+  "inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50";
 const quietButton =
   "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
 
@@ -125,7 +125,11 @@ function AddProfile() {
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className={quietButton}>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-accent/40 hover:text-foreground"
+      >
         <Plus className="size-4" />
         Add profile
       </button>
@@ -133,7 +137,7 @@ function AddProfile() {
   }
   return (
     <form
-      className="space-y-3 rounded-md border border-border p-3"
+      className="space-y-3 rounded-lg border border-border bg-card/40 p-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (name.trim()) create.mutate();
@@ -177,18 +181,26 @@ function ProfileCard({
   const toggle = (next: Mode) => setMode((m) => (m === next ? null : next));
 
   return (
-    <li className="space-y-3 rounded-md border border-border p-3">
-      <div className="flex items-center gap-3">
+    <li
+      className={cn(
+        "space-y-3 rounded-lg border p-3 transition-colors",
+        mode ? "border-foreground/20 bg-card/60" : "border-border bg-card/20",
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <ProfileAvatar name={profile.name} color={profile.color} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">
+          <p className="flex items-center gap-1.5 truncate text-sm font-medium">
             {profile.name}
-            {isSelf && <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>}
+            {isSelf && (
+              <span className="rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-medium text-primary">You</span>
+            )}
           </p>
           <p className="text-xs text-muted-foreground">
             {profile.isOwner ? "Owner" : "Profile"} · {profile.hasPin ? "PIN set" : "No PIN"}
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-0.5">
         {(isSelf || canManage) && (
           <button type="button" onClick={() => toggle("edit")} className={quietButton}>
             <Pencil className="size-3.5" />
@@ -217,6 +229,7 @@ function ProfileCard({
             Delete
           </button>
         )}
+        </div>
       </div>
       {mode === "edit" && <EditProfile profile={profile} onDone={() => setMode(null)} />}
       {mode === "pin" && <PinEditor profile={profile} isSelf={isSelf} onDone={() => setMode(null)} />}

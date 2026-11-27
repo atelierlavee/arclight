@@ -35,7 +35,6 @@ vi.mock("./Sidebar", () => ({ Sidebar: () => null }));
 vi.mock("./AppFooter", () => ({ AppFooter: () => null }));
 vi.mock("./UserMenu", () => ({ UserMenu: () => null }));
 vi.mock("./NotificationCenter", () => ({ NotificationCenter: () => null }));
-vi.mock("./AppearanceMenu", () => ({ AppearanceMenu: () => null }));
 vi.mock("./DiscreetUnlockDialog", () => ({ DiscreetUnlockDialog: () => null }));
 vi.mock("./PrivacyUnlockPrompt", () => ({ PrivacyUnlockPrompt: () => null }));
 vi.mock("./SpotlightSearch", () => ({

@@ -44,7 +44,7 @@ export function BrandLogo({
             SIZES[size].tag,
           )}
         >
-          Explore <span className="text-[#ff2d95]">·</span> Indulge <span className="text-[#ff2d95]">·</span> Enjoy
+          Desire <span className="text-[#ff2d95]">·</span> Dominate <span className="text-[#ff2d95]">·</span> Devour
         </span>
       )}
     </span>

@@ -20,6 +20,11 @@ export const OWNER_ONLY_ROUTES: ReadonlySet<string> = new Set([
   // Account — one login shared by every profile, so the owner holds it.
   "PATCH /api/auth/account",
   "POST /api/auth/password",
+  // The authenticator app can reset that login's password, so it is the owner's too.
+  "GET /api/auth/totp",
+  "POST /api/auth/totp/setup",
+  "POST /api/auth/totp/enable",
+  "POST /api/auth/totp/disable",
 
   // Activity log: library-wide history, and it names what everyone did.
   "GET /api/activity",
@@ -104,6 +109,8 @@ export const OWNER_ONLY_ROUTES: ReadonlySet<string> = new Set([
 export const PROFILE_ROUTES: Readonly<Record<string, string>> = {
   "POST /api/auth/setup": "public: first-run setup, before any profile exists",
   "POST /api/auth/login": "public: signing in comes before picking a profile",
+  "POST /api/auth/recover": "public: resetting a forgotten password comes before signing in",
+  "POST /api/auth/recover/code": "public: asks the server for a reset code, which it only writes to its own log and disk",
   "POST /api/auth/logout": "anyone may sign out",
   "POST /api/webauthn/login/options": "public: passkey sign-in",
   "POST /api/webauthn/login": "public: passkey sign-in",

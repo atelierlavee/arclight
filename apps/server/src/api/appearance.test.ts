@@ -164,43 +164,9 @@ describe("appearance settings — every client setting round-trips", () => {
     expect(await load()).toMatchObject({ cardRadiusRem: 1.5, typeScale: 0.85 });
   });
 
-  it("keeps every home row this build has", async () => {
-    const rows = [
-      "categories",
-      "continue",
-      "favourites",
-      "performers",
-      "studios",
-      "recent",
-      "recentlyWatched",
-      "mostPlayed",
-      "unwatched",
-      "recentlyBrowsed",
-      "recentlyInteracted",
-      "randomPicks",
-      "pinned",
-      "collections",
-      "tags",
-    ].map((key) => ({ key, visible: true }));
-
-    await save({ homeRows: rows });
-    const stored = (await load()).homeRows as { key: string }[];
-    expect(stored.map((row) => row.key)).toEqual(rows.map((row) => row.key));
-  });
-
-  it("keeps a hidden row hidden", async () => {
-    await save({
-      homeRows: [
-        { key: "pinned", visible: false },
-        { key: "recent", visible: true },
-      ],
-    });
-    expect(await load()).toMatchObject({
-      homeRows: [
-        { key: "pinned", visible: false },
-        { key: "recent", visible: true },
-      ],
-    });
+  it("drops the retired homepage row list", async () => {
+    await save({ homeRows: [{ key: "recent", visible: true }] });
+    expect(await load()).not.toHaveProperty("homeRows");
   });
 
   it("keeps per-page layout overrides", async () => {

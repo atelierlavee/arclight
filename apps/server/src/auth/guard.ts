@@ -23,6 +23,8 @@ export const PUBLIC_API_PATHS: ReadonlySet<string> = new Set([
   "/api/auth/setup",
   "/api/auth/login",
   "/api/auth/logout",
+  "/api/auth/recover",
+  "/api/auth/recover/code",
   "/api/webauthn/login/options",
   "/api/webauthn/login",
   "/api/health",

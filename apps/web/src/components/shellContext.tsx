@@ -16,8 +16,6 @@ export type PageHeader = {
   title?: string;
   subtitle?: string;
   centeredHeader: boolean;
-  /** The page's PageScope, for the appearance menu that lives up here. */
-  scope: string | null;
 };
 
 export type ShellStore = {

@@ -78,34 +78,6 @@ const ENUM_KEYS: Record<string, string[]> = {
 /** The layout settings a single page may pin for itself. */
 const PAGE_OVERRIDE_ENUMS = ["viewMode", "tileShape", "density", "tileInfo"] as const;
 
-/**
- * Must track the client's HOME_ROWS. There is no shared package between the
- * two, so this is a second copy of that list, and a row missing from here is
- * a row the server silently strips on save — which is how every section
- * added in one release failed to survive a round-trip.
- *
- * The client re-reconciles whatever it receives against its own list, so a
- * stale copy here costs the *order* rather than the row itself. That is the
- * safety net, not the fix.
- */
-const HOME_ROW_KEYS = [
-  "categories",
-  "continue",
-  "favourites",
-  "performers",
-  "studios",
-  "recent",
-  "recentlyWatched",
-  "mostPlayed",
-  "unwatched",
-  "recentlyBrowsed",
-  "recentlyInteracted",
-  "randomPicks",
-  "pinned",
-  "collections",
-  "tags",
-];
-
 function clean(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== "object") return {};
   const body = input as Record<string, unknown>;
@@ -132,18 +104,6 @@ function clean(input: unknown): Record<string, unknown> {
   for (const [key, allowed] of Object.entries(ENUM_KEYS)) {
     const value = body[key];
     if (typeof value === "string" && allowed.includes(value)) out[key] = value;
-  }
-
-  if (Array.isArray(body.homeRows)) {
-    const seen = new Set<string>();
-    const rows: { key: string; visible: boolean }[] = [];
-    for (const entry of body.homeRows) {
-      const key = (entry as { key?: unknown })?.key;
-      if (typeof key !== "string" || !HOME_ROW_KEYS.includes(key) || seen.has(key)) continue;
-      seen.add(key);
-      rows.push({ key, visible: (entry as { visible?: unknown }).visible !== false });
-    }
-    if (rows.length > 0) out.homeRows = rows;
   }
 
   // Per-page layout overrides: a map of scope name to a partial layout.

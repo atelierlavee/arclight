@@ -53,7 +53,7 @@ describe("UserMenu logout", () => {
     await user.click(await screen.findByRole("button", { name: "Account" }));
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
 
-    await screen.findByRole("heading", { name: "Sign in" });
+    await screen.findByRole("heading", { name: "Welcome back" });
     expect(screen.queryByText("Private library")).not.toBeInTheDocument();
     expect(client.getQueryData(qk.mediaItems.all)).toBeUndefined();
     expect(client.getQueryData(qk.authStatus)).toEqual({

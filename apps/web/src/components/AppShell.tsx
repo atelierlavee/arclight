@@ -13,9 +13,8 @@ import {
 import { createPortal } from "react-dom";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, CircleHelp, Menu, Search, X } from "lucide-react";
-import { PageScope, SEARCH_SHORTCUT, useAppearanceScope } from "@/lib/appearance";
+import { SEARCH_SHORTCUT } from "@/lib/appearance";
 import { useIsMobile } from "@/lib/useMediaQuery";
-import { AppearanceMenu } from "./AppearanceMenu";
 import { Screensaver } from "./Screensaver";
 import { DiscreetUnlockDialog } from "./DiscreetUnlockDialog";
 import { PrivacyUnlockPrompt } from "./PrivacyUnlockPrompt";
@@ -101,7 +100,6 @@ function ShellPage({
 }: PageProps) {
   const shell = useContext(ShellContext);
   const setHeader = shell?.setHeader;
-  const { scope } = useAppearanceScope();
   const owner = useId();
 
   // A layout effect so the header is right on the first paint rather than
@@ -110,10 +108,10 @@ function ShellPage({
   // the frame, and with it this page, forever.
   useLayoutEffect(() => {
     if (!setHeader) return;
-    setHeader({ owner, title, subtitle, centeredHeader, scope });
+    setHeader({ owner, title, subtitle, centeredHeader });
     return () =>
       setHeader((current) => (current?.owner === owner ? null : current));
-  }, [setHeader, owner, title, subtitle, centeredHeader, scope]);
+  }, [setHeader, owner, title, subtitle, centeredHeader]);
 
   return (
     <>
@@ -455,13 +453,6 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
           />
         )}
 
-        {/* Rendered here rather than in the header: it has no trigger any more,
-            and it portals itself, so it only needs to exist somewhere that's on
-            every page. Scoped to the page's PageScope, which the page reports
-            up, so the panel edits the page it is open over. */}
-        <PageScope name={header?.scope ?? null}>
-          <AppearanceMenu />
-        </PageScope>
         <Screensaver />
         <DiscreetUnlockDialog />
         <PrivacyUnlockPrompt />

@@ -13,6 +13,8 @@ export type AuthStatus = {
   needsSetup: boolean;
   user: AuthUser | null;
   profile?: CurrentProfile | null;
+  /** Which ways back in "Forgot password?" can offer. Absent on an older server. */
+  recovery?: { authenticator: boolean };
 };
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -80,4 +82,36 @@ export function changePassword(currentPassword: string, newPassword: string) {
 export async function logout(): Promise<void> {
   const res = await fetch("/api/auth/logout", { method: "POST" });
   if (!res.ok) throw new Error(`Failed to sign out: ${res.status}`);
+}
+
+// ---------------------------------------------------------------------------
+// Forgot password, and the authenticator app that can answer it.
+// ---------------------------------------------------------------------------
+
+/** Has the server write a one-time reset code to its log and backups folder. */
+export function requestServerResetCode() {
+  return postJson<{ ok: true }>("/api/auth/recover/code", {});
+}
+
+/** Resets the password with a code, and signs in with the new one. */
+export function recoverPassword(method: "authenticator" | "server", code: string, newPassword: string) {
+  return postJson<{ user: AuthUser }>("/api/auth/recover", { method, code, newPassword });
+}
+
+export async function fetchAuthenticator(): Promise<{ enabled: boolean }> {
+  const res = await fetch("/api/auth/totp");
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  return res.json();
+}
+
+export function startAuthenticatorSetup(accountPassword: string) {
+  return postJson<{ secret: string; uri: string }>("/api/auth/totp/setup", { accountPassword });
+}
+
+export function confirmAuthenticator(code: string) {
+  return postJson<{ enabled: true }>("/api/auth/totp/enable", { code });
+}
+
+export function turnOffAuthenticator(accountPassword: string) {
+  return postJson<{ enabled: false }>("/api/auth/totp/disable", { accountPassword });
 }

@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import { useAppearance } from "@/lib/appearance";
-import { PREVIEW_SCREENSAVER, type ScreensaverSource } from "@/lib/screensaver";
+import { type ScreensaverSource } from "@/lib/screensaver";
 import { thumbnailUrl } from "@/lib/mediaItemApi";
 
 /**
@@ -87,14 +87,8 @@ export function Screensaver() {
       startedAt.current = Date.now();
       setActive(true);
     }, 5000);
-    const onPreview = () => {
-      startedAt.current = Date.now();
-      setActive(true);
-    };
-    window.addEventListener(PREVIEW_SCREENSAVER, onPreview);
     return () => {
       for (const type of events) window.removeEventListener(type, onInput, { capture: true });
-      window.removeEventListener(PREVIEW_SCREENSAVER, onPreview);
       clearInterval(timer);
     };
   }, [screensaver, idleMs]);

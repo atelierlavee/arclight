@@ -9,6 +9,8 @@ import { profiles, sessions, users } from "../db/schema.js";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../auth/passwords.js";
 import { accountPasswordOk, proveIdentity } from "../auth/profileProof.js";
 import { serialized } from "../auth/serialize.js";
+import { clearResetCode, consumeResetCode, issueResetCode } from "../auth/resetCode.js";
+import { generateTotpSecret, totpUri, verifyTotp } from "../auth/totp.js";
 import {
   autoSelectProfile,
   createSession,
@@ -132,8 +134,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const user = request.user
       ? { id: request.user.id, username: request.user.username }
       : null;
+    // Which ways back in "Forgot password?" can offer. Whether an
+    // authenticator is set up is all it says — never anything about it.
+    const [account] = await db.select({ totpSecret: users.totpSecret }).from(users).limit(1);
+    const recovery = { authenticator: Boolean(account?.totpSecret) };
     // `profile` null with a user means "show the picker".
-    return { needsSetup: !(await hasAnyUser()), user, profile };
+    return { needsSetup: !(await hasAnyUser()), user, profile, recovery };
   });
 
   app.post<{ Body: { username?: string; password?: string } }>(
@@ -310,6 +316,155 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return { ok: true };
     }
   );
+
+  // -------------------------------------------------------------------------
+  // Forgot password: no email to send, so the proof is either the
+  // authenticator app set up in Settings, or a code only someone at the
+  // server machine can read (see auth/resetCode.ts).
+  // -------------------------------------------------------------------------
+
+  app.post("/api/auth/recover/code", async (_request, reply) => {
+    if (!(await hasAnyUser())) {
+      reply.code(409);
+      return { error: "There is no account yet" };
+    }
+    const issued = await issueResetCode((line) => {
+      // A plain line rather than only the structured log, so it stands out
+      // in `docker compose logs` and can be read without parsing JSON.
+      console.warn(`\n[arc-light] ${line}\n`);
+      app.log.warn(line);
+    });
+    if (!issued) {
+      reply.code(429);
+      return { error: "A code was sent a moment ago. Wait half a minute before asking again." };
+    }
+    return { ok: true };
+  });
+
+  app.post<{ Body: { method?: unknown; code?: unknown; newPassword?: unknown } }>(
+    "/api/auth/recover",
+    // The same lock and the same attempt budget as signing in: six digits is
+    // a million guesses, and this must not be a second, unthrottled door.
+    async (request, reply) => serialized("login", async () => {
+      const ip = request.ip;
+      const wait = retryAfterSeconds(ip);
+      if (wait > 0) {
+        reply.code(429).header("Retry-After", String(wait));
+        return { error: "Too many attempts. Try again in a few minutes.", retryAfterSeconds: wait };
+      }
+
+      const { method, code, newPassword } = request.body ?? {};
+      // Checked before the code, so a short password doesn't use one up.
+      if (typeof newPassword !== "string" || newPassword.length < MIN_PASSWORD_LENGTH) {
+        reply.code(400);
+        return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+      }
+
+      const [user] = await db.select().from(users).limit(1);
+      if (!user) {
+        reply.code(409);
+        return { error: "There is no account yet" };
+      }
+
+      let ok = false;
+      if (method === "authenticator" && user.totpSecret) {
+        const step = verifyTotp(user.totpSecret, code, Date.now(), user.totpLastStep);
+        if (step !== null) {
+          ok = true;
+          await db.update(users).set({ totpLastStep: step }).where(eq(users.id, user.id));
+        }
+      } else if (method === "server") {
+        ok = await consumeResetCode(code);
+      }
+      if (!ok) {
+        recordFailure(ip);
+        reply.code(401);
+        return { error: "That code isn't right, or it has expired" };
+      }
+
+      attempts.delete(ip);
+      await db
+        .update(users)
+        .set({ passwordHash: await hashPassword(newPassword) })
+        .where(eq(users.id, user.id));
+      // Any outstanding server code is spent too: the password it was for is gone.
+      await clearResetCode();
+      // Every session goes — whoever forgot the password may not be the only
+      // one who had it — and you are signed in fresh with the new one.
+      await db.delete(sessions).where(eq(sessions.userId, user.id));
+      const sessionId = await createSession(user.id, await autoSelectProfile(user.id));
+      setSessionCookie(reply, sessionId, request.protocol === "https");
+      return { user: { id: user.id, username: user.username } };
+    }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Authenticator app setup (owner only, see ownerRoutes.ts).
+  // -------------------------------------------------------------------------
+
+  app.get("/api/auth/totp", async (request, reply) => {
+    if (!request.user) {
+      reply.code(401);
+      return { error: "Authentication required" };
+    }
+    const [user] = await db.select().from(users).where(eq(users.id, request.user.id));
+    return { enabled: Boolean(user?.totpSecret) };
+  });
+
+  app.post<{ Body: { accountPassword?: unknown } }>("/api/auth/totp/setup", async (request, reply) => {
+    if (!request.user) {
+      reply.code(401);
+      return { error: "Authentication required" };
+    }
+    // Your password, every time: an authenticator can reset the password, so
+    // letting someone at an unlocked browser add theirs would hand them the
+    // account later.
+    if (!(await accountPasswordOk(request.user.id, request.body?.accountPassword))) {
+      reply.code(403);
+      return { error: "Your password is incorrect" };
+    }
+    const secret = generateTotpSecret();
+    await db.update(users).set({ totpPendingSecret: secret }).where(eq(users.id, request.user.id));
+    return { secret, uri: totpUri(secret, request.user.username) };
+  });
+
+  app.post<{ Body: { code?: unknown } }>("/api/auth/totp/enable", async (request, reply) => {
+    if (!request.user) {
+      reply.code(401);
+      return { error: "Authentication required" };
+    }
+    const [user] = await db.select().from(users).where(eq(users.id, request.user.id));
+    if (!user?.totpPendingSecret) {
+      reply.code(409);
+      return { error: "Start the setup again" };
+    }
+    const step = verifyTotp(user.totpPendingSecret, request.body?.code, Date.now(), null);
+    if (step === null) {
+      reply.code(400);
+      return { error: "That code doesn't match. Check the time on your phone is set automatically." };
+    }
+    await db
+      .update(users)
+      .set({ totpSecret: user.totpPendingSecret, totpPendingSecret: null, totpLastStep: step })
+      .where(eq(users.id, user.id));
+    return { enabled: true };
+  });
+
+  app.post<{ Body: { accountPassword?: unknown } }>("/api/auth/totp/disable", async (request, reply) => {
+    if (!request.user) {
+      reply.code(401);
+      return { error: "Authentication required" };
+    }
+    if (!(await accountPasswordOk(request.user.id, request.body?.accountPassword))) {
+      reply.code(403);
+      return { error: "Your password is incorrect" };
+    }
+    await db
+      .update(users)
+      .set({ totpSecret: null, totpPendingSecret: null, totpLastStep: null })
+      .where(eq(users.id, request.user.id));
+    return { enabled: false };
+  });
 
   app.post("/api/auth/logout", async (request, reply) => {
     await destroySession(request.cookies[SESSION_COOKIE]);

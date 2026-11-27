@@ -5,7 +5,8 @@ import { pkey } from "@/lib/profileStorage";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
+import { AuthBackdrop } from "./AuthBackdrop";
 import { useOwnPasskeys } from "@/lib/profile";
 import { fetchPrivacyStatus } from "@/lib/privacyApi";
 import { PrivacyUnlockForm } from "./PrivacyUnlockForm";
@@ -69,11 +70,19 @@ export function AppOpenGate({ children }: { children: React.ReactNode }) {
   if (!guarded || unlocked) return <>{children}</>;
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background px-4 md:px-6">
-      <div className="w-full max-w-sm space-y-5">
+    <div className="relative flex min-h-dvh items-center justify-center bg-background px-4 md:px-6">
+      <AuthBackdrop />
+      <div className="relative w-full max-w-sm animate-fade-in space-y-6 rounded-2xl border border-white/10 bg-white/[0.035] p-7 shadow-[0_30px_80px_-20px_rgb(0_0_0/0.8)] backdrop-blur-xl sm:p-8">
+        <span
+          aria-hidden
+          className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[#ff2d95]/70 to-transparent"
+        />
         <BrandLogo size="md" />
         <div className="space-y-1">
-          <h1 className="text-lg font-semibold">Unlock Arc Light</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <Lock className="size-5 text-[#ff2d95]" />
+            Unlock Arc Light
+          </h1>
           <p className="text-sm text-muted-foreground">
             Use your fingerprint or privacy password to open the app.
           </p>

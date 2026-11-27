@@ -23,139 +23,11 @@ import {
 } from "./layout";
 
 /**
- * The homepage's sections, in their default order.
- *
- * `collections` and `tags` are groups rather than single rows — one row is
- * rendered per collection and per tag — so hiding either hides the whole
- * family. Keys are stored, not indexes, so inserting a section later doesn't
- * silently reshuffle somebody's saved order.
- */
-/**
  * How tall a performer's or studio's cover is, as a share of the screen.
  * Fixed: it used to be a slider, which made the header a thing to fiddle
  * with rather than look at.
  */
 export const BANNER_VH = 80;
-
-export const HOME_ROWS = [
-  { key: "dailyPick", label: "Daily pick" },
-  { key: "continue", label: "Continue watching" },
-  { key: "watchLater", label: "Watch later" },
-  { key: "following", label: "New from who you follow" },
-  { key: "favourites", label: "Favourites" },
-  { key: "performers", label: "Performers" },
-  { key: "studios", label: "Studios" },
-  { key: "recent", label: "Recently added" },
-  { key: "recentlyWatched", label: "Recently watched" },
-  { key: "mostPlayed", label: "Most played" },
-  { key: "unwatched", label: "Unwatched" },
-  { key: "randomPicks", label: "Random picks" },
-  { key: "pinned", label: "Pinned" },
-  { key: "collections", label: "Collections" },
-  { key: "tags", label: "Tags" },
-] as const;
-
-export type HomeRowKey = (typeof HOME_ROWS)[number]["key"];
-
-/** An ordered list; anything missing from it is hidden. */
-export type HomeRowSetting = { key: HomeRowKey; visible: boolean };
-
-/**
- * What a fresh home shows: something to watch now, what's new, and a little
- * to wander into. Every other row is one switch away in Customize home.
- *
- * It used to be every row but the streak — twenty-two of them, two of which
- * draw a row per tag and per collection — which made the home page a wall
- * to scroll past rather than a place to start.
- */
-const VISIBLE_BY_DEFAULT = new Set<HomeRowKey>(["dailyPick", "continue", "following", "recent"]);
-
-const DEFAULT_HOME_ROWS: HomeRowSetting[] = HOME_ROWS.map((row) => ({
-  key: row.key,
-  visible: VISIBLE_BY_DEFAULT.has(row.key),
-}));
-
-/**
- * A stored order that is just the old default saved back — every row on
- * (the streak aside) in the built-in order. Saving appearance writes the
- * whole home list along with whatever was actually changed, so this is what
- * a profile that never touched Customize home has, and it gets the new
- * default rather than keeping the wall.
- */
-function isUntouchedLegacyOrder(value: unknown[]): boolean {
-  const order = HOME_ROWS.map((row) => row.key as string);
-  let last = -1;
-  for (const entry of value) {
-    const { key, visible } = (entry ?? {}) as Partial<HomeRowSetting>;
-    const at = typeof key === "string" ? order.indexOf(key) : -1;
-    if (at < 0) continue;
-    if (at < last) return false;
-    last = at;
-    // The streak (no longer a row) was the one off in the old default.
-    if (visible === false && (key as string) !== "streak") return false;
-  }
-  return true;
-}
-
-/**
- * Reconciles a stored order against the rows this build actually has.
- *
- * Keeps the saved order and visibility, drops keys that no longer exist, and
- * slots any new section in at the position this build gives it — relative to
- * the rows the stored order already has.
- *
- * New rows used to be appended to the end, which was meant to stop a shipped
- * row being invisible and achieved the opposite. `collections` and `tags`
- * each render one row *per* collection and per tag, so the end of the list is
- * below twenty rows of content on a real library — far enough down that
- * Pinned, a row of navigation shortcuts, was reported as simply not there.
- *
- * Inserting by position keeps the two things that matter about a stored
- * order: the rows you arranged stay in the order you arranged them, and the
- * ones you hid stay hidden. Only the rows you have never seen move, and they
- * move to where they were designed to sit.
- */
-export function readHomeRows(value: unknown): HomeRowSetting[] {
-  if (!Array.isArray(value) || isUntouchedLegacyOrder(value)) return DEFAULT_HOME_ROWS;
-
-  const known = new Set<string>(HOME_ROWS.map((row) => row.key));
-  const seen = new Set<string>();
-  const out: HomeRowSetting[] = [];
-
-  for (const entry of value) {
-    const key = (entry as HomeRowSetting)?.key;
-    if (typeof key !== "string" || !known.has(key) || seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      key: key as HomeRowKey,
-      visible: (entry as HomeRowSetting).visible !== false,
-    });
-  }
-
-  const order = HOME_ROWS.map((row) => row.key as string);
-  for (const row of HOME_ROWS) {
-    if (seen.has(row.key)) continue;
-
-    // Land after the last row that this build puts ahead of it. Searching
-    // from the end rather than the start matters when the stored order has
-    // been rearranged: what decides the spot is the nearest preceding
-    // neighbour as it actually sits now, not as this build lists it.
-    //
-    // Rows inserted earlier in this loop count as neighbours too, which is
-    // what keeps several new rows in their own relative order.
-    const precedes = new Set(order.slice(0, order.indexOf(row.key)));
-    let at = 0;
-    for (let i = out.length - 1; i >= 0; i -= 1) {
-      if (precedes.has(out[i].key)) {
-        at = i + 1;
-        break;
-      }
-    }
-    out.splice(at, 0, { key: row.key, visible: true });
-  }
-
-  return out;
-}
 
 /**
  * Validates a stored override map.
@@ -392,8 +264,6 @@ export type Appearance = {
   typeScale: number;
   /** Hue for the accent color (0–360), or null for the default monochrome. */
   accentHue: number | null;
-  /** Which homepage sections show, and in what order. */
-  homeRows: HomeRowSetting[];
   /**
    * Per-context layout overrides, keyed by scope name (§1).
    *
@@ -478,7 +348,6 @@ export const DEFAULTS: Appearance = {
   cardRadiusRem: 0.625,
   typeScale: 1,
   accentHue: null,
-  homeRows: DEFAULT_HOME_ROWS,
   pageOverrides: {},
 };
 
@@ -494,12 +363,6 @@ const STORAGE_KEY = "appearance";
  */
 export const DISCREET_SHORTCUT = "Ctrl/⌘ + Shift + H";
 
-/**
- * Opens the appearance panel. Comma because every desktop app puts
- * preferences there; with Shift because a bare Ctrl/⌘ + , is the browser's
- * own settings and can't be intercepted.
- */
-export const APPEARANCE_SHORTCUT = "Ctrl/⌘ + Shift + ,";
 
 /** Opens search from anywhere. The convention every app with a palette uses. */
 export const SEARCH_SHORTCUT = "Ctrl/⌘ + K";
@@ -659,7 +522,6 @@ function parseStored(raw: string | null): Appearance {
         typeof parsed.accentHue === "number" && Number.isFinite(parsed.accentHue)
           ? ((parsed.accentHue % 360) + 360) % 360
           : null,
-      homeRows: readHomeRows(parsed.homeRows),
       pageOverrides: readPageOverrides(parsed.pageOverrides),
     };
   } catch {
@@ -781,9 +643,6 @@ export function AppearanceProvider({
         // default instead of becoming undefined.
         setValue((current) => {
           const merged = { ...current, ...stored };
-          if (stored.homeRows) {
-            merged.homeRows = readHomeRows(stored.homeRows);
-          }
           // The same migration `read` does, for the server's copy: a install
           // that set a banner height before the hero got its own slider has
           // only the old key, and a browser with no localStorage yet would

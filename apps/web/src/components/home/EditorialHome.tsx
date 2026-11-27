@@ -967,13 +967,9 @@ export function EndCard({ onOpen, stills }: { onOpen: Open; stills: MediaCardIte
             "radial-gradient(ellipse 40% 60% at 50% 50%, color-mix(in oklch, var(--primary) 16%, transparent), transparent 70%)",
         }}
       />
-      {/* The logo, a dot, then a word that changes in place. */}
-      <div className="relative mb-4 flex flex-wrap items-baseline justify-center gap-x-5 gap-y-2">
-        <BrandLogo size="hero" tagline={false} />
-        <span aria-hidden className="text-5xl font-black text-primary md:text-7xl lg:text-8xl">
-          ·
-        </span>
-        <RotatingWord words={["Untamed", "Unfiltered", "Unforgettable"]} />
+      {/* The logo with its one tagline, as everywhere else. */}
+      <div className="relative mb-4">
+        <BrandLogo size="hero" className="items-center" />
       </div>
       <div className="relative space-y-2">
         <p className="text-3xl font-black tracking-tight md:text-5xl">
@@ -982,9 +978,6 @@ export function EndCard({ onOpen, stills }: { onOpen: Open; stills: MediaCardIte
         <p className="mx-auto max-w-none text-balance text-muted-foreground md:text-lg">
           Discover videos that match your desires, explore new fantasies, and find exactly what gets your
           attention.
-        </p>
-        <p className="pt-2 text-xs font-semibold uppercase tracking-[0.35em] text-primary md:text-sm">
-          Your fantasies. Your freedom. Your pleasure.
         </p>
       </div>
       <div className="relative flex flex-wrap items-center justify-center gap-3 pt-2">
@@ -1013,43 +1006,5 @@ export function EndCard({ onOpen, stills }: { onOpen: Open; stills: MediaCardIte
         </Link>
       </div>
     </section>
-  );
-}
-
-/** How long each word holds before the next slides in. */
-const WORD_MS = 3000;
-
-/**
- * One word that changes in place, each new one sliding up into view. The
- * space is held at the longest word's width, so nothing beside it shifts.
- * With less motion asked for, the words sit together, dotted apart.
- */
-function RotatingWord({ words }: { words: string[] }) {
-  const { motion } = useAppearance();
-  const osReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const animated = motion === "full" && !osReducedMotion;
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    if (!animated) return;
-    const timer = window.setInterval(() => setIndex((current) => (current + 1) % words.length), WORD_MS);
-    return () => window.clearInterval(timer);
-  }, [animated, words.length]);
-
-  const wordClass = "text-5xl font-black leading-[1.1] tracking-tighter text-white md:text-7xl lg:text-8xl";
-
-  if (!animated) {
-    return <p className={wordClass}>{words.join(" · ")}</p>;
-  }
-
-  const longest = words.reduce((a, b) => (b.length > a.length ? b : a));
-  return (
-    <span className="grid overflow-hidden">
-      {/* Holds the width and height of the longest word. */}
-      <span className={cn(wordClass, "invisible col-start-1 row-start-1")}>{longest}</span>
-      <span key={index} className={cn(wordClass, "animate-word-in col-start-1 row-start-1 text-left")}>
-        {words[index]}
-      </span>
-    </span>
   );
 }

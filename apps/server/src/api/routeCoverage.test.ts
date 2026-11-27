@@ -107,6 +107,9 @@ const EXPECTED_PUBLIC = [
   "/api/auth/setup",
   "/api/auth/login",
   "/api/auth/logout",
+  // Forgot password: a code from the authenticator app or the server machine.
+  "/api/auth/recover",
+  "/api/auth/recover/code",
   "/api/webauthn/login/options",
   "/api/webauthn/login",
   "/api/health",

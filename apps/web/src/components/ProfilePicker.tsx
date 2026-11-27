@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useState } from "react";
+import { AuthBackdrop } from "./AuthBackdrop";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Delete, Loader2, Lock, Settings2 } from "lucide-react";
@@ -85,15 +86,16 @@ export function ProfilePicker() {
   const owner = list.find((profile) => profile.isOwner);
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-10 md:px-6">
-      <div className="mb-10">
+    <div className="relative flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-10 md:px-6">
+      <AuthBackdrop />
+      <div className="relative mb-12 animate-fade-in">
         <BrandLogo size="lg" className="items-center" />
       </div>
 
       {pinFor ? (
         <PinPad profile={pinFor} onBack={() => setPinFor(null)} onEntered={entered} />
       ) : (
-        <div className="w-full max-w-3xl space-y-8 text-center">
+        <div className="relative w-full max-w-3xl animate-fade-in space-y-10 text-center">
           <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
             {manage ? "Manage profiles" : "Who’s watching?"}
           </h1>
@@ -125,13 +127,18 @@ export function ProfilePicker() {
                   onClick={() => void choose(profile)}
                   disabled={busy !== null}
                   aria-label={`${displayName(profile)}${profile.hasPin ? " (PIN protected)" : ""}`}
-                  className="group flex w-24 flex-col items-center gap-2 rounded-lg p-1 outline-none disabled:opacity-60 md:w-32"
+                  className="group flex w-24 flex-col items-center gap-3 rounded-lg p-1 outline-none disabled:opacity-60 md:w-32"
                 >
-                  <span className="relative">
+                  <span className="relative transition-transform duration-300 group-hover:-translate-y-1 group-focus-visible:-translate-y-1">
+                    {/* A pink-violet glow that rises behind the face you point at. */}
+                    <span
+                      aria-hidden
+                      className="absolute -inset-3 rounded-[2rem] bg-gradient-to-br from-[#ff2d95] to-[#b026ff] opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-40 group-focus-visible:opacity-40"
+                    />
                     <ProfileAvatar
                       name={displayName(profile)}
                       color={profile.color}
-                      className="size-24 text-4xl ring-offset-2 ring-offset-background transition group-hover:ring-2 group-hover:ring-foreground group-focus-visible:ring-2 group-focus-visible:ring-foreground md:size-32 md:text-5xl"
+                      className="relative size-24 text-4xl ring-1 ring-white/10 ring-offset-2 ring-offset-transparent transition group-hover:ring-2 group-hover:ring-[#ff2d95] group-focus-visible:ring-2 group-focus-visible:ring-[#ff2d95] md:size-32 md:text-5xl"
                     />
                     {busy === profile.id && (
                       <Loader2 className="absolute inset-0 m-auto size-6 animate-spin text-white" />
@@ -156,7 +163,7 @@ export function ProfilePicker() {
             <button
               type="button"
               onClick={() => setManage((on) => !on)}
-              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-muted-foreground backdrop-blur transition-colors hover:bg-white/[0.08] hover:text-foreground"
             >
               {manage ? <ArrowLeft className="size-4" /> : <Settings2 className="size-4" />}
               {manage ? "Back" : "Manage profiles"}

@@ -204,8 +204,6 @@ export const qk = {
   duplicates: ["duplicates"] as const,
   scanLatest: ["scan-latest"] as const,
   scanJob: (jobId: Id) => ["scan-job", jobId] as const,
-  storageInsights: ["storage-insights"] as const,
-  storageTreemap: (path: string) => ["storage-treemap", path] as const,
   cacheUsage: ["cache-usage"] as const,
   backups: ["backups"] as const,
   settings: ["settings"] as const,
@@ -214,6 +212,7 @@ export const qk = {
   stashDbScenes: (term: string) => ["stashdb-scenes", term] as const,
 
   authStatus: ["auth-status"] as const,
+  authenticator: ["authenticator"] as const,
   /** The signed-in account's profiles; survives a profile switch, like auth status. */
   profiles: ["profiles"] as const,
   privacy: ["privacy"] as const,

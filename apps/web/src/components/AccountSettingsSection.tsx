@@ -3,15 +3,16 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { BarChart3, ChevronRight, Loader2 } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
+import { Crown, Fingerprint, KeyRound, Loader2, ShieldCheck, ShieldOff, type LucideIcon } from "lucide-react";
 import { SettingsFeedback, SettingsSection, settingsInputClass } from "@/components/SettingsSection";
 import { changePassword, fetchAuthStatus, updateUsername } from "@/lib/authApi";
 import { useProfile } from "@/lib/profile";
 import { displayName, updateProfile, type CurrentProfile, type Proof } from "@/lib/profilesApi";
-import { ConfirmIdentityDialog } from "@/components/ConfirmIdentityDialog";
+import { fetchPrivacyStatus } from "@/lib/privacyApi";
+import { fetchPasskeys } from "@/lib/webauthnApi";
 import { ProfileAvatar } from "@/components/ProfilePicker";
+import { cn } from "@/lib/utils";
+import { ConfirmIdentityDialog } from "@/components/ConfirmIdentityDialog";
 import { qk } from "@/lib/queryKeys";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -112,7 +113,14 @@ function AccountForm({ profile, isOwner }: { profile: CurrentProfile | null; isO
     };
 
   return (
-    <SettingsSection title="Your details" description="Your name is how the home page greets you.">
+    <SettingsSection
+      title="Your details"
+      description={
+        isOwner
+          ? "Your name is how the home page greets you. The username and password are how this server is signed in to."
+          : "Your name is how the home page greets you."
+      }
+    >
       <div className="space-y-6">
         {profile && (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -200,7 +208,7 @@ function AccountForm({ profile, isOwner }: { profile: CurrentProfile | null; isO
         type="button"
         onClick={onSave}
         disabled={!dirty || save.isPending}
-        className="flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition-transform hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100"
+        className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
       >
         {save.isPending && <Loader2 className="size-4 animate-spin" />}
         Save changes
@@ -212,54 +220,74 @@ function AccountForm({ profile, isOwner }: { profile: CurrentProfile | null; isO
   );
 }
 
-/** Your profile: who you are, a way into your stats, and your sign-in details. */
-export function AccountPage() {
-  const { data: auth } = useQuery({ queryKey: qk.authStatus, queryFn: fetchAuthStatus });
+/**
+ * Your details, on the Settings page's Personal chapter: your name, and for
+ * the owner the sign-in username and password. It used to be its own page
+ * behind "Profile" in the account menu.
+ */
+export function AccountSettingsSection() {
   const { profile, isOwner } = useProfile();
-  const username = profile?.name ?? auth?.user?.username ?? "";
+  return <AccountForm profile={profile} isOwner={isOwner} />;
+}
+
+/**
+ * The top of the Personal card: who you are and how you're protected, at a
+ * glance, so most visits don't need to read the forms underneath.
+ */
+export function PersonalSummary() {
+  const { profile, isOwner } = useProfile();
+  const { data: auth } = useQuery({ queryKey: qk.authStatus, queryFn: fetchAuthStatus });
+  const { data: privacy } = useQuery({ queryKey: qk.privacy, queryFn: fetchPrivacyStatus });
+  const { data: passkeys } = useQuery({ queryKey: qk.passkeys, queryFn: fetchPasskeys });
+
+  const username = auth?.user?.username ?? "";
   const name = profile ? displayName(profile) : username;
+  const handle = profile?.name ?? username;
+  const keys = passkeys?.length ?? 0;
+
+  const chips: { icon: LucideIcon; label: string; tone: "ok" | "warn" | "plain" }[] = [
+    isOwner
+      ? { icon: Crown, label: "Owner", tone: "plain" }
+      : { icon: KeyRound, label: profile?.hasPin ? "PIN set" : "No PIN", tone: profile?.hasPin ? "ok" : "plain" },
+    privacy?.hasPassword
+      ? { icon: ShieldCheck, label: "Privacy password set", tone: "ok" }
+      : { icon: ShieldOff, label: "No privacy password", tone: "warn" },
+    {
+      icon: Fingerprint,
+      label: keys ? `Touch ID on ${keys} ${keys === 1 ? "browser" : "browsers"}` : "No Touch ID",
+      tone: keys ? "ok" : "plain",
+    },
+  ];
 
   return (
-    <AppShell>
-      <div className="stagger mx-auto w-full max-w-2xl space-y-5 px-4 py-6 md:px-6 md:py-8">
-        <div className="flex items-center gap-4">
-          {profile ? (
-            <ProfileAvatar
-              name={profile.name}
-              color={profile.color}
-              className="size-12 rounded-full text-lg"
-            />
-          ) : (
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-secondary text-lg font-semibold ring-1 ring-border">
-              {name.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div className="min-w-0">
-            <h1 className="sensitive truncate text-xl font-bold tracking-tight">{name}</h1>
-            <p className="sensitive text-sm text-muted-foreground">
-              {name !== username ? `@${username}` : "Profile"}
-            </p>
-          </div>
-        </div>
-
-        <Link
-          to="/stats"
-          className="group flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:bg-secondary/40"
-        >
-          <BarChart3 className="size-5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium">Your stats</span>
-            <span className="block text-xs text-muted-foreground">
-              Hours watched, streaks and your year in review
-            </span>
-          </span>
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-        </Link>
-
-        {/* The sign-in account belongs to the owner; other profiles manage
-            their own name, colour and PIN under Settings → Profiles. */}
-        <AccountForm profile={profile} isOwner={isOwner} />
+    <div className="flex flex-col gap-4 bg-gradient-to-br from-primary/10 via-transparent to-transparent p-5 sm:flex-row sm:items-center md:p-6">
+      <ProfileAvatar
+        name={profile?.name ?? (username || "?")}
+        color={profile?.color}
+        className="size-16 shrink-0 rounded-full text-2xl ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="sensitive truncate text-lg font-semibold tracking-tight">{name || "\u00a0"}</p>
+        {handle && handle !== name && (
+          <p className="sensitive truncate text-sm text-muted-foreground">@{handle}</p>
+        )}
+        <ul className="mt-3 flex flex-wrap gap-1.5">
+          {chips.map(({ icon: Icon, label, tone }) => (
+            <li
+              key={label}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px]",
+                tone === "ok" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+                tone === "warn" && "border-amber-500/30 bg-amber-500/10 text-amber-400",
+                tone === "plain" && "border-border bg-secondary/50 text-muted-foreground",
+              )}
+            >
+              <Icon className="size-3" />
+              {label}
+            </li>
+          ))}
+        </ul>
       </div>
-    </AppShell>
+    </div>
   );
 }

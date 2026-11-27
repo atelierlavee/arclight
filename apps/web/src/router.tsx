@@ -9,7 +9,6 @@ import {
 } from "@tanstack/react-router";
 import { AppLayout } from "@/components/AppShell";
 import { RouteErrorFallback } from "@/components/RouteErrorFallback";
-import { AccountPage } from "@/pages/AccountPage";
 import { AlbumPage } from "@/pages/AlbumPage";
 import { AlbumsPage } from "@/pages/AlbumsPage";
 import { BrowsePage } from "@/pages/BrowsePage";
@@ -318,7 +317,10 @@ const tiersRoute = createRoute({
 const accountRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/account",
-  component: AccountPage,
+  // Your details live in Settings → Personal now; old links land there.
+  beforeLoad: () => {
+    throw redirect({ to: "/settings", search: { tab: "account" } });
+  },
 });
 
 const routeTree = rootRoute.addChildren([
