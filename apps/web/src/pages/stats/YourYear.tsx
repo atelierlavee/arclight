@@ -114,7 +114,7 @@ function MonthStory({
           <img src={thumbnailUrl(recap.mostWatched.item)} alt="" className="aspect-video w-28 shrink-0 rounded-lg object-cover" />
           <span className="min-w-0">
             <span className="block text-[11px] uppercase tracking-wider text-muted-foreground">On repeat</span>
-            <span className="sensitive line-clamp-2 block font-semibold">{recap.mostWatched.item.title}</span>
+            <span className="sensitive line-clamp-2 font-semibold">{recap.mostWatched.item.title}</span>
             <span className="text-xs text-muted-foreground">{formatWatchTime(recap.mostWatched.seconds)} watched</span>
           </span>
         </button>

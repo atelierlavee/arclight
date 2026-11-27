@@ -449,7 +449,7 @@ export function MediaPlayer({
             {seriesDetail.name} · S{nextEpisode.seasonNumber ?? 1}
             {nextEpisode.episodeNumber != null && ` E${nextEpisode.episodeNumber}`}
           </span>
-          <span className="sensitive line-clamp-2 block text-base font-bold leading-snug transition-colors group-hover:text-primary">
+          <span className="sensitive line-clamp-2 text-base font-bold leading-snug transition-colors group-hover:text-primary">
             {nextEpisode.episodeTitle || nextEpisode.title}
           </span>
           <span className="block text-[13px] text-zinc-500">

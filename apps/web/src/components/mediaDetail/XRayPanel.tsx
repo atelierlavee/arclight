@@ -101,7 +101,7 @@ export function XRayPanel({ performers, visible }: { performers: Performer[]; vi
                 </span>
                 {/* Name and details beside the portrait. */}
                 <span className="min-w-0 flex-1 pt-1">
-                  <span className="sensitive line-clamp-2 block text-sm font-semibold leading-snug text-white transition-colors group-hover:text-primary">
+                  <span className="sensitive line-clamp-2 text-sm font-semibold leading-snug text-white transition-colors group-hover:text-primary">
                     {performer.name}
                   </span>
                   <PerformerFacts id={performer.id} />

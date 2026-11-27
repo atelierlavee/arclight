@@ -16,7 +16,6 @@ import { TechnicalInfoPanel } from "../TechnicalInfoPanel";
 import { ThumbnailPicker } from "../ThumbnailPicker";
 import { FramingEditor, type FramingValue } from "../FramingEditor";
 import { BookmarkList } from "../BookmarkList";
-import { SeriesAssignment } from "../SeriesAssignment";
 import { NoteEditor } from "../NoteEditor";
 import { PerformerAvatar } from "../PerformerAvatar";
 import type { PerformerSummary } from "../PerformerCard";
@@ -28,26 +27,7 @@ import type { Marker } from "@/lib/markerApi";
 import type { Category } from "@/lib/categoryApi";
 import { setItemNote, thumbnailUrl, type MediaItemDetail, type VideoMetadata } from "@/lib/mediaItemApi";
 import { qk } from "@/lib/queryKeys";
-import { cardChrome, TILE_SHAPES } from "@/lib/layout";
-import { useAppearance } from "@/lib/appearance";
 import { cn } from "@/lib/utils";
-
-/**
- * The hero banner's shape, so reframing can preview it alongside the tiles.
- *
- * Derived from the viewport rather than a constant: the hero spans the full
- * width and a chosen fraction of the viewport height, so its ratio is a
- * property of the window and the setting, not of the card system. Falls back
- * to a typical wide banner when there is no window to measure, which keeps
- * this usable under test.
- */
-function heroAspect(heroHeightPercent: number): string {
-  if (typeof window === "undefined") return "16 / 5";
-  const height = (window.innerHeight * heroHeightPercent) / 100;
-  return height > 0 && window.innerWidth > 0
-    ? `${window.innerWidth} / ${height}`
-    : "16 / 5";
-}
 
 /**
  * A stored date as the viewer's own calendar day. A bare "YYYY-MM-DD" is
@@ -336,7 +316,6 @@ export function DetailsPanel({
   framingSaving: boolean;
   onSaveFraming: (next: FramingValue) => void;
 }) {
-  const { density, heroHeight } = useAppearance();
   const queryClient = useQueryClient();
   const galleryTotal = useGalleryTotal(item.id);
   const isVideo = item.itemType === "video";
@@ -553,23 +532,14 @@ export function DetailsPanel({
                         y: item.thumbnailPositionY,
                         scale: item.thumbnailScale,
                       }}
+                      // A video's thumbnail is landscape: one 16:9 frame to
+                      // drag and zoom, rather than a focal point checked
+                      // against every tile shape and the hero banner.
                       aspectClass="aspect-video"
-                      // Every shape this one value has to satisfy, rather
-                      // than the one tile shape that happens to be selected:
-                      // previewing a single frame left whichever axis it
-                      // does not crop impossible to drag. Ratios come from
-                      // cardChrome so tuning a tile shape moves these too.
-                      previews={[
-                        ...TILE_SHAPES.map((shape) => ({
-                          label: shape.label,
-                          aspectRatio: cardChrome(density, "none", shape.value).aspectRatio,
-                        })),
-                        { label: "Hero", aspectRatio: heroAspect(heroHeight) },
-                      ]}
                       saving={framingSaving}
                       onSave={onSaveFraming}
                       onCancel={() => setReframing(false)}
-                      note="Used everywhere this image appears — tile, hover card, search row and the hero banner."
+                      note="Drag and zoom to choose what the thumbnail shows."
                     />
                   ) : (
                     <button
@@ -584,7 +554,6 @@ export function DetailsPanel({
                 </div>
 
                 <FolderPicker itemId={item.id} parentId={item.parentId} />
-                {isVideo && <SeriesAssignment item={item} />}
               </div>
             )}
           </div>

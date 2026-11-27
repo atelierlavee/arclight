@@ -525,7 +525,7 @@ export function MediaCard({
               paddingTop: Math.max(6, chrome.paddingPx - 2),
             }}
           >
-            <span className="sensitive line-clamp-2 block text-xs font-medium leading-snug text-foreground">
+            <span className="sensitive line-clamp-2 text-xs font-medium leading-snug text-foreground">
               {item.title}
             </span>
             {item.performers && item.performers.length > 0 && (

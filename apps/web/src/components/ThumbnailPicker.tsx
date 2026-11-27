@@ -92,7 +92,7 @@ export function ThumbnailPicker({
       {error && <p className="text-[11px] text-destructive">{error}</p>}
       <p className="text-[11px] text-muted-foreground/70">
         {hasCustom
-          ? "Your image is shown on tiles and in the hero."
+          ? "Using your own image as the thumbnail."
           : "Using a frame from the video. Cropped to 16:9 on upload."}
       </p>
     </div>
