@@ -13,7 +13,6 @@ import {
   Server,
   DatabaseBackup,
   Wifi,
-  History,
   TriangleAlert,
   User,
   Lock,
@@ -31,7 +30,6 @@ import { NetworkSettingsSection } from "@/components/NetworkSettingsSection";
 import { PrivacySettingsSection } from "@/components/PrivacySettingsSection";
 import { AccountSettingsSection, PersonalSummary } from "@/components/AccountSettingsSection";
 import { AuthenticatorSettingsSection } from "@/components/AuthenticatorSettingsSection";
-import { ActivityLogSection } from "@/components/ActivityLogSection";
 import { cn } from "@/lib/utils";
 import { useIsOwner } from "@/lib/profile";
 import { ProfilesSettingsSection } from "@/components/ProfilesSettingsSection";
@@ -76,13 +74,6 @@ const TABS = [
     icon: Wifi,
     group: "server",
     description: "Whether other devices on your wifi can open this server.",
-  },
-  {
-    id: "activity",
-    label: "Activity",
-    icon: History,
-    group: "server",
-    description: "A history of what happened in your library.",
   },
 ] as const satisfies readonly {
   id: string;
@@ -177,7 +168,6 @@ const SETTINGS_INDEX: { tab: TabId; title: string; anchor: string; words: string
     anchor: settingsAnchor("Local network access"),
     words: "wifi phone tablet lan other devices qr",
   },
-  { tab: "activity", title: "Activity history", anchor: "activity-title", words: "log history changes audit" },
 ];
 
 type Tab = (typeof TABS)[number];
@@ -539,11 +529,6 @@ function Chapter({
       {id === "network" && (
         <SettingsGroup>
           <NetworkSettingsSection />
-        </SettingsGroup>
-      )}
-      {id === "activity" && (
-        <SettingsGroup layout="stacked">
-          <ActivityLogSection />
         </SettingsGroup>
       )}
     </section>

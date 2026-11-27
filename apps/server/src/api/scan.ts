@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
 import { scanJobs } from "../db/schema.js";
 import { isScanRunning, startScan } from "../scanner/pipeline.js";
+import { logActivity } from "../activity/log.js";
 
 export async function scanRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/scan", async (_request, reply) => {
@@ -26,6 +27,7 @@ export async function scanRoutes(app: FastifyInstance): Promise<void> {
       }
       throw err;
     }
+    await logActivity("scan", "Library scan started", { jobId: id });
     reply.code(202);
     return { id };
   });

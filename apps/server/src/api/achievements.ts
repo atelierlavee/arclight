@@ -4,6 +4,7 @@
 import type { FastifyInstance } from "fastify";
 import { profileId } from "../auth/profileContext.js";
 import { getProfileSetting, setProfileSetting } from "../library/profileSettings.js";
+import { logActivity } from "../activity/log.js";
 
 const ACHIEVEMENTS_KEY = "achievements";
 
@@ -43,16 +44,36 @@ export async function getAchievements(profile: number): Promise<AchievementRecor
  * Records ids not seen before, stamped now. An id already recorded keeps its
  * original date, so a second device reporting the same badge changes nothing.
  */
-export async function recordUnlocks(profile: number, ids: string[]): Promise<AchievementRecord> {
+export async function recordUnlocks(
+  profile: number,
+  ids: string[],
+  // Only the owner's badges go in the log: it's library-wide and the owner
+  // reads it, and another profile's progress is its own.
+  logIt = false,
+): Promise<AchievementRecord> {
   const current = await getAchievements(profile);
   const now = new Date().toISOString();
   const unlocked = { ...current.unlocked };
+  const fresh: string[] = [];
   for (const id of ids) {
     if (Object.keys(unlocked).length >= MAX_STORED) break;
-    if (!(id in unlocked)) unlocked[id] = now;
+    if (!(id in unlocked)) {
+      unlocked[id] = now;
+      fresh.push(id);
+    }
   }
   const value: AchievementRecord = { unlocked, seeded: true };
   await setProfileSetting(profile, ACHIEVEMENTS_KEY, value);
+  // Not on the first save: that one records badges earned before tracking
+  // existed, silently, and the log should stay as quiet as the toasts do.
+  // Badge titles are worked out in the browser, so the id is what's here.
+  if (logIt && current.seeded) {
+    for (const id of fresh) {
+      // "first-watch" → "First watch": the id is all the server has.
+      const name = id.replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+      await logActivity("achievement", `Achievement unlocked: ${name}`, { id });
+    }
+  }
   return value;
 }
 
@@ -69,6 +90,6 @@ export async function achievementRoutes(app: FastifyInstance): Promise<void> {
       reply.code(400);
       return { error: `ids must be up to ${MAX_IDS_PER_SAVE} non-empty strings` };
     }
-    return recordUnlocks(profileId(request), ids as string[]);
+    return recordUnlocks(profileId(request), ids as string[], request.profile?.isOwner === true);
   });
 }

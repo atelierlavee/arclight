@@ -196,6 +196,11 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
       )
       .returning({ id: playbackStates.id });
 
+    if (cleared.length > 0 && request.profile?.isOwner) await logActivity(
+      "watch",
+      "Cleared continue watching",
+      { cleared: cleared.length },
+    );
     return { cleared: cleared.length };
   });
 
@@ -238,6 +243,12 @@ export async function playbackRoutes(app: FastifyInstance): Promise<void> {
           .update(playbackStates)
           .set({ completedAt: null, positionSeconds: 0, updatedAt: new Date() })
           .where(and(eq(playbackStates.mediaItemId, mediaItemId), eq(playbackStates.profileId, profile)));
+        if (request.profile?.isOwner) await logActivity(
+          "watch",
+          `Marked "${item.title}" unwatched`,
+          { watched: false },
+          mediaItemId,
+        );
         return { ok: true, watched: false };
       }
 

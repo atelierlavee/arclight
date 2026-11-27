@@ -8,6 +8,7 @@ import { db } from "../db/client.js";
 import { mediaItems, oEvents, profileItemState } from "../db/schema.js";
 import { profileId } from "../auth/profileContext.js";
 import { hiddenGate } from "../library/visibility.js";
+import { logActivity } from "../activity/log.js";
 import { parseId } from "./mediaItemQueries.js";
 
 /**
@@ -25,18 +26,19 @@ export async function oCounterRoutes(app: FastifyInstance): Promise<void> {
     const id = parseId(rawId);
     if (id === null) return null;
     const [item] = await db
-      .select({ id: mediaItems.id })
+      .select({ id: mediaItems.id, title: mediaItems.title })
       .from(mediaItems)
       .where(and(eq(mediaItems.id, id), eq(mediaItems.inScope, true), hiddenGate(request)));
-    return item?.id ?? null;
+    return item ?? null;
   }
 
   app.post<{ Params: { id: string } }>("/api/media-items/:id/o", async (request, reply) => {
-    const id = await reachable(request, request.params.id);
-    if (id === null) {
+    const item = await reachable(request, request.params.id);
+    if (item === null) {
       reply.code(404);
       return { error: "Not found" };
     }
+    const id = item.id;
     const profile = profileId(request);
 
     // Serialised per profile and item so a double-click is two counts, not a
@@ -54,21 +56,26 @@ export async function oCounterRoutes(app: FastifyInstance): Promise<void> {
           .returning({ oCount: profileItemState.oCount });
         return state.oCount;
       });
+      // The owner's own count only: another profile's is its own business.
+      if (request.profile?.isOwner) {
+        await logActivity("o", `O added to "${item.title}"`, { oCount }, id);
+      }
       return { oCount };
     });
   });
 
   /** Takes back the most recent count, for a mis-click. Never goes below zero. */
   app.delete<{ Params: { id: string } }>("/api/media-items/:id/o", async (request, reply) => {
-    const id = await reachable(request, request.params.id);
-    if (id === null) {
+    const item = await reachable(request, request.params.id);
+    if (item === null) {
       reply.code(404);
       return { error: "Not found" };
     }
+    const id = item.id;
     const profile = profileId(request);
 
     return serialized(`o:${profile}:${id}`, async () => {
-      const oCount = await db.transaction(async (tx) => {
+      const { oCount, removed } = await db.transaction(async (tx) => {
         const [latest] = await tx
           .select({ id: oEvents.id })
           .from(oEvents)
@@ -82,8 +89,11 @@ export async function oCounterRoutes(app: FastifyInstance): Promise<void> {
           .set({ oCount: sql`greatest(${profileItemState.oCount} - ${latest ? 1 : 0}, 0)` })
           .where(and(eq(profileItemState.profileId, profile), eq(profileItemState.mediaItemId, id)))
           .returning({ oCount: profileItemState.oCount });
-        return state?.oCount ?? 0;
+        return { oCount: state?.oCount ?? 0, removed: Boolean(latest) };
       });
+      if (removed && request.profile?.isOwner) {
+        await logActivity("o", `O removed from "${item.title}"`, { oCount }, id);
+      }
       return { oCount };
     });
   });

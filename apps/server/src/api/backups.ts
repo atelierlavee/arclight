@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { serialized } from "../auth/serialize.js";
-import { rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
 import { privacyLocked } from "../auth/privacyUnlock.js";
 import { createBackup, listBackups, resolveBackupPath } from "../backup/create.js";
@@ -10,6 +10,7 @@ import { RestoreError, restoreBackup } from "../backup/restore.js";
 import { verifyBackup } from "../backup/verify.js";
 import { readRestoreMarker } from "../backup/restoreState.js";
 import { streamFile } from "../media/streamer.js";
+import { logActivity } from "../activity/log.js";
 
 /**
  * Backups, behind the privacy gate wherever it matters.
@@ -107,7 +108,16 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
       reply.code(400);
       return { error: "Invalid backup name" };
     }
+    // Checked first only for the log: deleting a name that isn't there stays a
+    // quiet success, but it isn't an event.
+    const existed = await stat(filePath).then(
+      () => true,
+      () => false,
+    );
     await rm(filePath, { force: true });
+    if (existed) {
+      await logActivity("backup", `Backup "${request.params.name}" deleted`, { name: request.params.name });
+    }
     return { ok: true };
   });
 }

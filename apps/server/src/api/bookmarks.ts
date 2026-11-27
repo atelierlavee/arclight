@@ -7,6 +7,7 @@ import { db } from "../db/client.js";
 import { bookmarks, mediaItems } from "../db/schema.js";
 import { hiddenGate, itemReachable } from "../library/visibility.js";
 import { profileId } from "../auth/profileContext.js";
+import { logActivity } from "../activity/log.js";
 
 const MAX_LABEL_LENGTH = 200;
 const MAX_NOTE_LENGTH = 4000;
@@ -26,6 +27,25 @@ function cleanLabel(label: string | null | undefined): string | null {
 function cleanNote(note: string | null | undefined): string | null {
   const trimmed = note?.trim().slice(0, MAX_NOTE_LENGTH);
   return trimmed ? trimmed : null;
+}
+
+/** 754 → "12:34", 3754 → "1:02:34": how the player shows a position. */
+function clock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+/** "12:34 · Intro", or just "12:34" for an unlabelled bookmark. */
+function bookmarkDetail(positionSeconds: number, label: string | null): string {
+  return label ? `${clock(positionSeconds)} · ${label}` : clock(positionSeconds);
+}
+
+async function itemTitle(id: number): Promise<string> {
+  const [row] = await db.select({ title: mediaItems.title }).from(mediaItems).where(eq(mediaItems.id, id));
+  return row?.title ?? "Untitled";
 }
 
 const columns = {
@@ -79,7 +99,7 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const [item] = await db
-      .select({ durationSeconds: mediaItems.durationSeconds })
+      .select({ durationSeconds: mediaItems.durationSeconds, title: mediaItems.title })
       .from(mediaItems)
       .where(and(eq(mediaItems.id, id), hiddenGate(request)));
     if (!item) {
@@ -104,6 +124,14 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
         note: cleanNote(note),
       })
       .returning(columns);
+
+    // Bookmarks are per profile: only the owner's own land in the log.
+    if (request.profile?.isOwner) await logActivity(
+      "bookmark",
+      `Bookmark added to "${item.title}": ${bookmarkDetail(created.positionSeconds, created.label)}`,
+      { bookmarkId: created.id, positionSeconds: created.positionSeconds, label: created.label },
+      id,
+    );
 
     reply.code(201);
     return created;
@@ -150,6 +178,18 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
         reply.code(404);
         return { error: "Not found" };
       }
+      if (request.profile?.isOwner) {
+        const changed = [
+          ...("label" in update ? [update.label ? "renamed" : "label cleared"] : []),
+          ...("note" in update ? [update.note ? "note updated" : "note cleared"] : []),
+        ];
+        await logActivity(
+          "bookmark",
+          `Bookmark on "${await itemTitle(updated.mediaItemId)}" updated: ${bookmarkDetail(updated.positionSeconds, updated.label)}`,
+          { bookmarkId: updated.id, positionSeconds: updated.positionSeconds, label: updated.label, changes: changed },
+          updated.mediaItemId,
+        );
+      }
       return updated;
     }
   );
@@ -163,10 +203,24 @@ export async function bookmarkRoutes(app: FastifyInstance): Promise<void> {
     const deleted = await db
       .delete(bookmarks)
       .where(and(eq(bookmarks.id, id), eq(bookmarks.profileId, profileId(request))))
-      .returning({ id: bookmarks.id });
+      .returning({
+        id: bookmarks.id,
+        mediaItemId: bookmarks.mediaItemId,
+        positionSeconds: bookmarks.positionSeconds,
+        label: bookmarks.label,
+      });
     if (deleted.length === 0) {
       reply.code(404);
       return { error: "Not found" };
+    }
+    if (request.profile?.isOwner) {
+      const [gone] = deleted;
+      await logActivity(
+        "bookmark",
+        `Bookmark removed from "${await itemTitle(gone.mediaItemId)}": ${bookmarkDetail(gone.positionSeconds, gone.label)}`,
+        { bookmarkId: gone.id, positionSeconds: gone.positionSeconds, label: gone.label },
+        gone.mediaItemId,
+      );
     }
     return { ok: true };
   });

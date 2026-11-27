@@ -8,6 +8,7 @@ import { markUnlocked } from "../auth/privacyUnlock.js";
 import { profileId, unlockKey } from "../auth/profileContext.js";
 import { proveProfile } from "../auth/profileProof.js";
 import { sweeper } from "../auth/sweep.js";
+import { logActivity } from "../activity/log.js";
 import {
   deleteProfileSetting,
   getProfileSetting,
@@ -90,9 +91,15 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
         return failure;
       }
 
+      // Only the owner's changes reach the activity log, as with the vault:
+      // it is library-wide and the owner reads it.
+      const log = request.profile?.isOwner ? logActivity : async () => {};
+      const had = (await getPrivacyHash(profile)) !== null;
+
       // An empty password clears it — discreet mode then unlocks freely.
       if (!password) {
         await setPrivacyPassword(profile, null);
+        if (had) await log("privacy", "Privacy password removed");
         return { hasPassword: false };
       }
 
@@ -102,6 +109,7 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
       }
 
       await setPrivacyPassword(profile, password);
+      await log("privacy", had ? "Privacy password changed" : "Privacy password set");
       return { hasPassword: true };
     }
   );
@@ -141,6 +149,7 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
         blockedUntil: count >= MAX_ATTEMPTS ? Date.now() + LOCKOUT_MS : 0,
         lastAt: Date.now(),
       });
+      if (request.profile?.isOwner) await logActivity("privacy", "Failed privacy lock unlock attempt");
       reply.code(403);
       return { ok: false, error: "Wrong password", attemptsLeft: Math.max(0, MAX_ATTEMPTS - count) };
     }
@@ -149,6 +158,7 @@ export async function privacyRoutes(app: FastifyInstance): Promise<void> {
     // Remembered for a while, so endpoints that guard something destructive
     // can ask whether this session has actually proved anything.
     markUnlocked(sessionId);
+    if (request.profile?.isOwner) await logActivity("privacy", "Privacy lock unlocked");
     return { ok: true };
   }));
 }

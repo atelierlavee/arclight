@@ -8,6 +8,7 @@ import { mediaItems, performers, profileItemState, profilePerformerState } from 
 import { profileId } from "../auth/profileContext.js";
 import { hiddenGate, visibleItemsSql } from "../library/visibility.js";
 import { itemNotHidden } from "../library/profileState.js";
+import { logActivity } from "../activity/log.js";
 
 /** Best first. */
 export const TIERS = ["S", "A", "B", "C", "D"] as const;
@@ -198,6 +199,11 @@ export async function tierRoutes(app: FastifyInstance): Promise<void> {
       }
     });
 
+    // Each profile has its own tier list; only the owner's goes in the log.
+    if (request.profile?.isOwner) await logActivity("metadata", `Tier list saved: ${kind === "performer" ? "performers" : "videos"}`, {
+      kind,
+      ranked: known.size,
+    });
     return { ok: true, ranked: [...known].length };
   });
 }

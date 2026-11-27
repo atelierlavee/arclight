@@ -9,6 +9,7 @@ import { libraries, mediaItemTypes, mediaItems } from "../db/schema.js";
 import { notHidden } from "../library/visibility.js";
 
 import { profileId } from "../auth/profileContext.js";
+import { logActivity } from "../activity/log.js";
 export async function folderRoutes(app: FastifyInstance): Promise<void> {
   // Flat list of every folder (id + title + parentId) — used by the "move to
   // folder" picker. There's no per-library scoping UI yet (single library,
@@ -89,6 +90,7 @@ export async function folderRoutes(app: FastifyInstance): Promise<void> {
         })
         .returning();
 
+      await logActivity("library", `Folder "${folder.title}" created`, { parentId: folder.parentId }, folder.id);
       reply.code(201);
       return folder;
     }

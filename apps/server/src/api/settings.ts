@@ -9,6 +9,7 @@ import { appSettings } from "../db/schema.js";
 import { restartScanSchedule } from "../scanner/schedule.js";
 import { forgetLanExposure, inContainer, lanAddresses, lanPort } from "../net/lan.js";
 import { isId } from "./mediaItemQueries.js";
+import { logActivity } from "../activity/log.js";
 
 /** More than any hero carousel shows; bounds what one save can store. */
 const MAX_HERO_ITEMS = 100;
@@ -232,8 +233,12 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const result: Record<string, unknown> = {};
+      // What actually changed, for the activity log: plain values, nothing secret.
+      const changes: string[] = [];
+      const changed: Record<string, unknown> = {};
 
       if (touchesNetwork) {
+        const before = await getNetworkSettings();
         const network = await setNetworkSettings(body.network!.lanExposed as boolean);
         // Pushed into the guard's cache rather than just clearing it, so the
         // very next request is judged by the new value with no extra query.
@@ -244,15 +249,27 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
           port: lanPort(),
           containerised: inContainer(),
         };
+        if (before.lanExposed !== network.lanExposed) {
+          changes.push(network.lanExposed ? "LAN access on" : "LAN access off");
+          changed["network.lanExposed"] = network.lanExposed;
+        }
       }
 
       if (touchesScan) {
+        const before = await getScanSettings();
         // An interval off the allow-list is coerced to the default by
         // setScanSettings, deliberately (see routes.test.ts).
-        result.scan = await setScanSettings(body.scan!.intervalMinutes as number);
+        const scan = await setScanSettings(body.scan!.intervalMinutes as number);
+        result.scan = scan;
         // Applied immediately rather than at next boot — changing the interval
         // and having nothing happen for an hour would read as broken.
         await restartScanSchedule();
+        if (before.intervalMinutes !== scan.intervalMinutes) {
+          changes.push(
+            scan.intervalMinutes === 0 ? "automatic scans off" : `scan every ${scan.intervalMinutes} min`,
+          );
+          changed["scan.intervalMinutes"] = scan.intervalMinutes;
+        }
       }
 
       if (touchesHero) {
@@ -274,8 +291,22 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
             set: { value, updatedAt: new Date() },
           });
         result.hero = value;
+        if (current.source !== value.source) {
+          changes.push(`homepage hero → ${value.source}`);
+          changed["hero.source"] = value.source;
+        }
+        if (current.itemIds.join(",") !== value.itemIds.join(",")) {
+          changes.push("homepage hero items");
+          changed["hero.itemIds"] = value.itemIds;
+        }
       }
 
+      if (changes.length > 0) {
+        await logActivity("settings", `Settings changed: ${changes.join(", ")}`, {
+          fields: Object.keys(changed),
+          values: changed,
+        });
+      }
       return result;
     }
   );

@@ -394,7 +394,7 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Puts an item on this profile's Watch Later list, or takes it off.
    * Per profile, like favourites: one person's to-do is nobody else's.
-   * Not logged — the activity log is the library's, read by the owner.
+   * Logged for the owner only — the activity log is the library's, read by the owner.
    */
   app.put<{ Params: { id: string }; Body: { watchLater: boolean } }>(
     "/api/media-items/:id/watch-later",
@@ -411,7 +411,7 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const [item] = await db
-        .select({ id: mediaItems.id })
+        .select({ id: mediaItems.id, title: mediaItems.title })
         .from(mediaItems)
         .where(and(eq(mediaItems.id, id), hiddenGate(request)));
       if (!item) {
@@ -421,13 +421,21 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
 
       const watchLaterAt = watchLater ? new Date() : null;
       await setItemState(profileId(request), id, { watchLaterAt });
+      // The owner's list only: another profile's to-do is its own.
+      if (request.profile?.isOwner) await logActivity(
+        "watch",
+        watchLater ? `Added to watch later "${item.title}"` : `Removed from watch later "${item.title}"`,
+        { watchLater },
+        id,
+      );
       return { ok: true, watchLater, watchLaterAt };
     },
   );
 
   /**
    * Sets this profile's private note on an item; null or "" clears it.
-   * Never logged: a note is the most personal thing a profile writes.
+   * Logged for the owner only, without the text: a note is the most
+   * personal thing a profile writes.
    */
   app.put<{ Params: { id: string }; Body: { note: string | null } }>(
     "/api/media-items/:id/note",
@@ -443,7 +451,7 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
         return { error: parsed.error };
       }
       const [item] = await db
-        .select({ id: mediaItems.id })
+        .select({ id: mediaItems.id, title: mediaItems.title })
         .from(mediaItems)
         .where(and(eq(mediaItems.id, id), hiddenGate(request)));
       if (!item) {
@@ -451,6 +459,14 @@ export async function mediaItemEditRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Not found" };
       }
       await setItemState(profileId(request), id, { note: parsed.note });
+      // The owner's notes only, and never their text: the log records that a
+      // note changed, not what it says.
+      if (request.profile?.isOwner) await logActivity(
+        "note",
+        parsed.note ? `Note on "${item.title}" updated` : `Note on "${item.title}" cleared`,
+        { cleared: !parsed.note },
+        id,
+      );
       return { ok: true, note: parsed.note };
     },
   );

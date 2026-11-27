@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { isAuthorisedCastStream } from "../auth/castTokens.js";
 import { canSeeHidden, hiddenGate, viewerProfile } from "../library/visibility.js";
 import { db } from "../db/client.js";
+import { logActivity } from "../activity/log.js";
 import { libraryRoots, mediaFiles, mediaItems, mediaItemTypes } from "../db/schema.js";
 import {
   deleteItemThumbnail,
@@ -487,6 +488,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
       // stray file rather than a broken reference.
       await deleteItemThumbnail(previous);
 
+      await logActivity("edit", `Thumbnail uploaded for "${item.title}"`, undefined, id);
       return { ok: true, thumbnailFile: fileName };
     })
   );
@@ -511,6 +513,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(mediaItems.id, id));
       await deleteItemThumbnail(item.thumbnailFile);
 
+      await logActivity("edit", `Thumbnail reset for "${item.title}"`, undefined, id);
       return { ok: true };
     })
   );

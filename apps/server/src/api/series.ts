@@ -16,6 +16,7 @@ import {
 } from "../db/schema.js";
 
 import { profileId } from "../auth/profileContext.js";
+import { logActivity } from "../activity/log.js";
 import { playbackJoin } from "./mediaItemQueries.js";
 import { suggestSeries } from "../library/seriesSuggestions.js";
 import { serialized } from "../auth/serialize.js";
@@ -43,6 +44,7 @@ export async function seriesRoutes(app: FastifyInstance): Promise<void> {
       .onConflictDoNothing()
       .returning();
     if (created) {
+      await logActivity("metadata", `Story "${created.name}" created`, { seriesId: created.id });
       reply.code(201);
       return created;
     }
@@ -173,6 +175,7 @@ export async function seriesRoutes(app: FastifyInstance): Promise<void> {
       await db.update(series).set({ coverFile: fileName, updatedAt: new Date() }).where(eq(series.id, id));
       // Only once the row points at the new file.
       await deleteSeriesCover(entity.coverFile);
+      await logActivity("metadata", `Story "${entity.name}": cover uploaded`, { seriesId: id });
       return { ok: true, coverFile: fileName };
     }),
   );
@@ -188,6 +191,9 @@ export async function seriesRoutes(app: FastifyInstance): Promise<void> {
       }
       await db.update(series).set({ coverFile: null, updatedAt: new Date() }).where(eq(series.id, id));
       await deleteSeriesCover(entity.coverFile);
+      if (entity.coverFile) {
+        await logActivity("metadata", `Story "${entity.name}": cover removed`, { seriesId: id });
+      }
       return { ok: true };
     }),
   );

@@ -22,6 +22,7 @@ import { normalizeName } from "../scanner/performerNames.js";
 
 import { serialized } from "../auth/serialize.js";
 import { profileId } from "../auth/profileContext.js";
+import { logActivity } from "../activity/log.js";
 import { performerIsFavorite } from "../library/profileState.js";
 import { followedStudioIds, studioFollowedAt } from "../library/following.js";
 import { isId, playbackJoin } from "./mediaItemQueries.js";
@@ -340,6 +341,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
     }
     try {
       const [created] = await db.insert(studios).values({ name, parentId, origin: "user" }).returning();
+      await logActivity("metadata", `Studio "${created.name}" created`, { studioId: created.id, parentId });
       reply.code(201);
       return { studio: created };
     } catch (error) {
@@ -368,6 +370,7 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
       const body = request.body ?? {};
 
       const parentId = body.parentId;
+      let parentName: string | null = null;
       if (parentId !== undefined && parentId !== null) {
         if (!isId(parentId)) {
           reply.code(400);
@@ -387,22 +390,25 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
           reply.code(400);
           return { error: `"${parent.name}" is already under "${studio.name}", so it cannot also be above it` };
         }
+        parentName = parent.name;
       }
 
       const defaultCategoryId = body.defaultCategoryId;
+      let categoryLabel: string | null = null;
       if (defaultCategoryId !== undefined && defaultCategoryId !== null) {
         if (!isId(defaultCategoryId)) {
           reply.code(400);
           return { error: "defaultCategoryId must be a category id or null" };
         }
         const [category] = await db
-          .select({ id: categories.id })
+          .select({ id: categories.id, label: categories.label })
           .from(categories)
           .where(eq(categories.id, defaultCategoryId));
         if (!category) {
           reply.code(400);
           return { error: "That category does not exist" };
         }
+        categoryLabel = category.label;
       }
 
       if (parentId === undefined && defaultCategoryId === undefined) {
@@ -418,6 +424,19 @@ export async function studioRoutes(app: FastifyInstance): Promise<void> {
         })
         .where(eq(studios.id, id));
       const refiled = await refileStudio(id);
+      const changes: string[] = [];
+      if (parentId !== undefined) {
+        changes.push(parentName === null ? "taken out of its network" : `network set to ${parentName}`);
+      }
+      if (defaultCategoryId !== undefined) {
+        changes.push(categoryLabel === null ? "category follows its network" : `filed under ${categoryLabel}`);
+      }
+      await logActivity("metadata", `Studio "${studio.name}": ${changes.join(", ")}`, {
+        studioId: id,
+        ...(parentId !== undefined ? { parentId } : {}),
+        ...(defaultCategoryId !== undefined ? { defaultCategoryId } : {}),
+        refiled,
+      });
       return { ok: true, refiled };
     }),
   );

@@ -4,6 +4,7 @@
 import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db/client.js";
+import { logActivity } from "../activity/log.js";
 import { profiles } from "../db/schema.js";
 import { hashPassword, verifyPassword } from "../auth/passwords.js";
 import { serialized } from "../auth/serialize.js";
@@ -212,19 +213,27 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Not found" };
       }
       if (row.pinHash !== null && !(await checkPin(request, reply, row.pinHash, request.body?.pin))) {
+        // A wrong PIN, not a lockout (429): only actual guesses are events.
+        if (reply.statusCode === 403) {
+          await logActivity("profile", `Wrong PIN entered for profile "${row.name}"`, { profileId: row.id });
+        }
         return reply;
       }
       const sessionId = request.user!.sessionId;
       clearUnlocks(sessionId);
       await setSessionProfile(sessionId, row.id);
+      await logActivity("profile", `Switched to profile "${row.name}"`, { profileId: row.id });
       return { profile: present(row) };
     }),
   );
 
   app.post("/api/profiles/deselect", async (request) => {
     const sessionId = request.user!.sessionId;
+    const leaving = request.profile;
     clearUnlocks(sessionId);
     await setSessionProfile(sessionId, null);
+    // A real switch-out back to the picker; nothing to say when none was picked.
+    if (leaving) await logActivity("profile", `Left profile "${leaving.name}"`, { profileId: leaving.id });
     return { ok: true };
   });
 
@@ -262,6 +271,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
         .insert(profiles)
         .values({ userId, name: named.name, color, position: maxPosition + 1 })
         .returning();
+      await logActivity("profile", `Profile "${created.name}" created`, { profileId: created.id });
       reply.code(201);
       return { profile: present(created) };
     }),
@@ -359,6 +369,21 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
         return { error: "Nothing to update" };
       }
       const [updated] = await db.update(profiles).set(patch).where(eq(profiles.id, row.id)).returning();
+      // Only what actually changed, named rather than valued — except a
+      // rename, which says what to.
+      const labels: Record<string, string> = {
+        firstName: "first name",
+        lastName: "last name",
+        color: "colour",
+      };
+      const changed = (Object.keys(patch) as (keyof typeof patch)[]).filter((key) => patch[key] !== row[key]);
+      if (changed.length > 0) {
+        const parts = changed.map((key) => (key === "name" ? `renamed to "${updated.name}"` : labels[key] ?? key));
+        await logActivity("profile", `Profile "${row.name}" changed: ${parts.join(", ")}`, {
+          profileId: row.id,
+          fields: changed,
+        });
+      }
       return { profile: present(updated) };
     },
   );
@@ -380,6 +405,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       return { error: "The owner profile cannot be deleted" };
     }
     await db.delete(profiles).where(eq(profiles.id, row.id));
+    await logActivity("profile", `Profile "${row.name}" deleted`, { profileId: row.id });
     return { ok: true };
   });
 
@@ -410,6 +436,9 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     const self = row.id === request.profile?.id;
     if (self) {
       if (row.pinHash !== null && !(await checkPin(request, reply, row.pinHash, body.currentPin))) {
+        if (reply.statusCode === 403) {
+          await logActivity("profile", `Wrong PIN entered for profile "${row.name}"`, { profileId: row.id });
+        }
         return reply;
       }
     } else {
@@ -425,6 +454,8 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
 
     const pinHash = newPin === null ? null : await hashPassword(newPin);
     await db.update(profiles).set({ pinHash }).where(eq(profiles.id, row.id));
+    const verb = pinHash === null ? "removed" : row.pinHash === null ? "set" : self ? "changed" : "reset";
+    await logActivity("profile", `PIN ${verb} for profile "${row.name}"`, { profileId: row.id });
     return { hasPin: pinHash !== null };
   });
 
@@ -454,6 +485,14 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     }
     if (body.vaultPin === true) await setVaultPin(row.id, null);
     if (body.privacyPassword === true) await setPrivacyPassword(row.id, null);
+    const cleared = [
+      ...(body.vaultPin === true ? ["vault PIN"] : []),
+      ...(body.privacyPassword === true ? ["privacy password"] : []),
+    ];
+    await logActivity("profile", `Reset ${cleared.join(" and ")} for profile "${row.name}"`, {
+      profileId: row.id,
+      cleared,
+    });
     return { ok: true };
   });
 }

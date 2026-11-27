@@ -13,6 +13,7 @@ import {
   studios,
 } from "../db/schema.js";
 import { profileId } from "../auth/profileContext.js";
+import { logActivity } from "../activity/log.js";
 import { itemFromFollowed, setPerformerFollowed, setStudioFollowed } from "../library/following.js";
 import { awaitingApproval, reachableItems, visibleItems, visibleItemsSql } from "../library/visibility.js";
 import { itemNote } from "../library/profileState.js";
@@ -63,12 +64,21 @@ export async function followingRoutes(app: FastifyInstance): Promise<void> {
         return { error: "follow must be a boolean" };
       }
       const [performer] =
-        id === null ? [] : await db.select({ id: performers.id }).from(performers).where(eq(performers.id, id));
+        id === null ? [] : await db
+              .select({ id: performers.id, name: performers.name })
+              .from(performers)
+              .where(eq(performers.id, id));
       if (!performer) {
         reply.code(404);
         return { error: "Not found" };
       }
       const followedAt = await setPerformerFollowed(profileId(request), performer.id, follow);
+      // The owner's follows only: whom another profile follows is its own.
+      if (request.profile?.isOwner) await logActivity(
+        "follow",
+        follow ? `Followed "${performer.name}"` : `Unfollowed "${performer.name}"`,
+        { performerId: performer.id, follow },
+      );
       return { ok: true, followedAt };
     },
   );
@@ -83,12 +93,17 @@ export async function followingRoutes(app: FastifyInstance): Promise<void> {
         return { error: "follow must be a boolean" };
       }
       const [studio] =
-        id === null ? [] : await db.select({ id: studios.id }).from(studios).where(eq(studios.id, id));
+        id === null ? [] : await db.select({ id: studios.id, name: studios.name }).from(studios).where(eq(studios.id, id));
       if (!studio) {
         reply.code(404);
         return { error: "Not found" };
       }
       const followedAt = await setStudioFollowed(profileId(request), studio.id, follow);
+      if (request.profile?.isOwner) await logActivity(
+        "follow",
+        follow ? `Followed "${studio.name}"` : `Unfollowed "${studio.name}"`,
+        { studioId: studio.id, follow },
+      );
       return { ok: true, followedAt };
     },
   );

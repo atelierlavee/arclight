@@ -9,6 +9,7 @@ import { db } from "../db/client.js";
 import { collectionItems, collections, mediaItemTypes, mediaItems } from "../db/schema.js";
 import { playbackWarningFor } from "../media/compatibility.js";
 import { isId, parseId, parsePage } from "./mediaItemQueries.js";
+import { logActivity } from "../activity/log.js";
 
 import { profileId } from "../auth/profileContext.js";
 const PAGE_SIZE = 50;
@@ -90,6 +91,12 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
       })
       .returning();
 
+    await logActivity(
+      "collection",
+      `${type === "smart" ? "Smart collection" : "Collection"} "${collection.name}" created`,
+      { collectionId: collection.id, type },
+    );
+
     reply.code(201);
     return collection;
   });
@@ -117,6 +124,9 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
       reply.code(404);
       return { error: "Not found" };
     }
+    await logActivity("collection", `Collection "${deleted[0].name}" deleted`, {
+      collectionId: id,
+    });
     return { ok: true };
   });
 
@@ -207,7 +217,7 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
       // Checked up front rather than left to the foreign key, which would
       // surface an unknown id as a 500.
       const [item] = await db
-        .select({ id: mediaItems.id })
+        .select({ id: mediaItems.id, title: mediaItems.title })
         .from(mediaItems)
         .where(eq(mediaItems.id, mediaItemId));
       if (!item) {
@@ -220,10 +230,20 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
         .from(collectionItems)
         .where(eq(collectionItems.collectionId, collectionId));
 
-      await db
+      const inserted = await db
         .insert(collectionItems)
         .values({ collectionId, mediaItemId, position: nextPos })
-        .onConflictDoNothing();
+        .onConflictDoNothing()
+        .returning({ id: collectionItems.mediaItemId });
+      // Already a member is a no-op, not an event.
+      if (inserted.length > 0) {
+        await logActivity(
+          "collection",
+          `"${item.title}" added to collection "${collection.name}"`,
+          { collectionId, collectionName: collection.name },
+          mediaItemId,
+        );
+      }
 
       reply.code(201);
       return { ok: true };
@@ -239,14 +259,30 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
         reply.code(404);
         return { error: "Not found" };
       }
-      await db
+      const removed = await db
         .delete(collectionItems)
         .where(
           and(
             eq(collectionItems.collectionId, collectionId),
             eq(collectionItems.mediaItemId, mediaItemId)
           )
-        );
+        )
+        .returning({ id: collectionItems.mediaItemId });
+      if (removed.length > 0) {
+        const [names] = await db
+          .select({ title: mediaItems.title, collectionName: collections.name })
+          .from(mediaItems)
+          .innerJoin(collections, eq(collections.id, collectionId))
+          .where(eq(mediaItems.id, mediaItemId));
+        if (names) {
+          await logActivity(
+            "collection",
+            `"${names.title}" removed from collection "${names.collectionName}"`,
+            { collectionId, collectionName: names.collectionName },
+            mediaItemId,
+          );
+        }
+      }
       return { ok: true };
     }
   );
@@ -303,6 +339,10 @@ export async function collectionRoutes(app: FastifyInstance): Promise<void> {
           where ${collectionItems.collectionId} = ${collectionId}
             and ${collectionItems.mediaItemId} = ordered.media_item_id
         `);
+        await logActivity("collection", `Collection "${collection.name}" reordered`, {
+          collectionId,
+          count: orderedIds.length,
+        });
       }
 
       return { ok: true };

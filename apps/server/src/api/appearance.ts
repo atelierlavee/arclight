@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { serialized } from "../auth/serialize.js";
 import { profileId } from "../auth/profileContext.js";
 import { getProfileSetting, setProfileSetting } from "../library/profileSettings.js";
+import { logActivity } from "../activity/log.js";
 
 const APPEARANCE_KEY = "appearance";
 
@@ -163,8 +164,20 @@ export async function appearanceRoutes(app: FastifyInstance): Promise<void> {
     // Read-merge-write, so two saves from one profile must not interleave or
     // the second would drop the first's keys.
     return serialized(`appearance:${id}`, async () => {
-      const value = { ...clean(await getProfileSetting(id, APPEARANCE_KEY)), ...clean(request.body) };
+      const stored = clean(await getProfileSetting(id, APPEARANCE_KEY));
+      const value = { ...stored, ...clean(request.body) };
       await setProfileSetting(id, APPEARANCE_KEY, value);
+      // Clients send the whole set on every save, so only keys whose value
+      // really moved are logged, and a save that changed nothing is not.
+      const changed = Object.keys(value).filter(
+        (key) => JSON.stringify(stored[key]) !== JSON.stringify(value[key]),
+      );
+      if (changed.length > 0) {
+        await logActivity("settings", `Appearance changed: ${changed.join(", ")}`, {
+          fields: changed,
+          profile: request.profile?.name ?? null,
+        });
+      }
       return { appearance: value };
     });
   });

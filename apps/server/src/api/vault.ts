@@ -190,6 +190,7 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
       fail(record, MAX_ATTEMPTS, now);
       sessionAttempts.set(sessionId, record);
       fail(globalAttempts, MAX_GLOBAL_ATTEMPTS, now);
+      if (request.profile?.isOwner) await logActivity("vault", "Failed vault unlock attempt");
       reply.code(403);
       return {
         ok: false,
@@ -203,12 +204,17 @@ export async function vaultRoutes(app: FastifyInstance): Promise<void> {
     // else's vault, so it must not buy fresh guesses at theirs.
     sessionAttempts.delete(sessionId);
     unlockVault(sessionId);
+    if (request.profile?.isOwner) await logActivity("vault", "Vault unlocked");
     return { ok: true };
   }));
 
   app.post("/api/vault/lock", async (request) => {
     const key = unlockKey(request);
+    // Logged only when it was open: the client also locks defensively, and
+    // locking a locked vault is not an event.
+    const wasOpen = key !== null && isVaultUnlocked(key);
     if (key) lockVault(key);
+    if (wasOpen && request.profile?.isOwner) await logActivity("vault", "Vault locked");
     return { ok: true };
   });
 

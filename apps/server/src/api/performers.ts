@@ -693,6 +693,11 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       // stray file rather than a broken reference.
       await deletePerformerImage(previous);
 
+      await logActivity(
+        "performer",
+        `${kind === "banner" ? "Banner" : "Photo"} uploaded for "${performer.name}"`,
+        { performerId: id, kind },
+      );
       return { ok: true, kind };
     })
   );
@@ -716,6 +721,12 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(performers.id, id));
       await deletePerformerImage(previous);
 
+      // Nothing to remove is not an event.
+      if (previous) await logActivity(
+        "performer",
+        `${kind === "banner" ? "Banner" : "Photo"} removed from "${performer.name}"`,
+        { performerId: id, kind },
+      );
       return { ok: true, kind };
     })
   );
@@ -912,6 +923,29 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const [updated] = await db.select().from(performers).where(eq(performers.id, id));
+
+      // Only the owner's edits: a non-owner can only favourite, and their
+      // favourites are their own business, not the library's log.
+      if (request.profile?.isOwner) {
+        const changes: string[] = [];
+        if (partial.name !== undefined && partial.name !== existing.name) changes.push(`name → "${partial.name}"`);
+        if (bio !== undefined) changes.push(partial.bio ? "bio updated" : "bio cleared");
+        if (isFavorite !== undefined) changes.push(isFavorite ? "favorited" : "unfavorited");
+        if (archived !== undefined) changes.push(archived ? "archived" : "unarchived");
+        for (const [field, value] of Object.entries(details.value)) {
+          changes.push(value === null ? `${field} cleared` : `${field} → ${String(value)}`);
+        }
+        // Photo framing isn't logged: each drag of the frame saves, and a
+        // line per drag would bury everything else.
+        if (changes.length > 0) {
+          await logActivity(
+            "performer",
+            `Edited "${updated.name}": ${changes.join(", ")}`,
+            { performerId: id, fields: changes },
+          );
+        }
+      }
+
       // Answered with this profile's favourite folded in, under the name the
       // column used to have.
       return { performer: { ...updated, isFavorite: (await performerStateFor(profile, id)).isFavorite } };
@@ -987,12 +1021,21 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
         reply.code(404);
         return { error: "Not found" };
       }
-      const [existing] = await db.select({ id: performers.id }).from(performers).where(eq(performers.id, id));
+      const [existing] = await db
+        .select({ id: performers.id, name: performers.name })
+        .from(performers)
+        .where(eq(performers.id, id));
       if (!existing) {
         reply.code(404);
         return { error: "Not found" };
       }
       await setPerformerNote(profileId(request), id, parsed.note);
+      // The owner's notes only, and never their text.
+      if (request.profile?.isOwner) await logActivity(
+        "note",
+        parsed.note ? `Note on "${existing.name}" updated` : `Note on "${existing.name}" cleared`,
+        { performerId: id, cleared: !parsed.note },
+      );
       return { ok: true, note: parsed.note };
     },
   );
@@ -1031,6 +1074,12 @@ export async function performerRoutes(app: FastifyInstance): Promise<void> {
     // transaction that then rolled back could not be put back.
     await deletePerformerImage(result.existing.imageFile);
     await deletePerformerImage(result.existing.bannerFile);
+
+    await logActivity(
+      "performer",
+      `Deleted performer "${result.existing.name}"`,
+      { performerId: id, unlinkedCount: result.unlinkedCount },
+    );
 
     // Worth surfacing in the UI: a performer derived from a folder comes back
     // on the next scan for any item still marked 'scanner'. That's correct —

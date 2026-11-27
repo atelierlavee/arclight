@@ -1,10 +1,10 @@
 // Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type FastifyInstance } from "fastify";
 import { db } from "../db/client.js";
-import { mediaItems } from "../db/schema.js";
+import { categories, mediaItems } from "../db/schema.js";
 import { visibleItems } from "../library/visibility.js";
 import { deleteKindCover, kindCoverPath, saveKindCover } from "../media/kindCovers.js";
 import { streamFile } from "../media/streamer.js";
@@ -12,6 +12,13 @@ import { categorySlugs } from "./mediaItemQueries.js";
 import { getKindCovers, kindCoverFor, setKindCover } from "./settings.js";
 
 import { profileId } from "../auth/profileContext.js";
+import { logActivity } from "../activity/log.js";
+/** The category's visible name for the log, falling back to its slug. */
+async function kindLabel(kind: string): Promise<string> {
+  const [row] = await db.select({ label: categories.label }).from(categories).where(eq(categories.slug, kind));
+  return row?.label ?? kind;
+}
+
 export async function kindRoutes(app: FastifyInstance): Promise<void> {
   // Backs the category tiles on the home page.
   app.get("/api/kinds", async (request) => {
@@ -94,6 +101,7 @@ export async function kindRoutes(app: FastifyInstance): Promise<void> {
     // a stray file rather than a broken reference.
     await deleteKindCover(previous);
 
+    await logActivity("metadata", `Section "${await kindLabel(kind)}": cover uploaded`, { kind });
     return { ok: true };
   });
 
@@ -106,6 +114,9 @@ export async function kindRoutes(app: FastifyInstance): Promise<void> {
     const previous = kindCoverFor(await getKindCovers(), kind);
     await setKindCover(kind, null);
     await deleteKindCover(previous);
+    if (previous) {
+      await logActivity("metadata", `Section "${await kindLabel(kind)}": cover removed`, { kind });
+    }
     return { ok: true };
   });
 }

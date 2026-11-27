@@ -1,9 +1,9 @@
 // Copyright 2026 atelierlavee
 // SPDX-License-Identifier: Apache-2.0
 
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, sql, type SQL } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { activityEvents } from "../db/schema.js";
+import { activityEvents, mediaItems } from "../db/schema.js";
 
 export type ActivityType =
   | "scan"
@@ -19,7 +19,17 @@ export type ActivityType =
   | "tag"
   | "performer"
   | "hide"
-  | "vault";
+  | "vault"
+  // Added with "record everything":
+  | "o"
+  | "bookmark"
+  | "note"
+  | "inbox"
+  | "follow"
+  | "account"
+  | "profile"
+  | "settings"
+  | "achievement";
 
 export async function logActivity(
   type: ActivityType,
@@ -42,7 +52,10 @@ export async function logActivity(
  */
 export async function listActivity(limit = 100, type?: string, hiddenFor: number | null = null) {
   const conditions: SQL[] = [];
-  if (type) conditions.push(eq(activityEvents.type, type));
+  // One type, or several comma-separated: the page's filters are groups.
+  const types = (type ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+  if (types.length === 1) conditions.push(eq(activityEvents.type, types[0]));
+  else if (types.length > 1) conditions.push(inArray(activityEvents.type, types));
   // `hiddenFor` is the profile whose vault to respect (the reader's), or
   // null when that vault is open.
   if (hiddenFor !== null) {
@@ -51,8 +64,11 @@ export async function listActivity(limit = 100, type?: string, hiddenFor: number
     );
   }
   return db
-    .select()
+    // The item's thumbnail version too, so the log can show the picture
+    // under the same cache key as everywhere else.
+    .select({ ...getTableColumns(activityEvents), thumbnailFile: mediaItems.thumbnailFile })
     .from(activityEvents)
+    .leftJoin(mediaItems, eq(mediaItems.id, activityEvents.mediaItemId))
     .where(and(...conditions))
     .orderBy(desc(activityEvents.createdAt), desc(activityEvents.id))
     // A limit parsed from a query string can be NaN, which Postgres rejects

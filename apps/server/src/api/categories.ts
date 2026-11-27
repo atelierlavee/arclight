@@ -13,6 +13,7 @@ import { streamFile } from "../media/streamer.js";
 import { PG_INT_MAX, parseId } from "./mediaItemQueries.js";
 
 import { profileId } from "../auth/profileContext.js";
+import { logActivity } from "../activity/log.js";
 const MAX_LABEL_LENGTH = 100;
 
 /** Lowercase, hyphenated, so it's safe in a URL and stable as a key. */
@@ -111,6 +112,10 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
         .insert(categories)
         .values({ slug, label, position: max + 1 })
         .returning();
+      await logActivity("metadata", `Category "${created.label}" created`, {
+        categoryId: created.id,
+        slug: created.slug,
+      });
       return { category: created };
     } catch (error) {
       // Two requests passed the check above together; the index caught it.
@@ -223,6 +228,12 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
         patch.coverScale = Math.round(Math.max(100, Math.min(300, value)));
       }
 
+      // The old name, for the log line — only needed when it is changing.
+      const [before] =
+        patch.label !== undefined
+          ? await db.select({ label: categories.label }).from(categories).where(eq(categories.id, id))
+          : [];
+
       const updated = await db
         .update(categories)
         .set(patch)
@@ -231,6 +242,25 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
       if (updated.length === 0) {
         reply.code(404);
         return { error: "Not found" };
+      }
+      const changes: string[] = [];
+      if (patch.label !== undefined && before && before.label !== patch.label) {
+        changes.push(`renamed to ${patch.label}`);
+      }
+      if (patch.position !== undefined) changes.push("moved");
+      if (
+        patch.coverPositionX !== undefined ||
+        patch.coverPositionY !== undefined ||
+        patch.coverScale !== undefined
+      ) {
+        changes.push("cover framing adjusted");
+      }
+      if (changes.length > 0) {
+        await logActivity(
+          "metadata",
+          `Category "${before?.label ?? updated[0].label}": ${changes.join(", ")}`,
+          { categoryId: id, ...patch },
+        );
       }
       return { category: updated[0] };
     }
@@ -283,6 +313,13 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
     const { category, fallback, moved } = outcome;
     // After the commit: a file can't be un-deleted, a row can be rolled back.
     await deleteKindCover(category.coverFile);
+
+    await logActivity(
+      "metadata",
+      `Category "${category.label}" deleted` +
+        (fallback && moved.length > 0 ? `: ${moved.length} items moved to ${fallback.label}` : ""),
+      { categoryId: id, slug: category.slug, movedCount: moved.length, movedTo: fallback?.label ?? null },
+    );
 
     return { ok: true, movedCount: moved.length, movedTo: fallback?.label ?? null };
   });
@@ -340,6 +377,9 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
       await db.update(categories).set({ coverFile: fileName }).where(eq(categories.id, category.id));
       // Only after the row points at the new file.
       await deleteKindCover(category.coverFile);
+      await logActivity("metadata", `Category "${category.label}": cover uploaded`, {
+        categoryId: category.id,
+      });
       return { ok: true };
     })
   );
@@ -357,6 +397,11 @@ export async function categoryRoutes(app: FastifyInstance): Promise<void> {
       }
       await db.update(categories).set({ coverFile: null }).where(eq(categories.id, category.id));
       await deleteKindCover(category.coverFile);
+      if (category.coverFile) {
+        await logActivity("metadata", `Category "${category.label}": cover removed`, {
+          categoryId: category.id,
+        });
+      }
       return { ok: true };
     })
   );

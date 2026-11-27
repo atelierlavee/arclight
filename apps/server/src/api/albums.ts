@@ -10,6 +10,7 @@ import { studioIdsUnderName } from "../library/hierarchy.js";
 import { albums, mediaFiles, mediaItemTypes, mediaItems, performers, studios } from "../db/schema.js";
 
 import { profileId } from "../auth/profileContext.js";
+import { logActivity } from "../activity/log.js";
 const PAGE_SIZE = 100;
 
 /**
@@ -238,7 +239,7 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const [existing] = await db
-        .select({ coverItemId: albums.coverItemId })
+        .select({ coverItemId: albums.coverItemId, title: albums.title })
         .from(albums)
         .where(eq(albums.id, id));
       if (!existing) {
@@ -276,6 +277,16 @@ export async function albumRoutes(app: FastifyInstance): Promise<void> {
       }
 
       await db.update(albums).set(patch).where(eq(albums.id, id));
+      const detail =
+        coverItemId === undefined
+          ? "cover framing adjusted"
+          : coverItemId === null
+            ? "cover reset to automatic"
+            : "cover photo chosen";
+      await logActivity("metadata", `Album "${existing.title}": ${detail}`, {
+        albumId: id,
+        ...patch,
+      });
       return { ok: true, ...patch };
     }
   );

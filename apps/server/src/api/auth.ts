@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { and, eq, ne, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { db } from "../db/client.js";
+import { logActivity } from "../activity/log.js";
 import { profiles, sessions, users } from "../db/schema.js";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "../auth/passwords.js";
 import { accountPasswordOk, proveIdentity } from "../auth/profileProof.js";
@@ -196,6 +197,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       // the owner profile is the only one there is.
       const sessionId = await createSession(user.id, user.ownerProfileId);
       setSessionCookie(reply, sessionId, request.protocol === "https");
+      await logActivity("account", `Account "${user.username}" created`, { username: user.username });
       return { user: { id: user.id, username: user.username } };
     }
   );
@@ -225,6 +227,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
       if (!ok) {
         recordFailure(ip);
+        // Never the attempted username: it may be a password typed into the
+        // wrong box.
+        await logActivity("account", `Failed sign-in attempt from ${ip}`, { ip, method: "password" });
         reply.code(401);
         return { error: INVALID_CREDENTIALS };
       }
@@ -232,6 +237,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       attempts.delete(ip);
       const sessionId = await createSession(user.id, await autoSelectProfile(user.id));
       setSessionCookie(reply, sessionId, request.protocol === "https");
+      await logActivity("account", "Signed in", { username: user.username, ip, method: "password" });
       return { user: { id: user.id, username: user.username } };
     })
   );
@@ -272,6 +278,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         .set({ username })
         .where(eq(users.id, request.user.id))
         .returning();
+      if (updated.username !== request.user.username) {
+        await logActivity("account", `Username changed to "${updated.username}"`, {
+          fields: ["username"],
+          username: updated.username,
+        });
+      }
       return { user: { id: updated.id, username: updated.username } };
     }
   );
@@ -313,6 +325,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         .delete(sessions)
         .where(current ? and(eq(sessions.userId, user.id), ne(sessions.id, current)) : eq(sessions.userId, user.id));
 
+      await logActivity("account", "Password changed");
       return { ok: true };
     }
   );
@@ -323,7 +336,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // server machine can read (see auth/resetCode.ts).
   // -------------------------------------------------------------------------
 
-  app.post("/api/auth/recover/code", async (_request, reply) => {
+  app.post("/api/auth/recover/code", async (request, reply) => {
     if (!(await hasAnyUser())) {
       reply.code(409);
       return { error: "There is no account yet" };
@@ -338,6 +351,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       reply.code(429);
       return { error: "A code was sent a moment ago. Wait half a minute before asking again." };
     }
+    await logActivity("account", `Password recovery code requested from ${request.ip}`, { ip: request.ip });
     return { ok: true };
   });
 
@@ -376,8 +390,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       } else if (method === "server") {
         ok = await consumeResetCode(code);
       }
+      // The method is a fixed word, never the code that came with it.
+      const via = method === "authenticator" ? "authenticator" : method === "server" ? "server" : "unknown";
       if (!ok) {
         recordFailure(ip);
+        await logActivity("account", `Failed password recovery attempt from ${ip}`, { ip, method: via });
         reply.code(401);
         return { error: "That code isn't right, or it has expired" };
       }
@@ -394,6 +411,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       await db.delete(sessions).where(eq(sessions.userId, user.id));
       const sessionId = await createSession(user.id, await autoSelectProfile(user.id));
       setSessionCookie(reply, sessionId, request.protocol === "https");
+      await logActivity(
+        "account",
+        via === "authenticator"
+          ? "Password reset with the authenticator app"
+          : "Password reset with a server recovery code",
+        { ip, method: via },
+      );
       return { user: { id: user.id, username: user.username } };
     }),
   );
@@ -447,6 +471,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       .update(users)
       .set({ totpSecret: user.totpPendingSecret, totpPendingSecret: null, totpLastStep: step })
       .where(eq(users.id, user.id));
+    await logActivity("account", "Two-factor authentication turned on");
     return { enabled: true };
   });
 
@@ -463,12 +488,15 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       .update(users)
       .set({ totpSecret: null, totpPendingSecret: null, totpLastStep: null })
       .where(eq(users.id, request.user.id));
+    await logActivity("account", "Two-factor authentication turned off");
     return { enabled: false };
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
     await destroySession(request.cookies[SESSION_COOKIE]);
     reply.clearCookie(SESSION_COOKIE, { path: "/" });
+    // Only a real session ending: a stray logout from a signed-out page is not one.
+    if (request.user) await logActivity("account", "Signed out", { username: request.user.username });
     return { ok: true };
   });
 }

@@ -198,6 +198,7 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
     // restores its items instantly rather than waiting for the next scan.
     await recomputeScope();
 
+    await logActivity("library", `Watched folder "${created.path}" added`, { rootId: created.id });
     return { root: created };
   }));
 
@@ -429,6 +430,11 @@ export async function libraryRoutes(app: FastifyInstance): Promise<void> {
     // folder that just went. Items are only hidden, so nothing authored is
     // lost — but the lists stop showing names from a library you no longer have.
     await purgeEmptyEntities();
+
+    await logActivity("library", `Watched folder "${root.path}" removed`, {
+      rootId: id,
+      deleteData: request.query.deleteData === "true",
+    });
 
     // Asked for at the point of removal, because "I am done with this folder"
     // and "I want its 1,400 rows gone" are different decisions and only you

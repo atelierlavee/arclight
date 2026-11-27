@@ -13,7 +13,7 @@ import { AlbumPage } from "@/pages/AlbumPage";
 import { AlbumsPage } from "@/pages/AlbumsPage";
 import { BrowsePage } from "@/pages/BrowsePage";
 import { HelpPage } from "@/pages/HelpPage";
-import { DiaryPage } from "./pages/DiaryPage";
+import { ActivityPage } from "./pages/ActivityPage";
 import { FeedPage } from "./pages/FeedPage";
 import { TiersPage } from "./pages/TiersPage";
 import { HomePage } from "@/pages/HomePage";
@@ -293,19 +293,12 @@ const feedRoute = createRoute({
   component: FeedPage,
 });
 
-// The watch log as a diary; the month is in the URL so back and forward
-// step through months.
+// Your activity: the library's activity log. Still at /diary, where the
+// watch diary it replaced lived, so old links land on it.
 const diaryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/diary",
-  // "at" rather than "month": the browse page's search already has a
-  // numeric month, and the router merges every route's search types.
-  // "log=all" switches from the watch diary to everything you did.
-  validateSearch: (search: Record<string, unknown>): { at?: string; log?: "all" } => ({
-    at: typeof search.at === "string" && /^\d{4}-\d{2}$/.test(search.at) ? search.at : undefined,
-    log: search.log === "all" ? "all" : undefined,
-  }),
-  component: DiaryPage,
+  component: ActivityPage,
 });
 
 const tiersRoute = createRoute({

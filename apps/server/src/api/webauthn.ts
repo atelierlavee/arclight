@@ -18,6 +18,7 @@ import {
   verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import { db } from "../db/client.js";
+import { logActivity } from "../activity/log.js";
 import { profiles, users, webauthnCredentials } from "../db/schema.js";
 
 /**
@@ -159,16 +160,30 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
     const [stored] = await db.select().from(webauthnCredentials)
       .where(eq(webauthnCredentials.id, response.id));
     if (!stored || !(await verifyAssertion(response, challenge.value, stored))) {
+      await logActivity("account", `Failed passkey sign-in attempt from ${request.ip}`, {
+        ip: request.ip,
+        method: "passkey",
+      });
       reply.code(401);
       return { error: "That passkey didn't verify" };
     }
     const [user] = await db.select().from(users).where(eq(users.id, stored.userId));
     if (!user) {
+      await logActivity("account", `Failed passkey sign-in attempt from ${request.ip}`, {
+        ip: request.ip,
+        method: "passkey",
+      });
       reply.code(401);
       return { error: "That passkey didn't verify" };
     }
     const sessionId = await createSession(user.id, await autoSelectProfile(user.id));
     setSessionCookie(reply, sessionId, request.protocol === "https");
+    await logActivity("account", "Signed in with a passkey", {
+      username: user.username,
+      ip: request.ip,
+      method: "passkey",
+      passkey: stored.label,
+    });
     return { user: { id: user.id, username: user.username } };
   });
 
@@ -286,7 +301,8 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const { credential } = verification.registrationInfo;
-      await db
+      const label = (request.body?.label ?? "This browser").slice(0, 60);
+      const added = await db
         .insert(webauthnCredentials)
         .values({
           id: credential.id,
@@ -294,10 +310,18 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
           profileId: profileId(request),
           publicKey: Buffer.from(credential.publicKey).toString("base64"),
           counter: credential.counter,
-          label: (request.body?.label ?? "This browser").slice(0, 60),
+          label,
         })
-        .onConflictDoNothing();
+        .onConflictDoNothing()
+        .returning({ id: webauthnCredentials.id });
 
+      // Only a passkey that was actually stored; a duplicate is a no-op.
+      if (added.length > 0) {
+        await logActivity("account", `Passkey added: ${label}`, {
+          label,
+          profile: request.profile?.name ?? null,
+        });
+      }
       return { ok: true };
     }
   );
@@ -360,6 +384,13 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
       }
       const expected = takeChallenge(`${purpose}:${unlockKey(request)}`);
       const credentialId = request.body?.response?.id;
+      // Logged as the password or PIN route for the same purpose would be:
+      // only the owner's, since another profile's vault and discreet mode
+      // are not the library's story (see api/vault.ts).
+      const what = purpose === "vault" ? "Vault" : "Privacy lock";
+      const log = request.profile?.isOwner
+        ? (message: string) => logActivity(purpose, message, { method: "passkey" })
+        : async () => {};
       if (!expected || !credentialId) {
         reply.code(400);
         return { ok: false, error: "That took too long — try again" };
@@ -379,11 +410,13 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
           )
         );
       if (!stored) {
+        await log(`Failed ${what.toLowerCase()} unlock attempt with a passkey`);
         reply.code(403);
         return { ok: false, error: "Unknown passkey" };
       }
 
       if (!request.body.response || !(await verifyAssertion(request.body.response, expected, stored))) {
+        await log(`Failed ${what.toLowerCase()} unlock attempt with a passkey`);
         reply.code(403);
         return { ok: false, error: "That didn't verify" };
       }
@@ -399,6 +432,7 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
       } else {
         markUnlocked(unlockKey(request)!);
       }
+      await log(`${what} unlocked with a passkey`);
       return { ok: true };
     }
   );
@@ -412,7 +446,7 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
     // this, a locked session could remove the last one and in doing so switch
     // the privacy gate off for every destructive route at once.
     if (await privacyLocked(request, reply)) return reply;
-    await db
+    const removed = await db
       .delete(webauthnCredentials)
       .where(
         and(
@@ -421,7 +455,11 @@ export async function webauthnRoutes(app: FastifyInstance): Promise<void> {
           // Your own passkeys; the owner may remove anyone's.
           request.profile?.isOwner ? undefined : eq(webauthnCredentials.profileId, profileId(request)),
         )
-      );
+      )
+      .returning({ label: webauthnCredentials.label });
+    for (const { label } of removed) {
+      await logActivity("account", `Passkey removed: ${label}`, { label });
+    }
     return { ok: true };
   });
 }

@@ -10,7 +10,7 @@ const TABS = [
 ] as const;
 
 /**
- * Your stats, diary and tier list as one place with three tabs, rather than
+ * Your stats, activity and tier list as one place with three tabs, rather than
  * three separate sidebar links. Sits in the page header so it is in the same
  * spot on all three pages, including Stats, whose opening fills the top.
  */

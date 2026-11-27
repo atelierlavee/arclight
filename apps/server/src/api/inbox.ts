@@ -18,6 +18,7 @@ import { reachableItems } from "../library/visibility.js";
 import { isId, parsePage } from "./mediaItemQueries.js";
 
 import { profileId } from "../auth/profileContext.js";
+import { logActivity } from "../activity/log.js";
 import { itemIsFavorite, itemRating } from "../library/profileState.js";
 /** Waiting videos per page of the inbox. */
 const INBOX_PAGE_SIZE = 50;
@@ -188,10 +189,19 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
     // Anything past the cap is left for the next request rather than
     // rejected; the count says how many were actually handled.
     const batch = [...new Set(ids)].slice(0, MAX_TRIAGE);
-    await db
+    const reviewed = await db
       .update(mediaItems)
       .set({ triagedAt: new Date() })
-      .where(inArray(mediaItems.id, batch));
+      .where(inArray(mediaItems.id, batch))
+      .returning({ id: mediaItems.id, title: mediaItems.title });
+
+    // One item gets its title and thumbnail. Several get a count only: a
+    // list of titles would bypass the vault filter, which goes by item id.
+    if (reviewed.length === 1) {
+      await logActivity("inbox", `"${reviewed[0].title}" marked done in the inbox`, undefined, reviewed[0].id);
+    } else if (reviewed.length > 1) {
+      await logActivity("inbox", `${reviewed.length} inbox items marked done`, { count: reviewed.length });
+    }
 
     return { ok: true, count: batch.length };
   });
@@ -210,6 +220,10 @@ export async function inboxRoutes(app: FastifyInstance): Promise<void> {
         and(reachableItems(profile), inArray(mediaItems.itemTypeId, videoTypeIds), isNull(mediaItems.triagedAt)),
       )
       .returning({ id: mediaItems.id });
+
+    if (result.length > 0) {
+      await logActivity("inbox", `All ${result.length} inbox items marked done`, { count: result.length });
+    }
 
     return { ok: true, count: result.length };
   });
